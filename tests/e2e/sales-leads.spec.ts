@@ -1,6 +1,24 @@
 import { test, expect, type Page } from "@playwright/test";
 import { setFakeRole } from "./helpers";
 
+/** The queue shape the admin owns (0326). Stubbed here so the payload matches
+ *  what the API actually answers with — rows plus the shape they came in. */
+const QUEUE = { daily_cap: 15, order: "newest_first" as const };
+
+/** The stats strip reads the triage counts first; a stub that carries only the
+ *  three weekly counts renders "undefined" where a number belongs. */
+const STATS = {
+  week_new_leads: 0,
+  working_now: 0,
+  week_converted: 0,
+  queue_today: 2,
+  overdue_count: 0,
+  unassigned_open_count: 2,
+  never_contacted_count: 2,
+  uncontactable_count: 0,
+};
+
+
 // @mocked — the list's critical path: tabs filter, search finds a lead by a
 // locally-typed phone number, the drawer opens, and a status change is written.
 
@@ -63,10 +81,10 @@ async function stub(page: Page): Promise<Posted[]> {
       },
     }),
   );
-  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/week-stats**", (r) =>
-    r.fulfill({ json: { stats: { week_new_leads: 0, working_now: 1, week_converted: 1 } } }),
+    r.fulfill({ json: { stats: { ...STATS, working_now: 1, week_converted: 1 } } }),
   );
   // Playwright gives later-registered routes precedence, so the list catch-all
   // goes first — otherwise it also answers /leads/:id/status.

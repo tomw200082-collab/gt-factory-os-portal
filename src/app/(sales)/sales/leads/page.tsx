@@ -32,6 +32,11 @@ function LeadsScreen() {
 
   const [tab, setTab] = useState<LeadStatus>("new");
   const [query, setQuery] = useState("");
+  // 39 of the imported leads carry neither phone nor email. They left the Today
+  // queue in 0326 because no outcome could ever clear them — but they are real
+  // history, so they stay here behind a chip that makes them findable and
+  // fixable rather than silently dropped (audit P0-1, decision gate D2).
+  const [uncontactableOnly, setUncontactableOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(params?.get("lead") ?? null);
 
   const rows = useMemo(() => leads.data ?? [], [leads.data]);
@@ -41,9 +46,20 @@ function LeadsScreen() {
     return out;
   }, [rows]);
 
+  const uncontactableCount = useMemo(
+    () => rows.filter((r) => r.uncontactable).length,
+    [rows],
+  );
+
   const visible = useMemo(
-    () => rows.filter((r) => r.status === tab && matchesQuery(r, query)),
-    [rows, tab, query],
+    () =>
+      rows.filter(
+        (r) =>
+          r.status === tab &&
+          matchesQuery(r, query) &&
+          (!uncontactableOnly || r.uncontactable),
+      ),
+    [rows, tab, query, uncontactableOnly],
   );
 
   const openLead = rows.find((r) => r.id === openId) ?? null;
@@ -132,6 +148,22 @@ function LeadsScreen() {
           ))}
         </div>
       </header>
+
+      {/* One chip, not a filter bar: this is the only cut of the table that
+          answers a question the tabs cannot. */}
+      {leads.isSuccess && uncontactableCount > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="leads-chip-uncontactable"
+            aria-pressed={uncontactableOnly}
+            className={`s-tab ${uncontactableOnly ? "s-tab-active" : ""}`}
+            onClick={() => setUncontactableOnly((v) => !v)}
+          >
+            {UI.uncontactableChip(uncontactableCount)}
+          </button>
+        </div>
+      ) : null}
 
       <div id="leads-panel" role="tabpanel" aria-labelledby={`leads-tab-${tab}`}>
         {leads.isLoading ? <QueueLoading /> : null}

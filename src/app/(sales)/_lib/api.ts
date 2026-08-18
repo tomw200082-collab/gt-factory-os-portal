@@ -15,12 +15,12 @@ import {
 import { RULE_MESSAGES, UI } from "./labels";
 import type {
   LeadEventRow,
+  TodayPayload,
   OrgRow,
   OutcomeResult,
   OutreachChannel,
   SalesLeadRow,
   SalesSettings,
-  TodayRow,
   WeekStats,
   WhatsappTemplates,
 } from "./types";
@@ -89,10 +89,17 @@ export const salesKeys = {
 
 // ---- reads -----------------------------------------------------------------
 
-export function useToday(): UseQueryResult<TodayRow[], SalesApiError> {
+/**
+ * The queue, and the shape it was ordered by.
+ *
+ * The payload carries `queue` because the cap is a product decision the admin
+ * owns (0326) and the rows arrive complete: the screen defers the remainder
+ * and says how many, rather than the server hiding them and the count lying.
+ */
+export function useToday(): UseQueryResult<TodayPayload, SalesApiError> {
   return useQuery({
     queryKey: salesKeys.today(),
-    queryFn: async () => (await request<{ rows: TodayRow[] }>("/api/sales/today")).rows,
+    queryFn: async () => await request<TodayPayload>("/api/sales/today"),
     staleTime: 30_000,
   });
 }
@@ -206,16 +213,16 @@ export interface OutcomeVars {
  */
 export function useOutcome(leadId: string) {
   const qc = useQueryClient();
-  return useMutation<unknown, SalesApiError, OutcomeVars, { previous?: TodayRow[] }>({
+  return useMutation<unknown, SalesApiError, OutcomeVars, { previous?: TodayPayload }>({
     mutationFn: (vars) => request(`/api/sales/leads/${leadId}/outcome`, jsonBody(vars)),
     onMutate: async () => {
       await qc.cancelQueries({ queryKey: salesKeys.today() });
-      const previous = qc.getQueryData<TodayRow[]>(salesKeys.today());
+      const previous = qc.getQueryData<TodayPayload>(salesKeys.today());
       if (previous) {
-        qc.setQueryData<TodayRow[]>(
-          salesKeys.today(),
-          previous.filter((row) => row.lead_id !== leadId),
-        );
+        qc.setQueryData<TodayPayload>(salesKeys.today(), {
+          ...previous,
+          rows: previous.rows.filter((row) => row.lead_id !== leadId),
+        });
       }
       return { previous };
     },

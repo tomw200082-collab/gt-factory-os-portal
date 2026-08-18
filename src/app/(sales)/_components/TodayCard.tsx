@@ -10,12 +10,16 @@ import { MessageCircle, PartyPopper, Phone } from "lucide-react";
 import { fmtMoney, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
 import { telHref, templateFor, waHref, fillTemplate } from "../_lib/wa";
+import { agedTone } from "../_lib/queue";
 import type { TodayRow, WhatsappTemplates } from "../_lib/types";
 import { CustomerBadge, CustomerContext } from "./CustomerBadge";
 import { SlaBadge } from "./SlaBadge";
 
 export interface TodayCardProps {
   row: TodayRow;
+  /** The live SLA parameter — the threshold the age tint respects, so the line
+   *  Tom sets on the settings screen is the line the colour uses. */
+  slaHours: number;
   templates: WhatsappTemplates | null;
   /** Called on tap, before the browser follows the tel:/wa.me link. */
   onArm: (leadId: string, channel: "call" | "whatsapp") => void;
@@ -49,10 +53,18 @@ function ConversionCard({ row }: { row: TodayRow }) {
   );
 }
 
-export function TodayCard({ row, templates, onArm, onPostpone, onLost }: TodayCardProps) {
+export function TodayCard({
+  row,
+  slaHours,
+  templates,
+  onArm,
+  onPostpone,
+  onLost,
+}: TodayCardProps) {
   if (row.item_type === "conversion") return <ConversionCard row={row} />;
 
   const returning = row.item_type === "returning_customer";
+  const aged = agedTone(row.age_days, slaHours);
   const name = row.contact_name ?? row.org_name;
   const tel = telHref(row.phone_e164);
   const waText = templates
@@ -114,11 +126,25 @@ export function TodayCard({ row, templates, onArm, onPostpone, onLost }: TodayCa
       ) : null}
 
       {/* Muted, not faint: this line also sits on the returning-customer card's
-          tinted background, where faint ink drops below AA. */}
-      <p className="mt-2 text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+          tinted background, where faint ink drops below AA. Past the SLA it
+          turns red — the queue has to make age impossible to ignore, and the
+          same relative phrase in the same ink made a 19-day-old lead look like
+          a fresh one (audit P1-14). */}
+      <p
+        data-testid="today-age"
+        // The tone is also an attribute so it can be asserted without reading
+        // a computed style: jsdom rejects hsl(var(--token)) outright and drops
+        // the declaration, so a style-based assertion tests nothing.
+        data-tone={aged}
+        className="mt-2 text-[12px]"
+        style={{
+          color:
+            aged === "overdue" ? "hsl(var(--s-sla-overdue))" : "hsl(var(--s-fg-muted))",
+        }}
+      >
         {row.item_type === "due_follow_up" && row.next_touch_at
           ? UI.nextTouchOn(fmtRelative(row.next_touch_at))
-          : fmtRelative(row.created_at)}
+          : `${fmtRelative(row.created_at)} · ${UI.ageInDays(row.age_days)}`}
         {row.campaign_name ? ` · ${row.campaign_name}` : ""}
       </p>
 

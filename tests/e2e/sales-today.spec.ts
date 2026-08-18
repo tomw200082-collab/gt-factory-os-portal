@@ -1,6 +1,24 @@
 import { test, expect, type Page } from "@playwright/test";
 import { setFakeRole } from "./helpers";
 
+/** The queue shape the admin owns (0326). Stubbed here so the payload matches
+ *  what the API actually answers with — rows plus the shape they came in. */
+const QUEUE = { daily_cap: 15, order: "newest_first" as const };
+
+/** The stats strip reads the triage counts first; a stub that carries only the
+ *  three weekly counts renders "undefined" where a number belongs. */
+const STATS = {
+  week_new_leads: 2,
+  working_now: 0,
+  week_converted: 0,
+  queue_today: 2,
+  overdue_count: 0,
+  unassigned_open_count: 2,
+  never_contacted_count: 2,
+  uncontactable_count: 0,
+};
+
+
 // @mocked — the sales workspace's critical path: the queue renders, a call is
 // armed, and the outcome that follows is what clears the card.
 
@@ -70,12 +88,12 @@ async function stubSales(page: Page, rows: unknown[]): Promise<Posted[]> {
   let queue = [...rows];
 
   await page.route("**/api/sales/week-stats**", (route) =>
-    route.fulfill({ json: { stats: { week_new_leads: 2, working_now: 0, week_converted: 0 } } }),
+    route.fulfill({ json: { stats: STATS } }),
   );
   await page.route("**/api/sales/settings**", (route) => route.fulfill({ json: SETTINGS }));
-  await page.route("**/api/sales/leads**", (route) => route.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/orgs**", (route) => route.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/today**", (route) => route.fulfill({ json: { rows: queue } }));
+  await page.route("**/api/sales/leads**", (route) => route.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/orgs**", (route) => route.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/today**", (route) => route.fulfill({ json: { rows: queue, queue: QUEUE } }));
 
   await page.route("**/api/sales/leads/*/outreach", (route) => {
     posted.push({ url: route.request().url(), body: route.request().postDataJSON() });
@@ -126,7 +144,10 @@ test("queue renders, an outcome is captured, and the card clears @mocked", async
   await expect(page.getByRole("heading", { name: "לקוח חוזר" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "לידים חדשים" })).toBeVisible();
   await expect(page.getByText("קפה בדיקה")).toBeVisible();
-  await expect(page.getByTestId("stats-strip")).toContainText("השבוע: 2 לידים");
+  // Tranche 164 split the strip in two: the triage counts lead, the weekly
+  // line stays underneath. Both are asserted so neither can quietly vanish.
+  await expect(page.getByTestId("stats-strip")).toContainText("בתור היום");
+  await expect(page.getByTestId("stats-strip-week")).toContainText("השבוע: 2 לידים");
 
   // The returning customer carries its dated history — the Patio case.
   const returning = page.getByTestId("today-card-L2");
@@ -182,12 +203,12 @@ test("a failed outcome keeps the sheet open instead of silently losing the call 
   // though it saved, the card quietly reappears later, and the call was never
   // logged. That is the one failure this screen must not have.
   await page.route("**/api/sales/week-stats**", (r) =>
-    r.fulfill({ json: { stats: { week_new_leads: 1, working_now: 0, week_converted: 0 } } }),
+    r.fulfill({ json: { stats: { ...STATS, week_new_leads: 1 } } }),
   );
   await page.route("**/api/sales/settings**", (r) => r.fulfill({ json: SETTINGS }));
-  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [newLead] } }));
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [newLead], queue: QUEUE } }));
   await page.route("**/api/sales/leads/*/outreach", (r) =>
     r.fulfill({ json: { lead_id: "L1", event_id: "E1" } }),
   );
@@ -220,12 +241,12 @@ test("the sheet stays put while the outcome is being written @mocked", async ({ 
   // vanishes mid-write and the user is left looking at the queue for the length
   // of a mobile round-trip — then the error, if any, arrives from nowhere.
   await page.route("**/api/sales/week-stats**", (r) =>
-    r.fulfill({ json: { stats: { week_new_leads: 1, working_now: 0, week_converted: 0 } } }),
+    r.fulfill({ json: { stats: { ...STATS, week_new_leads: 1 } } }),
   );
   await page.route("**/api/sales/settings**", (r) => r.fulfill({ json: SETTINGS }));
-  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [newLead] } }));
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [newLead], queue: QUEUE } }));
   await page.route("**/api/sales/leads/*/outreach", (r) =>
     r.fulfill({ json: { lead_id: "L1", event_id: "E1" } }),
   );
@@ -264,8 +285,8 @@ test("an empty queue is a finished day, not a blank screen @mocked", async ({ pa
 test("a failed queue load offers a way out @mocked", async ({ page }) => {
   await page.route("**/api/sales/week-stats**", (r) => r.fulfill({ status: 500, json: {} }));
   await page.route("**/api/sales/settings**", (r) => r.fulfill({ json: SETTINGS }));
-  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/today**", (r) => r.fulfill({ status: 500, json: {} }));
 
   await page.goto("/sales/today");

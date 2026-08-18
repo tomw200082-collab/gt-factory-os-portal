@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import { TODAY_SECTION_LABELS, UI } from "../_lib/labels";
+import { SECTION_ALARM_COUNT, capRows } from "../_lib/queue";
 import type { TodayItemType, TodayRow, WhatsappTemplates } from "../_lib/types";
 import { TodayCard } from "./TodayCard";
 
@@ -20,15 +21,21 @@ const SECTION_ORDER: TodayItemType[] = [
 ];
 
 /**
- * How many cards a section renders before asking. The imported backlog is 185
- * untouched leads: every card at once is unusable on a phone, and quietly
- * dropping the rest would misreport the work. So the count is always the true
- * one and the cards arrive in batches.
+ * How many cards a section renders before asking. The imported backlog is 149
+ * callable untouched leads: every card at once is unusable on a phone, and
+ * quietly dropping the rest would misreport the work. So the count is always
+ * the true one and the cards arrive in batches.
+ *
+ * This is render batching, which is a different thing from the daily cap
+ * below: batching decides how much arrives per tap, the cap decides how much
+ * is owed today.
  */
 const PAGE = 12;
 
 export interface TodayQueueProps {
   rows: TodayRow[];
+  dailyCap: number;
+  slaHours: number;
   templates: WhatsappTemplates | null;
   onArm: (leadId: string, channel: "call" | "whatsapp") => void;
   onPostpone: (row: TodayRow) => void;
@@ -38,14 +45,21 @@ export interface TodayQueueProps {
 function Section({
   type,
   rows,
+  dailyCap,
+  slaHours,
   templates,
   onArm,
   onPostpone,
   onLost,
 }: { type: TodayItemType; rows: TodayRow[] } & Omit<TodayQueueProps, "rows">) {
   const [shown, setShown] = useState(PAGE);
-  const visible = rows.slice(0, shown);
-  const remaining = rows.length - visible.length;
+
+  // Two limits, in order: the daily commitment decides what is owed today, the
+  // batch decides how much of it is on screen right now.
+  const { visible: committed, remaining: deferred } = capRows(rows, dailyCap);
+  const visible = committed.slice(0, shown);
+  const remaining = committed.length - visible.length;
+  const alarming = rows.length > SECTION_ALARM_COUNT;
 
   return (
     <section
@@ -57,19 +71,35 @@ function Section({
         <h2 id={`today-section-title-${type}`} className="s-eyebrow" style={{ margin: 0 }}>
           {TODAY_SECTION_LABELS[type]}
         </h2>
+        {/* Muted, not faint, and red past the alarm threshold: this is the
+            number that states the size of the fire, and it used to be the
+            lightest ink on the page (audit P0-7). */}
         <span
           data-testid="today-section-count"
           className="s-nums text-[12px]"
-          style={{ color: "hsl(var(--s-fg-faint))" }}
+          style={{
+            color: alarming ? "hsl(var(--s-sla-overdue))" : "hsl(var(--s-fg-muted))",
+          }}
         >
           {rows.length}
         </span>
       </div>
 
+      {deferred > 0 ? (
+        <p
+          data-testid="today-daily-commitment"
+          className="s-nums text-[12px]"
+          style={{ color: "hsl(var(--s-fg-muted))" }}
+        >
+          {UI.dailyCommitment(committed.length, deferred)}
+        </p>
+      ) : null}
+
       {visible.map((row) => (
         <TodayCard
           key={row.lead_id}
           row={row}
+          slaHours={slaHours}
           templates={templates}
           onArm={onArm}
           onPostpone={onPostpone}
@@ -97,7 +127,15 @@ function Section({
   );
 }
 
-export function TodayQueue({ rows, templates, onArm, onPostpone, onLost }: TodayQueueProps) {
+export function TodayQueue({
+  rows,
+  dailyCap,
+  slaHours,
+  templates,
+  onArm,
+  onPostpone,
+  onLost,
+}: TodayQueueProps) {
   return (
     <div className="flex flex-col gap-6">
       {SECTION_ORDER.map((type) => {
@@ -108,6 +146,8 @@ export function TodayQueue({ rows, templates, onArm, onPostpone, onLost }: Today
             key={type}
             type={type}
             rows={section}
+            dailyCap={dailyCap}
+            slaHours={slaHours}
             templates={templates}
             onArm={onArm}
             onPostpone={onPostpone}

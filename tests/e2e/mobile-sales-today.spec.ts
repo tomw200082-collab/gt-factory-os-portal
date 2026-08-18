@@ -1,6 +1,24 @@
 import { test, expect } from "@playwright/test";
 import { setFakeRole } from "./helpers";
 
+/** The queue shape the admin owns (0326). Stubbed here so the payload matches
+ *  what the API actually answers with — rows plus the shape they came in. */
+const QUEUE = { daily_cap: 15, order: "newest_first" as const };
+
+/** The stats strip reads the triage counts first; a stub that carries only the
+ *  three weekly counts renders "undefined" where a number belongs. */
+const STATS = {
+  week_new_leads: 0,
+  working_now: 0,
+  week_converted: 0,
+  queue_today: 2,
+  overdue_count: 0,
+  unassigned_open_count: 2,
+  never_contacted_count: 2,
+  uncontactable_count: 0,
+};
+
+
 // Mobile-only spec — runs under the mobile-safari Playwright project
 // (playwright.config.ts), iPhone 14 device (390x844, WebKit). The workspace is
 // phone-first; this is the shape that actually gets used.
@@ -26,11 +44,11 @@ test.beforeEach(async ({ page }) => {
   await setFakeRole(page, "admin");
   await page.route("**/api/sales/settings**", (r) => r.fulfill({ json: SETTINGS }));
   await page.route("**/api/sales/week-stats**", (r) =>
-    r.fulfill({ json: { stats: { week_new_leads: 0, working_now: 0, week_converted: 0 } } }),
+    r.fulfill({ json: { stats: STATS } }),
   );
-  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
 });
 
 test("the phone gets a bottom tab bar and a quick-add within thumb reach", async ({

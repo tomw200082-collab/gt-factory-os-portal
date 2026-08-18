@@ -31,7 +31,15 @@ export default function TodayPage() {
   const [losing, setLosing] = useState<TodayRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const rows = useMemo(() => today.data ?? [], [today.data]);
+  const rows = useMemo(() => today.data?.rows ?? [], [today.data]);
+  // The cap and the SLA are both admin-owned settings; the screen reads them
+  // rather than deciding them. Defaults match 0326's seeds so a settings row
+  // that has not loaded yet degrades to the shipped behaviour, not to zero.
+  // queue?. rather than queue.: during the window between this deploy and the
+  // API's, /api/sales/today still answers with rows alone, and a hard property
+  // read there is a white screen instead of a degraded one.
+  const dailyCap = today.data?.queue?.daily_cap ?? 15;
+  const slaHours = settings.data?.sla_hours ?? 24;
   const pendingRow = useMemo(
     () => rows.find((r) => r.lead_id === capture.pending?.leadId) ?? null,
     [rows, capture.pending],
@@ -125,6 +133,8 @@ export default function TodayPage() {
         {today.isSuccess && rows.length > 0 ? (
           <TodayQueue
             rows={rows}
+            dailyCap={dailyCap}
+            slaHours={slaHours}
             templates={settings.data?.whatsapp_templates ?? null}
             onArm={arm}
             onPostpone={setPostponing}

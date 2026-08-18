@@ -114,6 +114,20 @@ export const UI = {
   // same prefix states something untrue about the number.
   statsLine: (n: number, working: number, converted: number) =>
     `השבוע: ${leads(n)} · ${conversions(converted)} · בטיפול כרגע: ${working}`,
+  // The triage line. The weekly counts above describe steady state and read
+  // zero for as long as a batch-imported backlog is being worked down, which
+  // is exactly when someone needs to know the shape of the morning.
+  triageLine: (queue: number, overdue: number, unowned: number, never: number) =>
+    `בתור היום: ${queue} · באיחור: ${overdue} · ללא בעלים: ${unowned} · טרם נוצר קשר: ${never}`,
+  // Nothing is hidden — the rest is deferred, and the number says how much.
+  dailyCommitment: (shown: number, remaining: number) =>
+    `היום: ${shown} שיחות · עוד ${remaining} ממתינות בתור`,
+  // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
+  // past. This one states the lead's age as a property of the lead, which is
+  // what makes an old lead feel old on the card.
+  ageInDays: (days: number) => (days === 1 ? "בן יום" : `בן ${days} ימים`),
+  uncontactableChip: (n: number) => `ללא פרטי קשר (${n})`,
+  sortByAge: "מיין לפי גיל",
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
   showMore: (n: number) => `הצג עוד ${leads(n)}`,
@@ -245,7 +259,9 @@ export const UI = {
   settingsSaved: "נשמר ✓",
 
   // SLA badge
-  slaWithin: "בזמן",
+  // slaWithin was deliberately retired in tranche 164: the calm state gets no
+  // badge, so the red one means something. Kept out of the object rather than
+  // left dangling — an unused string is a future mistake.
   slaOverdue: "עבר זמן",
 
   // errors
