@@ -107,27 +107,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
 
-  if (isLoading) return <SideNavSkeleton />;
-
-  if (loadError) {
-    return (
-      <div className="rounded-md border border-warning/50 bg-warning-softer p-3">
-        <div className="text-[0.75rem] font-semibold text-warning-fg">
-          Session unavailable
-        </div>
-        <div className="mt-1 text-3xs text-fg-muted">
-          Could not verify your identity. Navigation is limited.
-        </div>
-        <Link
-          href="/login"
-          onClick={onNavigate}
-          className="mt-2 block text-3xs font-medium text-accent hover:underline"
-        >
-          Sign in again →
-        </Link>
-      </div>
-    );
-  }
+  const showSkeleton = isLoading;
 
   // Track which collapsible groups are expanded. Starts from defaultCollapsed
   // only — SSR-safe (no window access). Auto-expand for active path happens
@@ -171,6 +151,28 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
       return new Set([...prev, activeGroup.title]);
     });
   }, [pathname]);
+
+  if (showSkeleton) return <SideNavSkeleton />;
+
+  if (loadError || !session) {
+    return (
+      <div className="rounded-md border border-warning/50 bg-warning-softer p-3">
+        <div className="text-[0.75rem] font-semibold text-warning-fg">
+          Session unavailable
+        </div>
+        <div className="mt-1 text-3xs text-fg-muted">
+          Could not verify your identity. Navigation is limited.
+        </div>
+        <Link
+          href="/login"
+          onClick={onNavigate}
+          className="mt-2 block text-3xs font-medium text-accent hover:underline"
+        >
+          Sign in again
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <nav aria-label="Primary navigation" className="flex flex-col gap-4">

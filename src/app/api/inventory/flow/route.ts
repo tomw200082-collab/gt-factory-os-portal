@@ -18,6 +18,8 @@ import { proxyRequest } from "@/lib/api-proxy";
 // ---------------------------------------------------------------------------
 
 export async function GET(req: Request): Promise<Response> {
+  const forceRefresh =
+    new URL(req.url).searchParams.get("force_refresh") === "true";
   const res = await proxyRequest(req, {
     method: "GET",
     upstreamPath: "/api/v1/queries/inventory/flow",
@@ -34,7 +36,9 @@ export async function GET(req: Request): Promise<Response> {
   if (res.ok) {
     res.headers.set(
       "Cache-Control",
-      "private, max-age=30, stale-while-revalidate=60",
+      forceRefresh
+        ? "private, no-store"
+        : "private, max-age=30, stale-while-revalidate=60",
     );
   }
   return res;

@@ -10,10 +10,9 @@
 // UnmappedSkusBanner gate, same EmptyState fallback.
 //
 // The shared sub-components are deliberately shape-agnostic so a single
-// `FlowItem[]` carries either FG ITEM rows or COMPONENT rows
-// (distinguished server-side by `sku_kind`). The supply-side projection
-// (migration 0147) emits only `sku_kind='COMPONENT'`; BOUGHT_FINISHED
-// items live on the FG flow page.
+// `FlowItem[]` carries COMPONENT rows here (raw materials + packaging).
+// BOUGHT_FINISHED items live outside this page; the top-level projection is
+// BOM-driven from production_plan only.
 // ---------------------------------------------------------------------------
 
 import { useSearchParams } from "next/navigation";
@@ -120,6 +119,7 @@ export function SupplyFlowClient() {
   }, [searchParams]);
 
   const flowQuery = useSupplyFlow(params);
+  const isRefreshing = flowQuery.isFetching || flowQuery.isForceRefreshing;
 
   const data = flowQuery.data ?? null;
   const summary = data?.summary ?? null;
@@ -200,17 +200,17 @@ export function SupplyFlowClient() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => void flowQuery.refetch()}
-            disabled={flowQuery.isFetching}
+            onClick={() => void flowQuery.forceRefresh().catch(() => undefined)}
+            disabled={isRefreshing}
             className="btn btn-ghost btn-sm gap-1.5"
             data-testid="supply-flow-refresh"
             title="Force a fresh projection. The auto-refresh runs every 60s; use this if you just posted a movement and want to see it immediately."
           >
             <RefreshCw
-              className={cn("h-3.5 w-3.5", flowQuery.isFetching && "animate-spin")}
+              className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
               strokeWidth={2}
             />
-            {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
+            {isRefreshing ? "Refreshing..." : "Refresh now"}
           </button>
         </div>
       }
@@ -278,10 +278,9 @@ export function SupplyFlowClient() {
         <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
           <div className="font-semibold">Calculating projection…</div>
           <div className="mt-0.5 text-fg-muted">
-            Supply flow runs a heavy SQL pass over BOM consumption + open POs +
-            on-hand for every active component and bought-finished item. First
-            loads can take ~20 seconds. Subsequent loads use a cached snapshot
-            and should be instant.
+            Components Flow calculates BOM consumption from production_plan,
+            open PO receipts, and current on-hand for every active raw material
+            and packaging component.
           </div>
         </div>
         <InsightsHero items={[]} summary={null} isLoading />
@@ -335,7 +334,7 @@ export function SupplyFlowClient() {
                 title="All clear ✨"
                 description={
                   atRiskOnlyClient
-                    ? "No supply items at risk in the next 14 days. Toggle off 'Show only at-risk' to see all components and bought-finished items."
+                    ? "No components at risk in the next 14 days. Toggle off 'Show only at-risk' to see all raw materials and packaging components."
                     : "No items match the current filters."
                 }
               />

@@ -13,14 +13,14 @@
 // Differences from useInventoryFlow:
 //   - Endpoint: /api/inventory/supply-flow
 //   - Query key prefix: ["inventory", "supply-flow", params]
-//   - persist key prefix: gtfos:supply_flow: (so FG and supply caches
+//   - persist key prefix: gtfos:supply_flow:v2: (so FG and supply caches
 //     never alias even when params happen to JSON-encode identically)
 //   - Reuses FlowQueryParams from ../../_lib/types — the supply variant
 //     ignores `supply_method` server-side, but the field is harmless on
 //     the wire (it's just not forwarded by buildQuerystring below).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useQuery,
   useQueryClient,
@@ -31,7 +31,9 @@ import type { FlowQueryParams, FlowResponse } from "../../_lib/types";
 const REFETCH_INTERVAL_MS = 60_000;
 const STALE_TIME_MS = 30_000;
 const GC_TIME_MS = 24 * 60 * 60 * 1000;
-const PERSIST_KEY_PREFIX = "gtfos:supply_flow:";
+// v2: cache key bumped after supply projection 0201/cache-bypass work so
+// browsers ignore stale pre-fix localStorage snapshots.
+const PERSIST_KEY_PREFIX = "gtfos:supply_flow:v2:";
 
 interface PersistedEntry {
   ts: number;
@@ -79,6 +81,7 @@ function buildQuerystring(params: FlowQueryParams): string {
   // Note: supply_method is intentionally NOT forwarded — the supply
   // endpoint has no such filter.
   if (params.at_risk_only) sp.set("at_risk_only", "true");
+  if (params.force_refresh) sp.set("force_refresh", "true");
   return sp.toString();
 }
 
@@ -91,6 +94,7 @@ async function fetchSupplyFlow(
     : "/api/inventory/supply-flow";
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
+    cache: params.force_refresh ? "no-store" : "default",
   });
   if (!res.ok) {
     let body: unknown = null;
@@ -112,30 +116,28 @@ async function fetchSupplyFlow(
 
 export function useSupplyFlow(
   params: FlowQueryParams = {},
-): UseQueryResult<FlowResponse> {
+): UseQueryResult<FlowResponse> & {
+  forceRefresh: () => Promise<void>;
+  isForceRefreshing: boolean;
+} {
   const queryClient = useQueryClient();
   const seededRef = useRef(false);
+  const [isForceRefreshing, setIsForceRefreshing] = useState(false);
+  const queryKey = ["inventory", "supply-flow", params] as const;
 
   if (!seededRef.current && typeof window !== "undefined") {
     const persisted = readPersisted(params);
     if (persisted) {
-      const existing = queryClient.getQueryData<FlowResponse>([
-        "inventory",
-        "supply-flow",
-        params,
-      ]);
+      const existing = queryClient.getQueryData<FlowResponse>(queryKey);
       if (!existing) {
-        queryClient.setQueryData(
-          ["inventory", "supply-flow", params],
-          persisted,
-        );
+        queryClient.setQueryData(queryKey, persisted);
       }
     }
     seededRef.current = true;
   }
 
   const result = useQuery({
-    queryKey: ["inventory", "supply-flow", params] as const,
+    queryKey,
     queryFn: () => fetchSupplyFlow(params),
     refetchInterval: REFETCH_INTERVAL_MS,
     staleTime: STALE_TIME_MS,
@@ -150,5 +152,27 @@ export function useSupplyFlow(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result.data, result.isSuccess]);
 
-  return result;
+  const forceRefresh = useCallback(async () => {
+    setIsForceRefreshing(true);
+    try {
+      const data = await queryClient.fetchQuery({
+        queryKey,
+        queryFn: () =>
+          fetchSupplyFlow({
+            ...params,
+            force_refresh: true,
+          }),
+        staleTime: 0,
+        gcTime: GC_TIME_MS,
+      });
+      writePersisted(params, data);
+    } finally {
+      setIsForceRefreshing(false);
+    }
+  }, [params, queryClient, queryKey]);
+
+  return Object.assign(result, {
+    forceRefresh,
+    isForceRefreshing,
+  });
 }

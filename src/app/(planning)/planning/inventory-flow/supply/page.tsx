@@ -2,8 +2,8 @@
 // /planning/inventory-flow/supply — Supply-side daily projection.
 //
 // Sister page to /planning/inventory-flow (FG flow). Shows daily projection
-// for raw-material + packaging components and BOUGHT_FINISHED items over
-// the same 14-day daily band + 6-week weekly tail.
+// for raw-material + packaging components over the same 14-day daily band +
+// weekly tail.
 //
 // Wave 3 of the supply-side inventory flow plan (2026-05-06). v1 does NOT
 // render the planned-production overlay (no inflow_from_production model

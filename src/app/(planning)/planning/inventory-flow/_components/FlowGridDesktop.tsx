@@ -324,9 +324,11 @@ function ItemRow({
       className="grid border-b border-border/30 last:border-b-0 reveal hover:bg-bg-subtle/30"
       style={{ ...gridStyle, ...rowAnimStyle }}
     >
-      {/* Wrap StickyItemPanel in relative container so the coverage badge
-          and the detail-chevron (R-NEW-5) can be absolute-positioned. */}
-      <div className="relative">
+      {/* Keep the whole item grid cell pinned during horizontal scroll. The
+          panel itself is also sticky for backwards compatibility, but the
+          wrapper must be sticky so row-level badges/actions stay attached to
+          the frozen product column. */}
+      <div className="sticky left-0 z-20 bg-bg-raised relative">
         <StickyItemPanel item={item} />
         {/* R-NEW-7 — Movement sparkline rendered after the cover tile */}
         {movementSparklineEl !== null ? (

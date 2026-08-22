@@ -177,4 +177,5 @@ export interface FlowQueryParams {
   family?: string;
   supply_method?: SupplyMethod;
   at_risk_only?: boolean;
+  force_refresh?: boolean;
 }

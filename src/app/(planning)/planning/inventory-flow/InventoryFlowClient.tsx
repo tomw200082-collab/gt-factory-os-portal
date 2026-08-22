@@ -41,6 +41,7 @@ export function InventoryFlowClient() {
   }, [searchParams]);
 
   const flowQuery = useInventoryFlow(params);
+  const isRefreshing = flowQuery.isFetching || flowQuery.isForceRefreshing;
   const data = flowQuery.data ?? null;
   const summary = data?.summary ?? null;
 
@@ -117,7 +118,7 @@ export function InventoryFlowClient() {
             <Badge tone="neutral" dotted>Loading…</Badge>
           ) : flowQuery.isError ? (
             <Badge tone="danger" dotted>Error</Badge>
-          ) : flowQuery.isFetching ? (
+          ) : isRefreshing ? (
             <Badge tone="info" dotted>Refreshing…</Badge>
           ) : (
             <Badge tone="success" dotted>Live</Badge>
@@ -138,17 +139,17 @@ export function InventoryFlowClient() {
           <PlannedOverlayToggle />
           <button
             type="button"
-            onClick={() => void flowQuery.refetch()}
-            disabled={flowQuery.isFetching}
+            onClick={() => void flowQuery.forceRefresh().catch(() => undefined)}
+            disabled={isRefreshing}
             className="btn btn-ghost btn-sm gap-1.5"
             data-testid="inventory-flow-refresh"
             title="Force a fresh projection. The auto-refresh runs every 60s; use this if you just posted a movement and want to see it immediately."
           >
             <RefreshCw
-              className={cn("h-3.5 w-3.5", flowQuery.isFetching && "animate-spin")}
+              className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
               strokeWidth={2}
             />
-            {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
+            {isRefreshing ? "Refreshing..." : "Refresh now"}
           </button>
         </div>
       }

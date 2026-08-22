@@ -17,7 +17,7 @@
 //   that avoids pulling in @tanstack/query-persist-client.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import type {
   FlowItemDetail,
@@ -31,9 +31,9 @@ const STALE_TIME_MS = 30_000;
 // a fresh 22s SQL run. The 60s background refetch will keep the data fresh
 // while the user is on the page; nav-away just suspends the timer.
 const GC_TIME_MS = 24 * 60 * 60 * 1000;
-// v2: cache key bumped after migration 0193 (recursive clamp + GREATEST demand)
-// to force all browsers to ignore pre-migration localStorage data.
-const PERSIST_KEY_PREFIX = "gtfos:inv_flow:v2:";
+// v3: cache key bumped after the 2026-05-16 FG forecast carry-forward fix so
+// browsers ignore stale pre-fix localStorage snapshots.
+const PERSIST_KEY_PREFIX = "gtfos:inv_flow:v3:";
 
 interface PersistedEntry {
   ts: number;
@@ -82,6 +82,7 @@ function buildQuerystring(params: FlowQueryParams): string {
   if (params.family) sp.set("family", params.family);
   if (params.supply_method) sp.set("supply_method", params.supply_method);
   if (params.at_risk_only) sp.set("at_risk_only", "true");
+  if (params.force_refresh) sp.set("force_refresh", "true");
   return sp.toString();
 }
 
@@ -90,6 +91,7 @@ async function fetchFlow(params: FlowQueryParams): Promise<FlowResponse> {
   const url = qs ? `/api/inventory/flow?${qs}` : "/api/inventory/flow";
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
+    cache: params.force_refresh ? "no-store" : "default",
   });
   if (!res.ok) {
     let body: unknown = null;
@@ -111,9 +113,14 @@ async function fetchFlow(params: FlowQueryParams): Promise<FlowResponse> {
 
 export function useInventoryFlow(
   params: FlowQueryParams = {},
-): UseQueryResult<FlowResponse> {
+): UseQueryResult<FlowResponse> & {
+  forceRefresh: () => Promise<void>;
+  isForceRefreshing: boolean;
+} {
   const queryClient = useQueryClient();
   const seededRef = useRef(false);
+  const [isForceRefreshing, setIsForceRefreshing] = useState(false);
+  const queryKey = ["inventory-flow", params] as const;
 
   // Seed the cache from localStorage on first mount per (params) variant.
   // Has to happen via queryClient.setQueryData so the next useQuery call
@@ -122,19 +129,16 @@ export function useInventoryFlow(
   if (!seededRef.current && typeof window !== "undefined") {
     const persisted = readPersisted(params);
     if (persisted) {
-      const existing = queryClient.getQueryData<FlowResponse>([
-        "inventory-flow",
-        params,
-      ]);
+      const existing = queryClient.getQueryData<FlowResponse>(queryKey);
       if (!existing) {
-        queryClient.setQueryData(["inventory-flow", params], persisted);
+        queryClient.setQueryData(queryKey, persisted);
       }
     }
     seededRef.current = true;
   }
 
   const result = useQuery({
-    queryKey: ["inventory-flow", params] as const,
+    queryKey,
     queryFn: () => fetchFlow(params),
     refetchInterval: REFETCH_INTERVAL_MS,
     staleTime: STALE_TIME_MS,
@@ -151,7 +155,29 @@ export function useInventoryFlow(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result.data, result.isSuccess]);
 
-  return result;
+  const forceRefresh = useCallback(async () => {
+    setIsForceRefreshing(true);
+    try {
+      const data = await queryClient.fetchQuery({
+        queryKey,
+        queryFn: () =>
+          fetchFlow({
+            ...params,
+            force_refresh: true,
+          }),
+        staleTime: 0,
+        gcTime: GC_TIME_MS,
+      });
+      writePersisted(params, data);
+    } finally {
+      setIsForceRefreshing(false);
+    }
+  }, [params, queryClient, queryKey]);
+
+  return Object.assign(result, {
+    forceRefresh,
+    isForceRefreshing,
+  });
 }
 
 /**
