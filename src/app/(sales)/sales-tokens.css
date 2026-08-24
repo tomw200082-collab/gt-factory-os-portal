@@ -83,8 +83,18 @@
   --s-radius-pill: 999px;
   /* 4% was a shadow in the source and nothing on the screen. Cards read as
      flat panels in daylight, which is where this product is used. */
-  --s-shadow-card: 0 1px 3px hsl(220 15% 16% / 0.08);
+  /* Two layers, always: a tight contact shadow that seats the card on the
+     ground, and a wider soft one that says how far above it sits. A single
+     blurred drop is what "flat panel with a smudge" looks like -- the pair is
+     what reads as a lit surface, which is the whole of the depth budget on a
+     screen where colour is spent on meaning instead. */
+  --s-shadow-card:
+    0 1px 2px hsl(220 15% 16% / 0.06),
+    0 2px 6px -1px hsl(220 15% 16% / 0.06);
   --s-shadow-sheet: 0 -8px 32px hsl(220 15% 16% / 0.12);
+  /* The 1px of light along a surface's top edge. Cheap, and it is most of the
+     difference between "a rectangle" and "a thing sitting under a light". */
+  --s-sheen: inset 0 1px 0 hsl(0 0% 100% / 0.7);
   --s-motion: 170ms;
   --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
@@ -129,8 +139,50 @@
   --s-sla-overdue-soft: 0 40% 22%;
   --s-danger-quiet: 0 50% 66%;
   --s-overlay: 0 0% 0% / 0.6;
-  --s-shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
+  --s-shadow-card:
+    0 1px 2px hsl(0 0% 0% / 0.35),
+    0 2px 6px -1px hsl(0 0% 0% / 0.3);
   --s-shadow-sheet: 0 -8px 32px hsl(0 0% 0% / 0.5);
+  /* In the dark the light comes from above as a lighter hairline, not white. */
+  --s-sheen: inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+
+/* --- the surfaces the browser draws for you -------------------------------
+   Selection, the caret and the scrollbar arrive styled by the OS, belonging to
+   no design system. On a Hebrew screen the default blue selection is the one
+   piece of foreign chrome in the whole product. Theming them costs nothing and
+   is most of the difference between a page that was built and one that was
+   assembled. */
+
+[data-app="sales"] ::selection {
+  background: hsl(var(--s-accent) / 0.16);
+  color: hsl(var(--s-fg));
+}
+
+[data-app="sales"] {
+  caret-color: hsl(var(--s-accent));
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--s-border-strong)) transparent;
+}
+
+/* WebKit ignores scrollbar-color; it needs its own pseudo-elements. Overlay
+   scrollbars on iOS ignore both, which is correct there and costs nothing. */
+[data-app="sales"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+[data-app="sales"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-app="sales"] ::-webkit-scrollbar-thumb {
+  background: hsl(var(--s-border-strong));
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--s-radius-pill);
+}
+[data-app="sales"] ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--s-fg-faint));
+  background-clip: content-box;
 }
 
 /* --- surfaces ------------------------------------------------------------ */
@@ -139,7 +191,7 @@
   background: hsl(var(--s-surface));
   border: 1px solid hsl(var(--s-border));
   border-radius: var(--s-radius);
-  box-shadow: var(--s-shadow-card);
+  box-shadow: var(--s-shadow-card), var(--s-sheen);
 }
 
 [data-app="sales"] .s-sheet {
@@ -438,7 +490,7 @@
 @keyframes s-fade-up {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
