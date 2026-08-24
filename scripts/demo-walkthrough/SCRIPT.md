@@ -40,6 +40,29 @@ node scripts/demo-walkthrough/record.mjs
 Output: `demo-out/gt-sales-walkthrough.webm`, and the session it reuses at
 `demo-out/state.json`.
 
+### Where the browser has no internet
+
+Some sandboxes give the agent outbound HTTPS but reset every browser
+connection. There the portal is served locally and only the session has to come
+from outside:
+
+```bash
+NODE_OPTIONS=--use-env-proxy \
+NEXT_PUBLIC_SUPABASE_URL=… NEXT_PUBLIC_SUPABASE_ANON_KEY=… \
+NEXT_PUBLIC_API_BASE=https://gt-factory-os-api-production.up.railway.app \
+NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH=false \
+  npx next dev -p 3737
+
+DEMO_BASE_URL=http://127.0.0.1:3737 DEMO_EMAIL=… DEMO_PASSWORD=… \
+NEXT_PUBLIC_SUPABASE_URL=… NEXT_PUBLIC_SUPABASE_ANON_KEY=… \
+  node --use-env-proxy scripts/demo-walkthrough/sign-in-headless.mjs
+
+DEMO_BASE_URL=http://127.0.0.1:3737 node scripts/demo-walkthrough/record.mjs
+```
+
+`sign-in-headless.mjs` mints the same session without a browser, and lets
+`@supabase/ssr` write the cookies rather than hand-encoding them.
+
 Both scripts read `DEMO_BASE_URL` / `DEMO_OUT` / `DEMO_STORAGE_STATE` from
 `config.mjs`, so the portal host is named in exactly one place. `PW_CHROME_PATH`
 is only for sandboxes that pre-provision a browser binary.
