@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
+import { authorizeCapability } from "@/lib/auth/authorize";
 import { activeNavLabel } from "@/lib/nav/active";
 import { NAV_MANIFEST, navItemAllowsRole, type NavItem } from "@/lib/nav/manifest";
 import { CommandPalette } from "./CommandPalette";
@@ -220,7 +221,10 @@ export function TopBar() {
  */
 export function SalesSwitch() {
   const { session } = useSession();
-  if (session.role !== "admin") return null;
+  // The capability, not the role — the same source of truth the (sales) layout
+  // gate uses. As a literal "admin" this hid the factory→sales crossing from
+  // the one role whose entire job is on the other side of it.
+  if (!authorizeCapability(session.role, "sales:execute")) return null;
 
   return (
     // Tranche 163 shipped this icon-only below `sm`, among five other topbar

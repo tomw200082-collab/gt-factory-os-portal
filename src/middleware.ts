@@ -55,9 +55,15 @@ const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   // app_users.role reaches the JWT (see below); the gate that actually holds
   // is the RoleGate in (sales)/layout.tsx plus the server-side check on every
   // sales endpoint. /apps itself is open to any authenticated role — it
-  // forwards a non-admin straight to /home.
-  { prefix: "/sales", allow: ["admin"] },
-  { prefix: "/apps", allow: ["operator", "planner", "admin", "viewer"] },
+  // forwards anyone without the sales capability straight to /home.
+  //
+  // sales_rep is listed on both even though this table is inert today: the file
+  // states above that it is "ready for backend to populate the claim without
+  // any further portal change", and leaving the new role out would have made
+  // that false — the day app_users.role reaches the JWT, every sales_rep would
+  // be bounced off their own workspace by the one layer nobody was watching.
+  { prefix: "/sales", allow: ["admin", "sales_rep"] },
+  { prefix: "/apps", allow: ["operator", "planner", "admin", "viewer", "sales_rep"] },
   { prefix: "/inbox/approvals", allow: ["planner", "admin"] },
   { prefix: "/admin/economics", allow: ["planner", "admin"] },
   { prefix: "/admin/decision-board", allow: ["planner", "admin"] },

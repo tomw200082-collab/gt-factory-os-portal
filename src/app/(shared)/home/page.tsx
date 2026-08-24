@@ -30,6 +30,7 @@
 import { useMemo, type CSSProperties } from "react";
 
 import { useSession } from "@/lib/auth/session-provider";
+import { authorizeCapability } from "@/lib/auth/authorize";
 import { buildHomeCockpit, type Lang } from "@/features/home/cockpit";
 import { cn } from "@/lib/cn";
 import { HomeTile } from "./_components/HomeTile";
@@ -128,8 +129,17 @@ export default function HomePage() {
       {/* Today Board (Tranche 136) — the 9:30 briefing surface: Yesterday /
           Today / Tomorrow tabs. Operator/planner/admin only in v1; the
           viewer/bookkeeper cockpit is a different surface entirely (OQ-2
-          default: no board there). */}
-      {role !== "viewer" ? (
+          default: no board there).
+          Gated on the capability rather than on `role !== "viewer"`: written as
+          an exclusion of one role, it silently ADMITTED every role added later,
+          and sales_rep — which holds nothing in the factory — would have been
+          shown the production plan, credits and PO pipeline.
+
+          The level is stock:EXECUTE, not stock:read — viewer holds stock:"read"
+          in the lattice, so `stock:read` would have started rendering the board
+          for the bookkeeper, which is the opposite of what this gate is for.
+          execute is exactly {operator, planner, admin}. */}
+      {authorizeCapability(role, "stock:execute") ? (
         <div className={REVEAL} style={revealDelay(2)}>
           <TodayBoard />
         </div>

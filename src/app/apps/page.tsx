@@ -11,14 +11,24 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Factory, TrendingUp } from "lucide-react";
 import { useSession } from "@/lib/auth/session-provider";
+import { authorizeCapability } from "@/lib/auth/authorize";
+import type { Role } from "@/lib/contracts/enums";
 
 const COOKIE = "gt.app.v1";
 const FACTORY_HOME = "/home";
 const SALES_HOME = "/sales/today";
 
-/** Sales is admin-only in v1 (masterprompt §6.1). */
-function hasSalesAccess(role: string | undefined): boolean {
-  return role === "admin";
+/**
+ * The capability, not the role.
+ *
+ * This read "role === 'admin'" and was missed when the sales axis landed, which
+ * made it the worst possible place for the omission: /apps is the default
+ * post-login destination, so a sales_rep signing in was forwarded straight past
+ * the only screen that offers their workspace, into a factory /home where every
+ * nav rail is empty for them.
+ */
+function hasSalesAccess(role: Role | undefined): boolean {
+  return role ? authorizeCapability(role, "sales:execute") : false;
 }
 
 function readRemembered(): string | null {

@@ -880,7 +880,8 @@
       "path": "/apps",
       "status": "live",
       "roles": [
-        "admin"
+        "admin",
+        "sales_rep"
       ],
       "group": "apps",
       "notes": "Tranche 162 — post-login switchboard (factory / sales). Non-admin roles are forwarded to /home; a remembered choice (cookie gt.app.v1) forwards without a tap."
@@ -889,7 +890,8 @@
       "path": "/sales",
       "status": "redirect",
       "roles": [
-        "admin"
+        "admin",
+        "sales_rep"
       ],
       "group": "sales",
       "notes": "Tranche 162 — redirects to /sales/today."
@@ -898,7 +900,8 @@
       "path": "/sales/today",
       "status": "live",
       "roles": [
-        "admin"
+        "admin",
+        "sales_rep"
       ],
       "group": "sales",
       "notes": "Tranche 162 — the work queue: conversions, returning customers, new leads, due follow-ups, plus the one-tap outcome loop. Hebrew RTL."
@@ -907,7 +910,8 @@
       "path": "/sales/leads",
       "status": "live",
       "roles": [
-        "admin"
+        "admin",
+        "sales_rep"
       ],
       "group": "sales",
       "notes": "Tranche 162 — full lead table: status tabs, search, drawer. Hebrew RTL."
@@ -916,7 +920,8 @@
       "path": "/sales/orgs",
       "status": "live",
       "roles": [
-        "admin"
+        "admin",
+        "sales_rep"
       ],
       "group": "sales",
       "notes": "Tranche 162 — businesses behind the leads, with the dated customer snapshot. Hebrew RTL."
@@ -925,7 +930,8 @@
       "path": "/sales/settings",
       "status": "live",
       "roles": [
-        "admin"
+        "admin",
+        "sales_rep"
       ],
       "group": "sales",
       "notes": "Tranche 162 — WhatsApp templates + SLA hours. Nothing else. Hebrew RTL."

@@ -203,6 +203,11 @@ export const UI = {
   wonEvidenceHint: "סגירה נרשמת רק מול מספר מסמך. המספר נשמר כאסמכתה.",
   wonEvidenceRequired: "צריך מספר מסמך כדי לסגור",
   wonSaved: "נסגר ✓",
+  // convert_lead returns false — not an error — when the lead is no longer
+  // open. Announcing "נסגר ✓" for that is the workspace telling the user a
+  // thing happened that did not, which is exactly the race a second person on
+  // the queue creates: one rep marks אבוד while the other is closing the deal.
+  wonNotOpen: "הליד כבר נסגר או סומן אבוד בינתיים — רענן ובדוק לפני שתנסה שוב",
   // The date step is a disclosure under an outcome that has already been
   // chosen, so it states which one it is about. It used to be reachable from a
   // bare "שנה תאריך" with nothing declared, and then wrote answered_progressing

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { LOST_REASONS, UI } from "@/app/(sales)/_lib/labels";
 import type { SalesLeadRow, TodayRow } from "@/app/(sales)/_lib/types";
 
@@ -23,7 +23,14 @@ interface Call {
   vars: Record<string, unknown>;
 }
 
-const sink = vi.hoisted(() => ({ status: [] as Call[], outcome: [] as Call[] }));
+const sink = vi.hoisted(() => ({
+  status: [] as Call[],
+  outcome: [] as Call[],
+  /** What the mocked convert endpoint answers. convert_lead returns FALSE, not
+   *  an error, when the lead is no longer open. */
+  convertResult: { converted: true } as { lead_id?: string; converted: boolean },
+  nextTouch: [] as Call[],
+}));
 
 vi.mock("@/app/(sales)/_lib/api", () => {
   const recorder = (bucket: Call[]) => (leadId: string) => ({
@@ -50,8 +57,23 @@ vi.mock("@/app/(sales)/_lib/api", () => {
     useSetStatus: recorder(sink.status),
     useOutcome: recorder(sink.outcome),
     // S5 added a close on all three sheets; unmocked, the pages throw here.
-    useConvert: idle,
-    useSetNextTouch: idle,
+    useConvert: (leadId: string) => ({
+      mutate: (
+        vars: Record<string, unknown>,
+        opts?: { onSuccess?: (data: unknown) => void },
+      ) => {
+        void leadId;
+        void vars;
+        opts?.onSuccess?.(sink.convertResult);
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    }),
+    // A recorder, not `idle`: idle's mutate never calls onSuccess, so the
+    // second toast would never be raised and the undo-scoping case below would
+    // pass for the wrong reason.
+    useSetNextTouch: recorder(sink.nextTouch),
     useAddNote: idle,
     useAssign: idle,
     useBulkAssign: idle,
@@ -151,6 +173,16 @@ function leadRows(): SalesLeadRow[] {
   ];
 }
 
+/** A real trip away from the app and back — what raises the owed sheet. */
+async function returnToApp() {
+  await act(async () => {
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+
 /** Arm an owed outcome, the way returning from a call does. */
 function armReturnFromCall() {
   window.sessionStorage.setItem(
@@ -173,6 +205,8 @@ function takeTheUndo(): Call {
 beforeEach(() => {
   sink.status.length = 0;
   sink.outcome.length = 0;
+  sink.convertResult = { converted: true };
+  sink.nextTouch.length = 0;
   window.sessionStorage.clear();
 });
 
@@ -228,5 +262,82 @@ describe("marking a lead lost is reversible", () => {
     expect(reversal.leadId).toBe("L1");
     expect(reversal.vars.status).toBe("working");
     expect(reversal.vars.next_touch_at).toBe(PRIOR_TOUCH);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The undo belongs to its toast — not to the screen.
+// ---------------------------------------------------------------------------
+
+describe("the way back does not outlive the message that offered it", () => {
+  it("a later toast never inherits an earlier toast's undo target", async () => {
+    // The defect: `undo` was sibling state that no toast owned. Record אבוד on
+    // a lead, then raise ANY other toast, and that second toast rendered a
+    // "בטל" button still pointing at the first lead — a reversal of something
+    // the message on screen was not about.
+    const { default: TodayPage } = await import("@/app/(sales)/sales/today/page");
+    render(<TodayPage />);
+
+    // 1. lose the lead — the toast offers a way back.
+    fireEvent.click(within(screen.getByTestId("today-card-L1")).getByText(UI.markLost));
+    fireEvent.click(screen.getByTestId(`lost-reason-${LOST_REASONS[0]}`));
+    fireEvent.click(screen.getByTestId("lost-confirm"));
+    expect(screen.getByTestId("sales-toast-action")).toBeTruthy();
+
+    // 2. raise a different toast — postponing the same card is enough.
+    fireEvent.click(within(screen.getByTestId("today-card-L1")).getByText(UI.postpone));
+    fireEvent.click(screen.getByTestId("next-touch-tomorrow"));
+
+    // 3. the new message must carry no reversal at all.
+    expect(screen.queryByTestId("sales-toast-action")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A close that did not happen is not a close.
+// ---------------------------------------------------------------------------
+
+describe("closing a deal reports what actually happened", () => {
+  it("announces success only when the lead was really converted", async () => {
+    const { default: TodayPage } = await import("@/app/(sales)/sales/today/page");
+    render(<TodayPage />);
+    armReturnFromCall();
+
+    fireEvent.click(within(screen.getByTestId("today-card-L1")).getByText(UI.call));
+    // arming is enough to raise the sheet on the next visibility return
+    await returnToApp();
+
+    fireEvent.click(screen.getByTestId("outcome-won"));
+    fireEvent.change(screen.getByTestId("won-document-number"), {
+      target: { value: "GI-2026-0042" },
+    });
+    fireEvent.click(screen.getByTestId("won-confirm"));
+    expect(screen.getByTestId("sales-toast")).toBeTruthy();
+  });
+
+  it("says so, and keeps the sheet open, when the lead was no longer open", async () => {
+    // sales_core.convert_lead returns FALSE — not an error — when the lead has
+    // already been won or lost. This is the race S3 creates by putting a second
+    // person on the queue: one rep marks אבוד while the other is closing the
+    // deal. Reporting "נסגר ✓" for it is the workspace stating something false.
+    sink.convertResult = { converted: false };
+    const { default: TodayPage } = await import("@/app/(sales)/sales/today/page");
+    render(<TodayPage />);
+    armReturnFromCall();
+
+    fireEvent.click(within(screen.getByTestId("today-card-L1")).getByText(UI.call));
+    await returnToApp();
+
+    fireEvent.click(screen.getByTestId("outcome-won"));
+    fireEvent.change(screen.getByTestId("won-document-number"), {
+      target: { value: "GI-2026-0042" },
+    });
+    fireEvent.click(screen.getByTestId("won-confirm"));
+
+    // No celebration ...
+    expect(screen.queryByTestId("sales-toast")).toBeNull();
+    // ... the sheet is still there, and it says why.
+    expect(screen.getByTestId("outcome-sheet")).toBeTruthy();
+    expect(screen.getByTestId("outcome-error").textContent).toBe(UI.wonNotOpen);
   });
 });

@@ -28,6 +28,9 @@ const CAPABILITY_LABELS: Partial<Record<CapabilityRequirement, string>> = {
   "admin:read": "Admin read access",
   "admin:execute": "Admin access",
   "admin:execute+override": "Admin override access",
+  "sales:read": "Sales read access",
+  "sales:execute": "Sales workspace access",
+  "sales:execute+override": "Sales override access",
 };
 
 type RoleGateProps =

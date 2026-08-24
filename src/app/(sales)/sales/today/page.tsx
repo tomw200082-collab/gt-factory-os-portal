@@ -18,7 +18,7 @@ import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
 import { useQueueScope } from "../../_lib/useQueueScope";
 import { useSession } from "@/lib/auth/session-provider";
 import { UI } from "../../_lib/labels";
-import type { TodayRow } from "../../_lib/types";
+import type { TodayRow, UndoTarget } from "../../_lib/types";
 import { QueueDone, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { StatsStrip } from "../../_components/StatsStrip";
 import { TodayQueue } from "../../_components/TodayQueue";
@@ -47,9 +47,7 @@ export default function TodayPage() {
   const [toast, setToast] = useState<string | null>(null);
   // The lead a just-recorded "אבוד" can be taken back from, for as long as its
   // toast is on screen.
-  const [undo, setUndo] = useState<{ leadId: string; previousNextTouch: string | null } | null>(
-    null,
-  );
+  const [undo, setUndo] = useState<UndoTarget | null>(null);
 
   const rows = useMemo(() => today.data?.rows ?? [], [today.data]);
   // The cap and the SLA are both admin-owned settings; the screen reads them
@@ -68,6 +66,10 @@ export default function TodayPage() {
   const outreach = useOutreach();
   const outcome = useOutcome(capture.pending?.leadId ?? "");
   const convert = useConvert(capture.pending?.leadId ?? "");
+  // convert_lead answers 200 {converted:false} when the lead is no longer open.
+  // That is not an HTTP error and carries no error.message, so it needs its own
+  // channel — otherwise a close that did nothing reads as a close that worked.
+  const [convertNote, setConvertNote] = useState<string | null>(null);
   const nextTouch = useSetNextTouch(postponing?.lead_id ?? "");
   const lostOutcome = useOutcome(losing?.lead_id ?? "");
   const undoStatus = useSetStatus(undo?.leadId ?? "");
@@ -96,7 +98,10 @@ export default function TodayPage() {
   // Confirmation should not outstay its welcome above the tab bar.
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 4500);
+    const id = setTimeout(() => {
+      setToast(null);
+      setUndo(null);
+    }, 4500);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -126,6 +131,20 @@ export default function TodayPage() {
     outreach.mutate({ leadId, channel });
   }
 
+  /**
+   * One setter for both, because they are one thing.
+   *
+   * `undo` used to be sibling state that no toast owned. The 4.5s timer cleared
+   * the message and left the target behind, and any toast raised afterwards
+   * inherited it — a button labelled "בטל", next to a message about lead B,
+   * that wrote status='working' to lead A. Routing every toast through here
+   * means raising one always replaces the way back, or removes it.
+   */
+  function showToast(message: string, undoTarget: UndoTarget | null = null) {
+    setToast(message);
+    setUndo(undoTarget);
+  }
+
   function submitOutcome(vars: OutcomeSubmit) {
     if (!vars.result) return;
 
@@ -136,12 +155,19 @@ export default function TodayPage() {
     // that view and disappears at the moment it earned its place there.
     if (vars.result === "won") {
       if (!vars.document_number) return;
+      setConvertNote(null);
       convert.mutate(
         { document_number: vars.document_number },
         {
-          onSuccess: () => {
+          onSuccess: (res) => {
+            // A close that did not happen must not be celebrated. The
+            // intent stays armed, so the sheet stays open on this lead.
+            if (!res.converted) {
+              setConvertNote(UI.wonNotOpen);
+              return;
+            }
             capture.clear();
-            setToast(UI.wonSaved);
+            showToast(UI.wonSaved);
           },
         },
       );
@@ -159,15 +185,15 @@ export default function TodayPage() {
       {
         onSuccess: () => {
           capture.clear();
-          setToast(UI.outcomeSaved);
           // The same reversal the card's אבוד button has carried since audit
           // P1-9. It was wired to one of the two doors that record 'lost' and
           // not the other, so answering אבוד inside the sheet — the door the
           // whole call-and-return loop leads to — was still the four-tap
           // mistake the undo was written to end.
-          if (vars.result === "lost" && leadId) {
-            setUndo({ leadId, previousNextTouch });
-          }
+          showToast(
+            UI.outcomeSaved,
+            vars.result === "lost" && leadId ? { leadId, previousNextTouch } : null,
+          );
         },
       },
     );
@@ -242,8 +268,8 @@ export default function TodayPage() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending}
-          error={outcome.error?.message ?? null}
+          busy={outcome.isPending || convert.isPending}
+          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={submitOutcome}
           // Closes the sheet but leaves the intent owed — it will be asked
           // again on the next return. Only an answer clears it.
@@ -264,7 +290,7 @@ export default function TodayPage() {
               {
                 onSuccess: () => {
                   setPostponing(null);
-                  setToast(UI.nextTouchSaved);
+                  showToast(UI.nextTouchSaved);
                 },
               },
             );
@@ -288,11 +314,10 @@ export default function TodayPage() {
               {
                 onSuccess: () => {
                   setLosing(null);
-                  setToast(UI.outcomeSaved);
                   // Marking a lead lost was a four-tap mistake to recover from
                   // (audit P1-9): find it, open the drawer, set the status
                   // back. An undo that lives as long as the toast costs one.
-                  setUndo({
+                  showToast(UI.outcomeSaved, {
                     leadId: lost.lead_id,
                     previousNextTouch: lost.next_touch_at,
                   });
@@ -325,7 +350,7 @@ export default function TodayPage() {
                           target.previousNextTouch ??
                           nextBusinessTouchPreview(1).toISOString(),
                       },
-                      { onSuccess: () => setToast(UI.undone) },
+                      { onSuccess: () => showToast(UI.undone) },
                     );
                   },
                 }

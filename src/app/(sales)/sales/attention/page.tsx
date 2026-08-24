@@ -60,6 +60,10 @@ export default function AttentionPage() {
   const pendingLead = leads.data?.find((l) => l.id === capture.pending?.leadId) ?? null;
   const outcome = useOutcome(capture.pending?.leadId ?? "");
   const convert = useConvert(capture.pending?.leadId ?? "");
+  // convert_lead answers 200 {converted:false} when the lead is no longer open.
+  // That is not an HTTP error and carries no error.message, so it needs its own
+  // channel — otherwise a close that did nothing reads as a close that worked.
+  const [convertNote, setConvertNote] = useState<string | null>(null);
   const answerSheetOpen = Boolean(capture.pending && (pendingLead || outcome.isPending));
 
   // The answered lead leaves /attention the moment it is answered for, and the
@@ -195,8 +199,8 @@ export default function AttentionPage() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending}
-          error={outcome.error?.message ?? null}
+          busy={outcome.isPending || convert.isPending}
+          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={(vars) => {
             if (!vars.result) return;
             // `won` is not an outcome — record_outcome refuses it, because a
@@ -205,10 +209,17 @@ export default function AttentionPage() {
             // needs to keep showing the deal.
             if (vars.result === "won") {
               if (!vars.document_number) return;
+              setConvertNote(null);
               convert.mutate(
                 { document_number: vars.document_number },
                 {
-                  onSuccess: () => {
+                  onSuccess: (res) => {
+                    // A close that did not happen must not be celebrated. The
+                    // intent stays armed, so the sheet stays open on this lead.
+                    if (!res.converted) {
+                      setConvertNote(UI.wonNotOpen);
+                      return;
+                    }
                     capture.clear();
                     setToast(UI.wonSaved);
                   },

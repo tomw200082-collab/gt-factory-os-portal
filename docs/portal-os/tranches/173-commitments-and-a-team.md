@@ -154,6 +154,91 @@ page-level harness the sales suite did not have).
 - [x] The three tranche-164 tests that encode the old doctrine are rewritten, none deleted
 - [x] tsc 0 · eslint 0 errors · vitest 1434/1434 · playwright @mocked 101/102
 
+## An adversarial review of this tranche, and what it found
+
+Because two things in this change could not be verified locally — the three
+migrations (no `pg_prove`, no DB connection) and the Edge Function (no Deno) — the
+diff was put through a five-dimension adversarial review with a skeptic per
+finding. It found defects that a green suite could not, several of them
+production-breaking. Every one below was reproduced first-hand before it was
+fixed.
+
+**The worst of them were invisible to every check that was passing.**
+
+- **`assert_assignee` still read the roster this tranche deletes.** 0333 dropped
+  `app_setting('assignees')`, but `sales_core.assert_assignee` (0325) — the gate
+  every `assign_lead` and `bulk_assign` passes through — validated against that
+  exact key. Deleting it makes the subquery NULL, `jsonb_array_elements(NULL)`
+  yield nothing, and the function raise `SALES_UNKNOWN_ASSIGNEE` **for
+  everybody**. Every assignment in the product would have broken on apply, with
+  no way back through the API: the settings PUT no longer accepts a roster and
+  the editor is read-only. 0333 now replaces the function's body in the same
+  transaction, reading `private_core.app_users` with the same predicate
+  `handleSalesSettings` uses — which is what 0325's own header said the upgrade
+  would look like.
+- **The reminders cron would have died on its first statement, every morning.**
+  `routeReminders` opens with `startRun(c, 'reminders')`, and
+  `sales_core.poll_run`'s CHECK permits only
+  `('poll','daily','ingest','probe','backfill')`. Verified against the live
+  constraint. 0334 widens it. Because `startRun` sits outside the route's try
+  block, it would not even have recorded the run it failed to open.
+- **`/apps` still hard-coded `role === "admin"`.** The nav entry gained
+  `sales_rep`; the page behind it did not. `/apps` is the default post-login
+  destination, so a sales rep signing in was forwarded straight past the only
+  screen offering their workspace into a factory `/home` with empty rails — D5
+  could not have passed however correct the API was.
+- **The undo outlived the toast that offered it.** `undo` was sibling state no
+  toast owned, so the 4.5s timer cleared the message and left the target; the
+  next toast inherited it and rendered a "בטל" button, beside a message about
+  lead B, that wrote `status='working'` to lead A. Both pages now route every
+  toast through one `showToast(message, undoTarget)`, so raising one always
+  replaces the way back or removes it.
+- **A close that did not happen was announced as one.** `convert_lead` returns
+  `false` — not an error — when the lead is no longer open, and all three sheets
+  discarded the response and toasted "נסגר ✓". This is precisely the race S3
+  creates by putting a second person on the queue. All three now branch on
+  `res.converted`, keep the sheet open and say why; the close also finally
+  carries `busy` and `error`, so a failed one is no longer silent.
+
+Also fixed: the digest grouped by raw assignee and applied the
+inactive-assignee fallback afterwards, so Tom would have received one partial
+email per departed rep, each claiming to be the whole day; `staffAllowlist` had
+no role filter, quietly re-creating the third registry D6 removes; the 0333
+pgTAP contained a hard `42601` (an `UPDATE` in a `FROM` subquery) that would have
+aborted the file; the 0325 pgTAP asserted the deleted key; `SalesSwitch`, the
+middleware role table, the `RoleGate` capability labels and the route manifest
+all still said admin-only.
+
+**And the API was never typechecked.** The root `tsconfig.json` includes only
+`scripts/**/*.ts`, and CI runs that root typecheck — so `api/src` and `api/test`
+are outside the one gate the backend repo has. Installing the API's own
+dependencies and running its typecheck surfaced three real compile errors this
+change had introduced (`me/schemas.ts` role enum, a `Record<AppRole, …>`
+fixture, and `sales_v2.test.ts` still passing `assignees`). Every earlier
+"backend typecheck clean" in this work proved nothing about the backend. Two
+further errors are pre-existing and untouched here
+(`purchase-session/handler.actions.ts:183`, `production_plan_base_batch.test.ts:523`).
+
+**One fix in this list was itself wrong on the first attempt**, and the suite
+caught it: the `/home` TodayBoard gate moved from `role !== "viewer"` to
+`stock:read` — but viewer *holds* `stock:"read"`, so the factory briefing would
+have started rendering for the bookkeeper. `stock:execute` is the level that
+means {operator, planner, admin}. `home.spec.ts:321` failed exactly as it should.
+
+### Left for Tom rather than decided here
+
+- `demo@gteveryday.com` is an active admin, so the derived roster offers "GT
+  Sales Demo" as a person who works leads. The clean fix is to make it a
+  `sales_rep`, or deactivate it — but §6.C of the driving masterprompt reserves
+  the demo account's lifecycle for Tom.
+- `viewer:read` is a synthetic always-true tier, so `sales_rep` still reaches the
+  `(shared)`, `(inbox)` and `(po)` layouts by URL despite holding nothing on
+  those axes. Narrowing it is a portal-wide decision, not a sales one.
+- `/sales/settings` — the daily cap, the SLA, the lost-reason vocabulary — became
+  writable by `sales_rep` when the layout gate widened. The lattice already
+  supports splitting it (`sales:execute` for reps, `sales:execute+override` for
+  admin); whether a rep may change the queue's shape is Tom's call.
+
 ## A second review pass, and a false sentence it caught
 
 A review of the driving masterprompt found four defects in the *instructions*, two of

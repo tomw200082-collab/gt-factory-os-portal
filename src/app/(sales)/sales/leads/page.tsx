@@ -20,7 +20,7 @@ import {
 import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
 import { matchesQuery } from "../../_lib/format";
 import { STATUS_LABELS, UI } from "../../_lib/labels";
-import type { LeadStatus } from "../../_lib/types";
+import type { LeadStatus, UndoTarget } from "../../_lib/types";
 import { ListEmpty, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { LeadsTable } from "../../_components/LeadsTable";
 import { LeadDrawer } from "../../_components/LeadDrawer";
@@ -99,9 +99,7 @@ function LeadsScreen() {
   // control and the outcome sheet raised by a call placed from this table) and
   // neither could be undone: the recovery was to find the lead, reopen the
   // drawer and set the status back by hand.
-  const [undo, setUndo] = useState<{ leadId: string; previousNextTouch: string | null } | null>(
-    null,
-  );
+  const [undo, setUndo] = useState<UndoTarget | null>(null);
   // Bound to the undo target rather than to openId: the drawer may well be
   // closed by the time the reversal is tapped, and the lead it is about is not
   // necessarily the one still open.
@@ -120,11 +118,18 @@ function LeadsScreen() {
   }, [pendingRow]);
   const outcome = useOutcome(capture.pending?.leadId ?? "");
   const convert = useConvert(capture.pending?.leadId ?? "");
+  // convert_lead answers 200 {converted:false} when the lead is no longer open.
+  // That is not an HTTP error and carries no error.message, so it needs its own
+  // channel — otherwise a close that did nothing reads as a close that worked.
+  const [convertNote, setConvertNote] = useState<string | null>(null);
   const answerSheetOpen = Boolean(capture.pending && (pendingRow || outcome.isPending));
 
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 4500);
+    const id = setTimeout(() => {
+      setToast(null);
+      setUndo(null);
+    }, 4500);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -157,8 +162,22 @@ function LeadsScreen() {
     assign.error?.message ??
     null;
 
+  /**
+   * One setter for both, because they are one thing.
+   *
+   * `undo` used to be sibling state that no toast owned. The 4.5s timer cleared
+   * the message and left the target behind, and any toast raised afterwards
+   * inherited it — a button labelled "בטל", next to a message about lead B,
+   * that wrote status='working' to lead A. Routing every toast through here
+   * means raising one always replaces the way back, or removes it.
+   */
+  function showToast(message: string, undoTarget: UndoTarget | null = null) {
+    setToast(message);
+    setUndo(undoTarget);
+  }
+
   /** Every drawer write says so — silence reads the same as a dropped save. */
-  const saved = { onSuccess: () => setToast(UI.saved) };
+  const saved = { onSuccess: () => showToast(UI.saved) };
 
   return (
     <div className="flex flex-col gap-4">
@@ -298,15 +317,13 @@ function LeadsScreen() {
             setStatus.mutate(
               { status, reason, next_touch_at: nextTouchAt },
               {
-                onSuccess: () => {
-                  setToast(UI.saved);
-                  if (status === "lost" && target) {
-                    setUndo({
-                      leadId: target.id,
-                      previousNextTouch: target.next_touch_at,
-                    });
-                  }
-                },
+                onSuccess: () =>
+                  showToast(
+                    UI.saved,
+                    status === "lost" && target
+                      ? { leadId: target.id, previousNextTouch: target.next_touch_at }
+                      : null,
+                  ),
               },
             );
           }}
@@ -316,7 +333,7 @@ function LeadsScreen() {
               {
                 onSuccess: () => {
                   done();
-                  setToast(UI.saved);
+                  showToast(UI.saved);
                 },
               },
             )
@@ -381,8 +398,8 @@ function LeadsScreen() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending}
-          error={outcome.error?.message ?? null}
+          busy={outcome.isPending || convert.isPending}
+          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={(vars) => {
             if (!vars.result) return;
             // `won` is not an outcome — record_outcome refuses it, because a
@@ -391,12 +408,19 @@ function LeadsScreen() {
             // needs to keep showing the deal.
             if (vars.result === "won") {
               if (!vars.document_number) return;
+              setConvertNote(null);
               convert.mutate(
                 { document_number: vars.document_number },
                 {
-                  onSuccess: () => {
+                  onSuccess: (res) => {
+                    // A close that did not happen must not be celebrated. The
+                    // intent stays armed, so the sheet stays open on this lead.
+                    if (!res.converted) {
+                      setConvertNote(UI.wonNotOpen);
+                      return;
+                    }
                     capture.clear();
-                    setToast(UI.wonSaved);
+                    showToast(UI.wonSaved);
                   },
                 },
               );
@@ -411,10 +435,10 @@ function LeadsScreen() {
               {
                 onSuccess: () => {
                   capture.clear();
-                  setToast(UI.outcomeSaved);
-                  if (vars.result === "lost" && leadId) {
-                    setUndo({ leadId, previousNextTouch });
-                  }
+                  showToast(
+                    UI.outcomeSaved,
+                    vars.result === "lost" && leadId ? { leadId, previousNextTouch } : null,
+                  );
                 },
               },
             );
@@ -446,7 +470,7 @@ function LeadsScreen() {
                           target.previousNextTouch ??
                           nextBusinessTouchPreview(1).toISOString(),
                       },
-                      { onSuccess: () => setToast(UI.undone) },
+                      { onSuccess: () => showToast(UI.undone) },
                     );
                   },
                 }
