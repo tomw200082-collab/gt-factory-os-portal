@@ -7,8 +7,10 @@ import {
   OUTCOME_LABELS,
   RULE_MESSAGES,
   STATUS_LABELS,
+  MATCH_TIER_LABELS,
   TODAY_SECTION_LABELS,
   UI,
+  actorLabel,
 } from "@/app/(sales)/_lib/labels";
 
 const HEBREW = /[֐-׿]/;
@@ -125,5 +127,43 @@ describe("hebrew number agreement", () => {
   it("agrees the feminine המרה too, and scopes each stat to its own period", () => {
     expect(UI.statsLine(1, 3, 1)).toBe("השבוע: ליד אחד · המרה אחת · בטיפול כרגע: 3");
     expect(UI.statsLine(7, 3, 2)).toBe("השבוע: 7 לידים · 2 המרות · בטיפול כרגע: 3");
+  });
+});
+
+describe("actorLabel", () => {
+  // lead_event is append-only, so an engineering actor written once is written
+  // forever. Live values on 2026-08-24: system (188), system:backfill-0330 (13),
+  // system:sales-leads-poll (6), Tom (6). Three of those four are slugs, and
+  // every one of them renders on the drawer timeline and the activity feed.
+  it("translates every system actor the pipeline actually writes", () => {
+    expect(actorLabel("system")).toBe("מערכת");
+    expect(actorLabel("system:ingest")).toBe("מערכת · קליטת ליד");
+    expect(actorLabel("system:sales-leads-poll")).toBe("מערכת · סנכרון Shopify");
+    expect(actorLabel("system:backfill-0330")).toBe("מערכת · התאמה היסטורית");
+  });
+
+  it("never leaks an unrecognised system slug", () => {
+    // A future job writes system:whatever. It must degrade to "מערכת", not to
+    // an English slug on a Hebrew screen.
+    expect(actorLabel("system:some-future-job")).toBe("מערכת");
+    expect(actorLabel("")).toBe("מערכת");
+    expect(actorLabel(null)).toBe("מערכת");
+  });
+
+  it("leaves a person's name alone", () => {
+    expect(actorLabel("Tom")).toBe("Tom");
+    expect(actorLabel("דורין")).toBe("דורין");
+  });
+});
+
+describe("match tier labels", () => {
+  it("names the evidence behind the known-customer badge, in Hebrew", () => {
+    for (const label of Object.values(MATCH_TIER_LABELS)) expect(label).toMatch(HEBREW);
+    // Exactly the tiers that have a writer: phone_e164 and email from the 0330
+    // backfill, shopify_lookup from sales_core.ingest_lead on the live path. A
+    // key with no writer is a label nobody will ever see.
+    expect(Object.keys(MATCH_TIER_LABELS).sort()).toEqual(
+      ["email", "phone_e164", "shopify_lookup"],
+    );
   });
 });

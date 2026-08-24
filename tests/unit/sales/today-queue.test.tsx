@@ -239,6 +239,30 @@ describe("today queue", () => {
     ).toBe("/sales/leads");
   });
 
+  it("states the rule that produced the number, not just the number", () => {
+    // "Why these 15?" has to be answerable without a person standing next to
+    // the screen. The line names the quota, and names it as one quota for the
+    // whole queue — which is also why a later section can read 0.
+    renderQueue(
+      Array.from({ length: 40 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+      15,
+    );
+    // Once for the whole queue, not once per section: the sentence describes a
+    // single budget, and two copies of it each claimed to describe all of it.
+    const rules = screen.getAllByTestId("today-daily-cap-rule");
+    expect(rules).toHaveLength(1);
+    expect(rules[0].textContent).toBe(UI.dailyCapRule(15));
+  });
+
+  it("says nothing about a quota that is not biting", () => {
+    // A queue smaller than the cap has no "why these?" to answer.
+    renderQueue(
+      Array.from({ length: 3 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+      15,
+    );
+    expect(screen.queryByTestId("today-daily-cap-rule")).toBeNull();
+  });
+
   it("spends one daily budget across the queue, not one per section", () => {
     // A cap of 15 used to mean 15 new leads *and* 15 follow-ups — thirty calls
     // from a setting whose label reads "כמה שיחות ביום" (gate P1).

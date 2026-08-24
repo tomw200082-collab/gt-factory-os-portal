@@ -46,6 +46,48 @@ export const EVENT_LABELS: Record<string, string> = {
   outcome: "תוצאת שיחה",
 };
 
+/**
+ * Which matching tier claimed a lead as an existing customer (spec 5.4, and the
+ * 0330 backfill that filled the history). The badge says "known customer"; this
+ * says on what evidence, because a claim about someone else's revenue has to be
+ * answerable on screen.
+ */
+export const MATCH_TIER_LABELS: Record<string, string> = {
+  // Written by the 0330 backfill, which knew which tier it used.
+  phone_e164: "לפי טלפון",
+  email: "לפי אימייל",
+  // Written by sales_core.ingest_lead on the live path. The Shopify lookup
+  // searches `email:X OR phone:Y` in one call and takes the hit, so it does not
+  // know which of the two matched — and claiming one would be a guess.
+  shopify_lookup: "לפי התאמה ב-Shopify",
+};
+
+/**
+ * Who did it, in Hebrew.
+ *
+ * `lead_event.actor` is written by whatever wrote the event, so it carries
+ * engineering names — `system`, `system:sales-leads-poll`, `system:backfill-0330`.
+ * Those are correct in the ledger and wrong on a screen: append-only means the
+ * stored value can never be tidied up later, so the translation has to happen
+ * here. A human actor is a person's name and passes through untouched.
+ */
+export const SYSTEM_ACTOR_LABELS: Record<string, string> = {
+  system: "מערכת",
+  "system:ingest": "מערכת · קליטת ליד",
+  "system:sales-leads-poll": "מערכת · סנכרון Shopify",
+  "system:backfill-0330": "מערכת · התאמה היסטורית",
+};
+
+export function actorLabel(actor: string | null | undefined): string {
+  const raw = (actor ?? "").trim();
+  if (!raw) return "מערכת";
+  const known = SYSTEM_ACTOR_LABELS[raw];
+  if (known) return known;
+  // A system actor we have no wording for is still a system actor. Bare
+  // "system" is already in the map above, so only the prefixed form reaches here.
+  return raw.startsWith("system:") ? "מערכת" : raw;
+}
+
 /** The outcome sheet's question, per channel it was raised by. */
 export const OUTCOME_TITLES: Record<OutreachChannel, string> = {
   call: "מה קרה בשיחה?",
@@ -129,6 +171,11 @@ export const UI = {
   // Nothing is hidden — the rest is deferred, and the number says how much.
   dailyCommitment: (shown: number, remaining: number) =>
     `היום: ${shown} שיחות · עוד ${remaining} ממתינות בתור`,
+  // "Why these?" has to be answerable from the screen. The count above says
+  // what is owed today; this says the rule that produced it — one quota for the
+  // whole queue, which is also why a later section can read 0 while an earlier
+  // one is full.
+  dailyCapRule: (cap: number) => `מתוך מכסה יומית של ${cap} לכל התור`,
   // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
   // past. This one states the lead's age as a property of the lead, which is
   // what makes an old lead feel old on the card.

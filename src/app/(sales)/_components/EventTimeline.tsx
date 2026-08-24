@@ -7,7 +7,15 @@
 // itself over time, and that is the point.
 
 import { fmtDateTime } from "../_lib/format";
-import { CHANNEL_LABELS, EVENT_LABELS, OUTCOME_LABELS, STATUS_LABELS, UI } from "../_lib/labels";
+import {
+  CHANNEL_LABELS,
+  EVENT_LABELS,
+  MATCH_TIER_LABELS,
+  OUTCOME_LABELS,
+  STATUS_LABELS,
+  UI,
+  actorLabel,
+} from "../_lib/labels";
 import type { LeadEventRow, LeadStatus, OutcomeResult } from "../_lib/types";
 
 function statusLabel(value: unknown): string {
@@ -38,6 +46,12 @@ function describe(event: LeadEventRow): string | null {
     }
     case "converted":
       return typeof p.order_ref === "string" ? String(p.order_ref) : null;
+    case "matched_existing_customer": {
+      // The badge on the card claims this business already buys from us. The
+      // timeline is where that claim has to name its evidence.
+      const by = String(p.matched_by ?? "");
+      return MATCH_TIER_LABELS[by] ?? null;
+    }
     default:
       return null;
   }
@@ -66,7 +80,7 @@ export function EventTimeline({ events }: { events: LeadEventRow[] }) {
                 </p>
               ) : null}
               <p className="s-nums text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-                {fmtDateTime(event.created_at)} · {event.actor}
+                {fmtDateTime(event.created_at)} · {actorLabel(event.actor)}
               </p>
             </div>
           </li>
