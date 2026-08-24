@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { TODAY_SECTION_LABELS, UI } from "../_lib/labels";
-import { SECTION_ALARM_COUNT, budgetSpent, capRows } from "../_lib/queue";
+import { CAPPED_SECTIONS, SECTION_ALARM_COUNT, budgetSpent, capRows } from "../_lib/queue";
 import type {
   AssigneeEntry,
   TodayItemType,
@@ -52,25 +52,24 @@ export interface TodayQueueProps {
 function Section({
   type,
   rows,
-  dailyCap,
+  budget,
   slaHours,
   roster,
   templates,
   onArm,
   onPostpone,
   onLost,
-  configuredCap,
 }: {
   type: TodayItemType;
   rows: TodayRow[];
-  configuredCap: number;
-} & Omit<TodayQueueProps, "rows">) {
+  /** What is LEFT of the daily cap once earlier sections took their share. */
+  budget: number;
+} & Omit<TodayQueueProps, "rows" | "dailyCap">) {
   const [shown, setShown] = useState(PAGE);
 
   // Two limits, in order: the daily commitment decides what is owed today, the
-  // batch decides how much of it is on screen right now. dailyCap here is this
-  // section's share of one queue-wide budget, not a fresh allowance.
-  const { visible: committed, remaining: deferred } = capRows(rows, dailyCap);
+  // batch decides how much of it is on screen right now.
+  const { visible: committed, remaining: deferred } = capRows(rows, budget);
   const visible = committed.slice(0, shown);
   const remaining = committed.length - visible.length;
   const alarming = rows.length > SECTION_ALARM_COUNT;
@@ -105,9 +104,7 @@ function Section({
           className="s-nums text-[12px]"
           style={{ color: "hsl(var(--s-fg-muted))" }}
         >
-          {UI.dailyCommitment(committed.length, deferred)}
-          {" · "}
-          <span data-testid="today-daily-cap-rule">{UI.dailyCapRule(configuredCap)}</span>{" "}
+          {UI.dailyCommitment(committed.length, deferred)}{" "}
           {/* The sentence named a number of waiting leads and offered no way to
               reach them — a count that states a backlog should open it. */}
           <Link
@@ -169,8 +166,23 @@ export function TodayQueue({
   // (gate P1). Sections draw from a single budget in render order instead.
   let budget = dailyCap;
 
+  // "Why these?" is a question about the whole queue, so it is answered once,
+  // here, where the single budget lives — not per section. Rendered per section
+  // it printed twice whenever two sections overflowed, each copy claiming to
+  // describe the whole queue.
+  const overflowing = rows.filter((r) => CAPPED_SECTIONS.includes(r.item_type)).length > dailyCap;
+
   return (
     <div className="flex flex-col gap-6">
+      {overflowing ? (
+        <p
+          data-testid="today-daily-cap-rule"
+          className="s-nums text-[12px]"
+          style={{ color: "hsl(var(--s-fg-muted))", margin: 0 }}
+        >
+          {UI.dailyCapRule(dailyCap)}
+        </p>
+      ) : null}
       {SECTION_ORDER.map((type) => {
         const section = rows.filter((r) => r.item_type === type);
         if (section.length === 0) return null;
@@ -181,8 +193,7 @@ export function TodayQueue({
             key={type}
             type={type}
             rows={section}
-            dailyCap={share}
-            configuredCap={dailyCap}
+            budget={share}
             slaHours={slaHours}
             roster={roster}
             templates={templates}

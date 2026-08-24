@@ -26,17 +26,23 @@ the page so the video explains itself with the sound off.
 ## Re-recording
 
 ```bash
-# once, per demo user
-SUPABASE_ANON_KEY=… DEMO_EMAIL=… DEMO_PASSWORD=… \
+npm ci                       # once, for @playwright/test
+npx playwright install chromium
+
+# once, per demo user — signs in through the portal's own password form
+DEMO_EMAIL=demo@gteveryday.com DEMO_PASSWORD='…' \
   node scripts/demo-walkthrough/sign-in.mjs
 
 # every take
-DEMO_STORAGE_STATE=./demo-out/state.json \
-PW_CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome \
-  node scripts/demo-walkthrough/record.mjs
+node scripts/demo-walkthrough/record.mjs
 ```
 
-Output: `demo-out/gt-sales-walkthrough.webm`.
+Output: `demo-out/gt-sales-walkthrough.webm`, and the session it reuses at
+`demo-out/state.json`.
+
+Both scripts read `DEMO_BASE_URL` / `DEMO_OUT` / `DEMO_STORAGE_STATE` from
+`config.mjs`, so the portal host is named in exactly one place. `PW_CHROME_PATH`
+is only for sandboxes that pre-provision a browser binary.
 
 ## What the video deliberately does not do
 

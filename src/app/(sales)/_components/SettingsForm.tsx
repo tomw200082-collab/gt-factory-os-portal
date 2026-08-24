@@ -10,7 +10,7 @@
 // deploy.
 
 import { useEffect, useState } from "react";
-import { UI } from "../_lib/labels";
+import { UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
 import type {
   AssigneeEntry,
@@ -75,7 +75,7 @@ export function SettingsForm({
   function lastChange(key: string): string | null {
     const change = settings.last_changes.find((c) => c.key === key);
     if (!change) return null;
-    return UI.lastChangedBy(change.actor, fmtRelative(change.at));
+    return UI.lastChangedBy(actorLabel(change.actor), fmtRelative(change.at));
   }
 
   return (

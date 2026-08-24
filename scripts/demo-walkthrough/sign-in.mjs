@@ -1,77 +1,77 @@
 // Mints a Playwright storageState for the dedicated demo user, once.
 //
-// The portal's production login is a Supabase magic link — there is no password
-// form on screen. Supabase's auth API still accepts a password grant, so a demo
-// user created in Supabase Studio (Authentication → Users → Add user, with
-// "Auto Confirm") can be signed in headlessly without touching anyone's inbox.
+// It signs in through the portal's OWN login page — the password form behind
+// "כניסה עם סיסמה" (`login-switch-to-password`) — and then asks Playwright to
+// serialise the session.
 //
-// The session is the same shape the browser would have after a magic link: the
-// SSR client reads it from the `sb-<ref>-auth-token` cookie.
+// An earlier version of this file hand-encoded the `sb-<ref>-auth-token` cookie
+// itself. That was wrong twice over: the portal does have a password form (so
+// there was nothing to work around), and the encoding it copied is
+// `@supabase/ssr` internals — a session past ~3180 bytes gets split across
+// `…auth-token.0` / `.1`, which the hand-rolled version never produced. The
+// symptom would have read as "the demo user lost access to /sales" rather than
+// "the cookie format moved". The library owns that format; let it.
 //
 //   DEMO_EMAIL=demo@gteveryday.com
 //   DEMO_PASSWORD=...
-//   SUPABASE_URL=https://rvadsozabmxkkrktwgnv.supabase.co   (default)
-//   SUPABASE_ANON_KEY=...            (the publishable key; it is public)
-//   DEMO_STORAGE_STATE=./demo-out/state.json                (default)
+//   DEMO_BASE_URL=https://gt-factory-os-portal.vercel.app   (optional)
+//   DEMO_OUT=./demo-out                                     (optional)
+//   PW_CHROME_PATH=...                                      (sandboxes only)
 //
 //   node scripts/demo-walkthrough/sign-in.mjs
 //
 // The demo user also needs an `admin` row in private_core.app_users, or the
-// portal will authenticate it and then refuse /sales — that row is written by a
-// numbered migration, not by hand.
+// portal authenticates it and then refuses /sales. That row is written by
+// migration 0331, not by hand.
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { chromium } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { OUT_DIR, PORTAL_URL, STATE_PATH, VIEWPORT, launchOptions } from "./config.mjs";
 
-const URL_BASE = process.env.SUPABASE_URL ?? "https://rvadsozabmxkkrktwgnv.supabase.co";
-const ANON = process.env.SUPABASE_ANON_KEY;
 const EMAIL = process.env.DEMO_EMAIL;
 const PASSWORD = process.env.DEMO_PASSWORD;
-const OUT = process.env.DEMO_STORAGE_STATE ?? path.resolve("demo-out/state.json");
-const PORTAL = process.env.DEMO_BASE_URL ?? "https://gt-factory-os-portal.vercel.app";
 
-if (!ANON || !EMAIL || !PASSWORD) {
-  console.error("SUPABASE_ANON_KEY, DEMO_EMAIL and DEMO_PASSWORD are all required.");
+if (!EMAIL || !PASSWORD) {
+  console.error("DEMO_EMAIL and DEMO_PASSWORD are required.");
   process.exit(1);
 }
 
-const projectRef = new URL(URL_BASE).hostname.split(".")[0];
+await mkdir(path.dirname(STATE_PATH), { recursive: true });
 
-const res = await fetch(`${URL_BASE}/auth/v1/token?grant_type=password`, {
-  method: "POST",
-  headers: { apikey: ANON, "Content-Type": "application/json" },
-  body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+const browser = await chromium.launch(launchOptions);
+const context = await browser.newContext({ viewport: VIEWPORT, locale: "he-IL" });
+const page = await context.newPage();
+
+await page.goto(`${PORTAL_URL}/login?redirectTo=%2Fsales%2Ftoday`, {
+  waitUntil: "domcontentloaded",
 });
 
-if (!res.ok) {
-  console.error(`sign-in failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+await page.getByTestId("login-switch-to-password").click();
+await page.getByTestId("login-email-input").fill(EMAIL);
+await page.getByTestId("login-password-input").fill(PASSWORD);
+await page.getByTestId("login-password-submit").click();
+
+// The page hard-navigates on success so the server middleware sees the new
+// cookies. Landing anywhere other than /login is the proof it worked; waiting
+// on the URL rather than on a timer is what makes a wrong password fail loudly.
+await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 30_000 });
+
+// Authenticated is not authorised. /sales is admin-gated on
+// private_core.app_users, so check the destination actually renders rather than
+// discovering it during the take.
+await page.goto(`${PORTAL_URL}/sales/today`, { waitUntil: "domcontentloaded" });
+if (new URL(page.url()).pathname.startsWith("/login")) {
+  console.error(
+    `signed in as ${EMAIL} but /sales/today bounced back to the login page.\n` +
+      "That is the admin role missing, not the password: apply migration 0331.",
+  );
+  await browser.close();
   process.exit(1);
 }
 
-const session = await res.json();
+await context.storageState({ path: STATE_PATH });
+await browser.close();
 
-// @supabase/ssr stores the whole session as a base64url-prefixed JSON cookie.
-const cookieValue =
-  "base64-" + Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
-
-const domain = new URL(PORTAL).hostname;
-
-const state = {
-  cookies: [
-    {
-      name: `sb-${projectRef}-auth-token`,
-      value: cookieValue,
-      domain,
-      path: "/",
-      expires: Math.floor(Date.now() / 1000) + 60 * 60 * 8,
-      httpOnly: false,
-      secure: true,
-      sameSite: "Lax",
-    },
-  ],
-  origins: [],
-};
-
-await mkdir(path.dirname(OUT), { recursive: true });
-await writeFile(OUT, JSON.stringify(state, null, 2), "utf8");
-console.log(`storageState written: ${OUT}`);
+console.log(`storageState written: ${STATE_PATH}`);
+console.log(`out dir: ${OUT_DIR}`);

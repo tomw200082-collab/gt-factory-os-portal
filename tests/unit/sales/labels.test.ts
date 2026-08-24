@@ -159,9 +159,11 @@ describe("actorLabel", () => {
 describe("match tier labels", () => {
   it("names the evidence behind the known-customer badge, in Hebrew", () => {
     for (const label of Object.values(MATCH_TIER_LABELS)) expect(label).toMatch(HEBREW);
-    // The tiers are the ones spec 5.4 allows and 0330 wrote.
+    // Exactly the tiers that have a writer: phone_e164 and email from the 0330
+    // backfill, shopify_lookup from sales_core.ingest_lead on the live path. A
+    // key with no writer is a label nobody will ever see.
     expect(Object.keys(MATCH_TIER_LABELS).sort()).toEqual(
-      ["email", "phone_e164", "shopify_customer_id"],
+      ["email", "phone_e164", "shopify_lookup"],
     );
   });
 });

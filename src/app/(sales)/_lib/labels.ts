@@ -53,9 +53,13 @@ export const EVENT_LABELS: Record<string, string> = {
  * answerable on screen.
  */
 export const MATCH_TIER_LABELS: Record<string, string> = {
+  // Written by the 0330 backfill, which knew which tier it used.
   phone_e164: "לפי טלפון",
   email: "לפי אימייל",
-  shopify_customer_id: "לפי מזהה לקוח",
+  // Written by sales_core.ingest_lead on the live path. The Shopify lookup
+  // searches `email:X OR phone:Y` in one call and takes the hit, so it does not
+  // know which of the two matched — and claiming one would be a guess.
+  shopify_lookup: "לפי התאמה ב-Shopify",
 };
 
 /**
@@ -79,8 +83,9 @@ export function actorLabel(actor: string | null | undefined): string {
   if (!raw) return "מערכת";
   const known = SYSTEM_ACTOR_LABELS[raw];
   if (known) return known;
-  // An unrecognised system actor is still a system actor — never leak the slug.
-  return raw.startsWith("system:") || raw === "system" ? "מערכת" : raw;
+  // A system actor we have no wording for is still a system actor. Bare
+  // "system" is already in the map above, so only the prefixed form reaches here.
+  return raw.startsWith("system:") ? "מערכת" : raw;
 }
 
 /** The outcome sheet's question, per channel it was raised by. */
