@@ -13,9 +13,9 @@ the page so the video explains itself with the sound off.
 | 1 | `/sales/today` — the queue | There is a day's work here, not a table dump. 149 workable rows exist; the screen shows the ones owed today. |
 | 1a | The line under a section header | The number explains itself: "מתוך מכסה יומית של 15 לכל התור". Nobody has to stand next to the screen to answer "why these?" |
 | 2 | The **הומרו** section | A lead that closed, carrying the Shopify order number that made it `won`. `won` has exactly one door — `sales_core.convert_lead()` — so this number cannot be typed by a human. |
-| 3 | A lead card opened | Everything needed to make the call is on one screen: name, business, phone with a tap-to-call and a WhatsApp link, age against the SLA. |
-| 4 | The event timeline in the drawer | Every event is kept, with actor and time, in Hebrew — including "זוהה כלקוח קיים · לפי טלפון", which is the evidence behind the known-customer badge. |
-| 5 | `/sales/leads` | The queue is a cut of the truth, not the whole of it. Everything is reachable. |
+| 3 | `/sales/leads` | The queue is a cut of the truth, not the whole of it. Everything is reachable. |
+| 4 | A lead opened from the list | Everything needed to make the call is on one screen: name, business, phone with a tap-to-call and a WhatsApp link, age against the SLA. The drawer opens from HERE, not from the queue — `/sales/today` is a list of what to do next and its cards carry their actions inline. |
+| 5 | The event timeline in the drawer | Every event is kept, with actor and time, in Hebrew — including "זוהה כלקוח קיים · לפי טלפון", which is the evidence behind the known-customer badge. |
 | 6 | The **uncontactable** chip | 39 imported leads carry neither phone nor email. They are real history: excluded from the queue on purpose, never deleted, and findable in one tap. A deliberate exclusion, not a gap. |
 | 7 | A search with no matches | The empty state reads as an answer. Shown deliberately, because a demo that only shows the happy path is a demo that breaks in front of an audience. |
 | 8 | `/sales/orgs` | A lead belongs to a business, and that is what makes "returning customer" a fact rather than a guess. |

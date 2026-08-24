@@ -113,23 +113,38 @@ await page.getByTestId("today-section-conversion").scrollIntoViewIfNeeded();
 await caption("2", "הומרו", "ליד שנסגר — עם מספר ההזמנה שמוכיח אותו");
 await beat(3000);
 
-// ── 3. Open a lead ────────────────────────────────────────────────────────
-await caption("3", "פותחים ליד", "כל מה שצריך כדי להתקשר, במסך אחד");
-await page.locator('[data-testid^="today-card-"]').first().click();
+// ── 3. The leads list ────────────────────────────────────────
+await open("/sales/leads", "leads-search");
+await caption("3", "כל הלידים", "התור הוא חיתוך; כאן נמצא הכול");
+await beat(3000);
 
-// ── 4. The timeline ───────────────────────────────────────────────────────
+// ── 4. Open a lead ────────────────────────────────────────────
+// The drawer opens from HERE, not from the queue. /sales/today is a list of
+// what to do next and its cards carry the four actions inline; reading a lead
+// in full is a different act, and it belongs on the screen that holds them all.
+// An earlier take clicked a today-card and waited 30s for a drawer that this
+// product never opens there.
+await caption("4", "פותחים ליד", "כל מה שצריך כדי להתקשר, במסך אחד");
+// The table and the card list are the same rows at two breakpoints; :visible
+// picks whichever this viewport actually rendered.
+await page
+  .locator('[data-testid^="lead-row-"]:visible, [data-testid^="lead-card-"]:visible')
+  .first()
+  .click();
+const drawer = page.getByTestId("lead-drawer");
+await drawer.waitFor({ state: "visible", timeout: 30_000 });
+await beat(3000);
+
+// ── 5. The timeline ─────────────────────────────────────────
+// It renders behind its own loading state, so waiting on it is also the proof
+// the events query answered.
 const timeline = page.getByTestId("event-timeline");
 await timeline.waitFor({ state: "visible", timeout: 30_000 });
 await timeline.scrollIntoViewIfNeeded();
-await caption("4", "ההיסטוריה", "כל אירוע נשמר — מי, מתי, ועל סמך מה");
+await caption("5", "ההיסטוריה", "כל אירוע נשמר — מי, מתי, ועל סמך מה");
 await beat(3200);
 await page.keyboard.press("Escape");
-await timeline.waitFor({ state: "hidden", timeout: 15_000 });
-
-// ── 5. The leads list ─────────────────────────────────────────────────────
-await open("/sales/leads", "leads-search");
-await caption("5", "כל הלידים", "התור הוא חיתוך; כאן נמצא הכול");
-await beat(3000);
+await drawer.waitFor({ state: "hidden", timeout: 15_000 });
 
 // ── 6. The uncontactable chip — a deliberate, explained exclusion ─────────
 await caption(
