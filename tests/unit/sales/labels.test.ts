@@ -18,8 +18,12 @@ const HEBREW = /[֐-׿]/;
 /** Latin that is allowed to appear on a Hebrew screen: product names and the
  *  placeholder token the templates document. Shopify joins WhatsApp for the
  *  same reason — it is the product's own name, and the transliteration
- *  ("שופיפיי") is not what a Hebrew speaker reads it as. */
-const ALLOWED_LATIN = ["WhatsApp", "Shopify", "GT", "SLA", "{{name}}"];
+ *  ("שופיפיי") is not what a Hebrew speaker reads it as. "Green Invoice" joins
+ *  them in tranche 173: the close asks for a document number, and the number is
+ *  read off a screen that says "Green Invoice" in Latin letters. Translating the
+ *  product's name would send the reader looking for something that is not
+ *  there. */
+const ALLOWED_LATIN = ["WhatsApp", "Shopify", "Green Invoice", "GT", "SLA", "{{name}}"];
 
 function stripAllowed(value: string): string {
   return ALLOWED_LATIN.reduce((acc, token) => acc.split(token).join(""), value);
@@ -52,8 +56,9 @@ describe("sales labels", () => {
   });
 
   it("covers every lead_event type the schema can produce", () => {
-    // 0318's nine values plus the two 0322 adds. A new event type without a
-    // label would render as a raw English token in the timeline.
+    // 0318's nine values, the two 0322 adds, and reminder_sent from 0334. A new
+    // event type without a label would render as a raw English token in the
+    // timeline — and reminder_sent is the one a rep sees most mornings.
     for (const type of [
       "created",
       "status_change",
@@ -66,6 +71,7 @@ describe("sales labels", () => {
       "imported",
       "outreach",
       "outcome",
+      "reminder_sent",
     ]) {
       expect(EVENT_LABELS[type], type).toMatch(HEBREW);
     }
@@ -106,11 +112,17 @@ describe("sales labels", () => {
     for (const label of Object.values(CHANNEL_LABELS)) expect(label).toMatch(HEBREW);
   });
 
-  it("never offers a way to declare a lead won", () => {
-    // Winning is proven by a Shopify order, never clicked. The outcome list and
-    // the status tabs must not contain an affordance for it.
+  it("never lets a win be declared as a call outcome", () => {
+    // Winning is proven by evidence — a Shopify order found by the poll, or a
+    // Green Invoice document number typed into the close step (tranche 173).
+    // What must never happen is `won` becoming a call OUTCOME: record_outcome
+    // refuses it, so an outcome labelled "won" would be a button that always
+    // fails. It travels through convert_lead instead, which is also the only
+    // writer that emits the `converted` event v_sales_today keys off.
     expect(Object.keys(OUTCOME_LABELS)).not.toContain("won");
     expect(UI.wonBannerHint).toMatch(HEBREW);
+    // The close is offered through the status vocabulary, where it belongs.
+    expect(STATUS_LABELS.won).toMatch(HEBREW);
   });
 });
 

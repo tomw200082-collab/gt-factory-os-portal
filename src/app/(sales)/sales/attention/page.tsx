@@ -16,6 +16,7 @@ import {
   useAttention,
   useLeadEvents,
   useLeads,
+  useConvert,
   useOutcome,
   useOutreach,
   useSetNextTouch,
@@ -58,6 +59,7 @@ export default function AttentionPage() {
   const capture = useOutcomeCapture();
   const pendingLead = leads.data?.find((l) => l.id === capture.pending?.leadId) ?? null;
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const convert = useConvert(capture.pending?.leadId ?? "");
   const answerSheetOpen = Boolean(capture.pending && (pendingLead || outcome.isPending));
 
   // The answered lead leaves /attention the moment it is answered for, and the
@@ -197,6 +199,23 @@ export default function AttentionPage() {
           error={outcome.error?.message ?? null}
           onSubmit={(vars) => {
             if (!vars.result) return;
+            // `won` is not an outcome — record_outcome refuses it, because a
+            // close is evidence-only. It goes to convert_lead, which is also
+            // the only writer that emits the `converted` event v_sales_today
+            // needs to keep showing the deal.
+            if (vars.result === "won") {
+              if (!vars.document_number) return;
+              convert.mutate(
+                { document_number: vars.document_number },
+                {
+                  onSuccess: () => {
+                    capture.clear();
+                    setToast(UI.wonSaved);
+                  },
+                },
+              );
+              return;
+            }
             outcome.mutate(
               { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
               {

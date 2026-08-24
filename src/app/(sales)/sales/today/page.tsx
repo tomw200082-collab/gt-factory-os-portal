@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useLeads,
+  useConvert,
   useOutcome,
   useOutreach,
   useSetNextTouch,
@@ -66,6 +67,7 @@ export default function TodayPage() {
 
   const outreach = useOutreach();
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const convert = useConvert(capture.pending?.leadId ?? "");
   const nextTouch = useSetNextTouch(postponing?.lead_id ?? "");
   const lostOutcome = useOutcome(losing?.lead_id ?? "");
   const undoStatus = useSetStatus(undo?.leadId ?? "");
@@ -126,12 +128,46 @@ export default function TodayPage() {
 
   function submitOutcome(vars: OutcomeSubmit) {
     if (!vars.result) return;
+
+    // `won` is not an outcome — record_outcome refuses it, because a close is
+    // evidence-only. It goes to convert_lead, which is also the only writer
+    // that emits the `converted` event v_sales_today needs to keep showing the
+    // deal. Marked won by any other route, the lead matches no WHERE branch in
+    // that view and disappears at the moment it earned its place there.
+    if (vars.result === "won") {
+      if (!vars.document_number) return;
+      convert.mutate(
+        { document_number: vars.document_number },
+        {
+          onSuccess: () => {
+            capture.clear();
+            setToast(UI.wonSaved);
+          },
+        },
+      );
+      return;
+    }
+    // Read before the write: answering optimistically drops the card, so by
+    // the time onSuccess runs both pendingRow and fallbackRow may be gone and
+    // there is nothing left to say what date the lead was carrying.
+    const leadId = capture.pending?.leadId ?? null;
+    const previousNextTouch =
+      pendingRow?.next_touch_at ?? fallbackRow?.next_touch_at ?? null;
+
     outcome.mutate(
       { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
       {
         onSuccess: () => {
           capture.clear();
           setToast(UI.outcomeSaved);
+          // The same reversal the card's אבוד button has carried since audit
+          // P1-9. It was wired to one of the two doors that record 'lost' and
+          // not the other, so answering אבוד inside the sheet — the door the
+          // whole call-and-return loop leads to — was still the four-tap
+          // mistake the undo was written to end.
+          if (vars.result === "lost" && leadId) {
+            setUndo({ leadId, previousNextTouch });
+          }
         },
       },
     );

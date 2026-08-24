@@ -119,6 +119,11 @@ export interface NavGroup {
 // consumer (SideNav, TopBar, CommandPalette) so the role floor is computed one
 // way, not re-derived per component.
 export const NAV_ROLE_ORDER: Record<Role, number> = {
+  // Rank 0, below viewer, and deliberately not a rung on the same ladder: a
+  // sales rep is orthogonal to the factory, not a junior version of it. At 0 no
+  // factory nav entry (every one of which floors at viewer) is ever listed for
+  // them, which is the truthful answer — they have no execute standing here.
+  sales_rep: 0,
   viewer: 1,
   operator: 2,
   planner: 3,
@@ -167,8 +172,8 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/apps",
         label: "Apps",
         icon: LayoutGrid,
-        min_role: "viewer",
-        roles: ["admin"],
+        min_role: "sales_rep",
+        roles: ["admin", "sales_rep"],
         required_capability: "viewer:read",
         placement: "command",
       },

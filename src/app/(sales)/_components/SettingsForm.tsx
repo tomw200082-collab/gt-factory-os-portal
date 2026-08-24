@@ -4,20 +4,22 @@
 //
 // v1 held two things — the SLA and the WhatsApp templates — and everything else
 // an admin needed to change was a SQL statement (audit §5: 2 of 9 controls
-// present). This screen is where the queue's shape, the roster of people who
-// may be handed leads, and the lost-reason vocabulary become editable, because
-// every one of them is policy that will change and none of them belongs in a
-// deploy.
+// present). This screen is where the queue's shape and the lost-reason
+// vocabulary become editable, because both are policy that will change and
+// neither belongs in a deploy.
+//
+// The roster used to be editable here too, and is not any more (tranche 173,
+// D6). It was a third registry of "who works leads", alongside the people who
+// can actually sign in and the check on the endpoints, and nothing reconciled
+// the three: a name could be handed leads without being able to log in, and a
+// person could be deactivated as a user and go on collecting them. People are
+// created and deactivated in one place now — /admin/users — and this section
+// shows what that produced.
 
 import { useEffect, useState } from "react";
 import { UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
-import type {
-  AssigneeEntry,
-  QueueSettings,
-  SalesSettings,
-  WhatsappTemplates,
-} from "../_lib/types";
+import type { QueueSettings, SalesSettings, WhatsappTemplates } from "../_lib/types";
 
 export interface SettingsFormProps {
   settings: SalesSettings;
@@ -27,7 +29,6 @@ export interface SettingsFormProps {
   onSave: (vars: {
     sla_hours?: number;
     whatsapp_templates?: WhatsappTemplates;
-    assignees?: AssigneeEntry[];
     lost_reasons?: string[];
     queue?: QueueSettings;
   }) => void;
@@ -46,9 +47,6 @@ export function SettingsForm({
 }: SettingsFormProps) {
   const [templates, setTemplates] = useState<WhatsappTemplates>(settings.whatsapp_templates);
   const [slaHours, setSlaHours] = useState<string>(String(settings.sla_hours));
-  const [roster, setRoster] = useState<AssigneeEntry[]>(settings.assignees);
-  const [newName, setNewName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
   const [lostReasons, setLostReasons] = useState<string[]>(settings.lost_reasons);
   const [newReason, setNewReason] = useState("");
   const [dailyCap, setDailyCap] = useState<string>(String(settings.queue.daily_cap));
@@ -58,7 +56,6 @@ export function SettingsForm({
   useEffect(() => {
     setTemplates(settings.whatsapp_templates);
     setSlaHours(String(settings.sla_hours));
-    setRoster(settings.assignees);
     setLostReasons(settings.lost_reasons);
     setDailyCap(String(settings.queue.daily_cap));
     setOrder(settings.queue.order);
@@ -93,101 +90,62 @@ export function SettingsForm({
         onSave({
           sla_hours: hours,
           whatsapp_templates: templates,
-          assignees: roster,
           lost_reasons: lostReasons,
           queue: { daily_cap: cap, order },
         });
       }}
     >
-      {/* People first: it is the control that unblocks a second person, and
-          the one whose absence made every assignment a guess. */}
+      {/* People first — but as a statement of fact, not a control. The
+          registry is /admin/users; this reads it back so the person setting a
+          daily cap can see who the cap is for. */}
       <section className="flex flex-col gap-2" aria-labelledby="settings-people-title" data-testid="settings-people">
         <h2 id="settings-people-title" className="s-section-heading">{UI.peopleTitle}</h2>
-
-        <ul className="flex flex-col gap-2">
-          {roster.map((person, i) => {
-            const open = openLeadsByAssignee[person.email] ?? 0;
-            return (
-              <li
-                key={person.email}
-                data-testid={`person-${person.email}`}
-                className="flex flex-wrap items-center gap-2"
-              >
-                <span className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>
-                  {person.name}
-                </span>
-                <bdi dir="ltr" className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-                  {person.email}
-                </bdi>
-                {/* The toggle and the warning sit at the far end together, so
-                    the row has two groups rather than four scattered items. */}
-                <span className="ms-auto flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-1 text-[13px]">
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5"
-                    data-testid={`person-active-${person.email}`}
-                    aria-label={UI.personActiveNamed(person.name)}
-                    // Native checkboxes render the OS accent — system blue,
-                    // which is nowhere in this palette.
-                    style={{ accentColor: "hsl(var(--s-accent))" }}
-                    checked={person.active}
-                    onChange={() =>
-                      setRoster((prev) =>
-                        prev.map((p, j) => (j === i ? { ...p, active: !p.active } : p)),
-                      )
-                    }
-                  />
-                  {UI.personActive}
-                </label>
-                {open > 0 ? (
-                  <span
-                    data-testid={`person-open-${person.email}`}
-                    className="text-[12px]"
-                    style={{ color: "hsl(var(--s-fg-faint))" }}
-                  >
-                    {UI.deactivateWarning(open)}
-                  </span>
-                ) : null}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="flex flex-wrap items-end gap-2">
-          <input
-            className="s-input w-auto flex-1"
-            aria-label={UI.personName}
-            placeholder={UI.personName}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <input
-            className="s-input w-auto flex-1"
-            type="email"
-            aria-label={UI.personEmail}
-            placeholder={UI.personEmail}
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-          />
-          <button
-            type="button"
-            data-testid="person-add"
-            className="s-btn s-btn-ghost"
-            disabled={!newName.trim() || !newEmail.includes("@")}
-            onClick={() => {
-              setRoster((prev) => [
-                ...prev.filter((p) => p.email !== newEmail.trim()),
-                { name: newName.trim(), email: newEmail.trim(), active: true },
-              ]);
-              setNewName("");
-              setNewEmail("");
-            }}
+        <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+          {UI.peopleDerived}{" "}
+          <a
+            href="/admin/users"
+            data-testid="people-registry-link"
+            className="underline"
+            style={{ color: "hsl(var(--s-accent))" }}
           >
-            {UI.addPerson}
-          </button>
-        </div>
+            {UI.peopleRegistryLink}
+          </a>
+        </p>
+
+        {settings.assignees.length === 0 ? (
+          <p data-testid="people-empty" className="text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+            {UI.peopleEmpty}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {settings.assignees.map((person) => {
+              const open = openLeadsByAssignee[person.email] ?? 0;
+              return (
+                <li
+                  key={person.email}
+                  data-testid={`person-${person.email}`}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <span className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>
+                    {person.name}
+                  </span>
+                  <bdi dir="ltr" className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                    {person.email}
+                  </bdi>
+                  {open > 0 ? (
+                    <span
+                      data-testid={`person-open-${person.email}`}
+                      className="ms-auto text-[12px]"
+                      style={{ color: "hsl(var(--s-fg-faint))" }}
+                    >
+                      {UI.personOpenLeads(open)}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       {/* The queue's shape. This is the answer to "188 leads is not a queue":

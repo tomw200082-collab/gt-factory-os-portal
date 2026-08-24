@@ -44,6 +44,10 @@ export const EVENT_LABELS: Record<string, string> = {
   imported: "יובא",
   outreach: "פנייה יצאה",
   outcome: "תוצאת שיחה",
+  // Written by the morning digest (migration 0334). Without a label here the
+  // drawer timeline renders the raw token "reminder_sent" on a Hebrew screen —
+  // and this is the one event type a rep will see most mornings.
+  reminder_sent: "תזכורת נשלחה",
 };
 
 /**
@@ -172,9 +176,12 @@ export const UI = {
   dailyCommitment: (shown: number, remaining: number) =>
     `היום: ${shown} שיחות · עוד ${remaining} ממתינות בתור`,
   // "Why these?" has to be answerable from the screen. The count above says
-  // what is owed today; this says the rule that produced it — one quota for the
-  // whole queue, which is also why a later section can read 0 while an earlier
-  // one is full.
+  // what is owed today; this says the rule that produced it — one quota, and
+  // the Hebrew ("לכל התור") is still exactly right, because the quota is still
+  // one number for the whole morning. What changed in tranche 173 is who spends
+  // it: only the untouched backlog does. A due follow-up is a promise already
+  // made and passes the quota untouched, so no section can be starved by an
+  // earlier one any more.
   dailyCapRule: (cap: number) => `מתוך מכסה יומית של ${cap} לכל התור`,
   // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
   // past. This one states the lead's age as a property of the lead, which is
@@ -184,6 +191,20 @@ export const UI = {
   sortByAge: "מיין לפי גיל",
   nextTouchPreview: (date: string) => `המגע הבא: ${date}`,
   chooseAnotherDate: "שנה תאריך",
+  // A close is proven by a Green Invoice document number (Tom 2026-08-24).
+  // Free text is rejected — "סגרנו עם דני" is not evidence, and `won` has been
+  // evidence-only since 0322.
+  wonTitle: "סגירת עסקה",
+  wonEvidenceLabel: "מספר מסמך ב-Green Invoice",
+  wonEvidenceHint: "סגירה נרשמת רק מול מספר מסמך. המספר נשמר כאסמכתה.",
+  wonEvidenceRequired: "צריך מספר מסמך כדי לסגור",
+  wonSaved: "נסגר ✓",
+  // The date step is a disclosure under an outcome that has already been
+  // chosen, so it states which one it is about. It used to be reachable from a
+  // bare "שנה תאריך" with nothing declared, and then wrote answered_progressing
+  // whichever date was tapped — "לא ענה, but call back Thursday" was recorded
+  // as a conversation that went well.
+  dateForOutcome: (outcome: string) => `התוצאה שתירשם: ${outcome}`,
   undo: "בטל",
   undone: "שוחזר",
   discardChanges: "יש שינויים שלא נשמרו — לצאת בכל זאת?",
@@ -248,15 +269,14 @@ export const UI = {
   addItem: "הוסף",
   lastChangedBy: (actor: string, when: string) => `שונה על ידי ${actor} · ${when}`,
   peopleTitle: "אנשי מכירות",
-  personName: "שם",
-  personEmail: "אימייל",
-  personActive: "פעיל",
-  personActiveNamed: (name: string) => `פעיל – ${name}`,
-  addPerson: "הוסף",
-  deactivateWarning: (n: number) =>
-    n === 1
-      ? "יש לו ליד פתוח אחד — שייך אותו קודם"
-      : `יש לו ${n} לידים פתוחים — שייך אותם קודם`,
+  // The roster is derived from the system's users, not edited here (D6). The
+  // sentence says so plainly, because a list you cannot change and that does
+  // not explain why reads as broken.
+  peopleDerived: "הרשימה נגזרת ממשתמשי המערכת שיש להם הרשאת מכירות. הוספה והשבתה נעשות במסך המשתמשים.",
+  peopleRegistryLink: "מסך המשתמשים",
+  peopleEmpty: "אין עדיין אנשי מכירות פעילים.",
+  personOpenLeads: (n: number) =>
+    n === 1 ? "ליד פתוח אחד" : `${n} לידים פתוחים`,
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
   showMore: (n: number) => `הצג עוד ${leads(n)}`,

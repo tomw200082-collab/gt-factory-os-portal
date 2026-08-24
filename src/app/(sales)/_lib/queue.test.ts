@@ -58,10 +58,23 @@ describe("capRows", () => {
   });
 
   it("treats a cap of zero as a cap, not as unlimited", () => {
-    const rows = Array.from({ length: 3 }, (_, i) => row("due_follow_up", `d${i}`));
+    // Built from new leads, not follow-ups: a cap of zero must still mean zero,
+    // and the section it means it about is the one the cap governs. Written
+    // against `due_follow_up` this case passed for the wrong reason and would
+    // have flipped 0 → 3 under tranche 173 without anything being broken.
+    const rows = Array.from({ length: 3 }, (_, i) => row("new_lead", `n${i}`));
     const { visible, remaining } = capRows(rows, 0);
     expect(visible).toHaveLength(0);
     expect(remaining).toBe(3);
+  });
+
+  it("never caps a promised callback, even at a cap of zero", () => {
+    // D1. The other half of the case above, and the reason it had to move: a
+    // due follow-up is a commitment already made, so no cap reaches it.
+    const rows = Array.from({ length: 3 }, (_, i) => row("due_follow_up", `d${i}`));
+    const { visible, remaining } = capRows(rows, 0);
+    expect(visible).toHaveLength(3);
+    expect(remaining).toBe(0);
   });
 });
 

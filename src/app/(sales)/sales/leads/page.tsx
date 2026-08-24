@@ -10,6 +10,7 @@ import {
   useLeadEvents,
   useBulkAssign,
   useLeads,
+  useConvert,
   useOutcome,
   useOutreach,
   useSetNextTouch,
@@ -25,7 +26,7 @@ import { LeadsTable } from "../../_components/LeadsTable";
 import { LeadDrawer } from "../../_components/LeadDrawer";
 import { assigneeName } from "../../_components/AssigneePicker";
 import { BulkBar } from "../../_components/BulkBar";
-import { OutcomeSheet } from "../../_components/OutcomeSheet";
+import { OutcomeSheet, nextBusinessTouchPreview } from "../../_components/OutcomeSheet";
 import { Toast } from "../../_components/Toast";
 
 const TABS: LeadStatus[] = ["new", "working", "won", "lost"];
@@ -92,6 +93,19 @@ function LeadsScreen() {
   const bulkAssign = useBulkAssign();
   const capture = useOutcomeCapture();
   const [toast, setToast] = useState<string | null>(null);
+  // The lead a just-recorded "אבוד" can be taken back from, for as long as its
+  // toast is on screen — the same affordance the Today card has had since audit
+  // P1-9. This screen sets 'lost' by two doors of its own (the drawer's status
+  // control and the outcome sheet raised by a call placed from this table) and
+  // neither could be undone: the recovery was to find the lead, reopen the
+  // drawer and set the status back by hand.
+  const [undo, setUndo] = useState<{ leadId: string; previousNextTouch: string | null } | null>(
+    null,
+  );
+  // Bound to the undo target rather than to openId: the drawer may well be
+  // closed by the time the reversal is tapped, and the lead it is about is not
+  // necessarily the one still open.
+  const undoStatus = useSetStatus(undo?.leadId ?? "");
 
   const pendingRow = useMemo(
     () => rows.find((r) => r.id === capture.pending?.leadId) ?? null,
@@ -105,6 +119,7 @@ function LeadsScreen() {
     if (pendingRow) lastLeadName.current = pendingRow.contact_name ?? pendingRow.org_name;
   }, [pendingRow]);
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const convert = useConvert(capture.pending?.leadId ?? "");
   const answerSheetOpen = Boolean(capture.pending && (pendingRow || outcome.isPending));
 
   useEffect(() => {
@@ -278,9 +293,23 @@ function LeadsScreen() {
           onClose={() => setOpenId(null)}
           roster={roster}
           lostReasons={settings.data?.lost_reasons}
-          onStatus={(status, reason, nextTouchAt) =>
-            setStatus.mutate({ status, reason, next_touch_at: nextTouchAt }, saved)
-          }
+          onStatus={(status, reason, nextTouchAt) => {
+            const target = openLead;
+            setStatus.mutate(
+              { status, reason, next_touch_at: nextTouchAt },
+              {
+                onSuccess: () => {
+                  setToast(UI.saved);
+                  if (status === "lost" && target) {
+                    setUndo({
+                      leadId: target.id,
+                      previousNextTouch: target.next_touch_at,
+                    });
+                  }
+                },
+              },
+            );
+          }}
           onNote={(note, done) =>
             addNote.mutate(
               { note },
@@ -356,12 +385,36 @@ function LeadsScreen() {
           error={outcome.error?.message ?? null}
           onSubmit={(vars) => {
             if (!vars.result) return;
+            // `won` is not an outcome — record_outcome refuses it, because a
+            // close is evidence-only. It goes to convert_lead, which is also
+            // the only writer that emits the `converted` event v_sales_today
+            // needs to keep showing the deal.
+            if (vars.result === "won") {
+              if (!vars.document_number) return;
+              convert.mutate(
+                { document_number: vars.document_number },
+                {
+                  onSuccess: () => {
+                    capture.clear();
+                    setToast(UI.wonSaved);
+                  },
+                },
+              );
+              return;
+            }
+            // Read before the write, for the same reason Today reads it there:
+            // the row leaves the list on success and takes its date with it.
+            const leadId = capture.pending?.leadId ?? null;
+            const previousNextTouch = pendingRow?.next_touch_at ?? null;
             outcome.mutate(
               { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
               {
                 onSuccess: () => {
                   capture.clear();
                   setToast(UI.outcomeSaved);
+                  if (vars.result === "lost" && leadId) {
+                    setUndo({ leadId, previousNextTouch });
+                  }
                 },
               },
             );
@@ -372,7 +425,39 @@ function LeadsScreen() {
         />
       ) : null}
 
-      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
+      {toast ? (
+        <Toast
+          message={toast}
+          action={
+            undo
+              ? {
+                  label: UI.undo,
+                  onAction: () => {
+                    const target = undo;
+                    setUndo(null);
+                    undoStatus.mutate(
+                      {
+                        status: "working",
+                        // 0324 refuses a working lead with no next touch, so
+                        // the reversal restores the date the lead carried, or
+                        // falls back to the same next-business-day rule the
+                        // outcome sheet previews.
+                        next_touch_at:
+                          target.previousNextTouch ??
+                          nextBusinessTouchPreview(1).toISOString(),
+                      },
+                      { onSuccess: () => setToast(UI.undone) },
+                    );
+                  },
+                }
+              : undefined
+          }
+          onClose={() => {
+            setToast(null);
+            setUndo(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

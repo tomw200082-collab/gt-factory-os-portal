@@ -182,29 +182,39 @@ test("the queue can be scoped to whoever is looking at it @mocked", async ({ pag
   await expect.poll(() => scopes.some((s) => s.length > 0)).toBe(true);
 });
 
-test("settings can add somebody and deactivate somebody else @mocked", async ({ page }) => {
+test("settings reads the roster back and refuses to write one @mocked", async ({ page }) => {
+  // Was: "settings can add somebody and deactivate somebody else". It could,
+  // and that was the defect — this screen was a THIRD registry of who works
+  // leads, beside private_core.app_users and beside the check on the endpoints,
+  // with nothing reconciling the three. A name could be handed leads without
+  // being able to sign in, and a person could be deactivated as a user and go
+  // on collecting them. People live in one place now (D6, tranche 173).
   const saved: unknown[] = [];
   await stub(page, [leadRow("A", { assignee: "erik@gteveryday.com" })]);
   await page.route("**/api/sales/settings", (r) => {
     if (r.request().method() === "PUT") {
       saved.push(r.request().postDataJSON());
-      return r.fulfill({ json: { updated: ["assignees"] } });
+      return r.fulfill({ json: { updated: ["queue"] } });
     }
     return r.fulfill({ json: SETTINGS });
   });
   await page.goto("/sales/settings");
 
-  // Erik owns an open lead, so deactivating him says what it would strand.
+  // What the screen still owes an admin: who is on the roster, and what
+  // deactivating them would strand — the fact you need BEFORE going to do it.
   await expect(page.getByTestId("person-open-erik@gteveryday.com")).toBeVisible();
 
-  await page.getByLabel("שם").fill("דנה");
-  await page.getByLabel("אימייל").fill("dana@gteveryday.com");
-  await page.getByTestId("person-add").click();
-  await page.getByTestId("person-active-erik@gteveryday.com").uncheck();
-  await page.getByTestId("settings-save").click();
+  // What it no longer offers, and where it sends you instead.
+  await expect(page.getByTestId("person-add")).toBeHidden();
+  await expect(page.getByTestId("person-active-erik@gteveryday.com")).toBeHidden();
+  await expect(page.getByTestId("people-registry-link")).toHaveAttribute(
+    "href",
+    "/admin/users",
+  );
 
+  // And a save from this screen carries no roster at all — the endpoint stopped
+  // accepting one in the same change, so sending it would be writing into a void.
+  await page.getByTestId("settings-save").click();
   await expect.poll(() => saved.length).toBeGreaterThan(0);
-  const body = saved[0] as { assignees: { email: string; active: boolean }[] };
-  expect(body.assignees.find((a) => a.email === "dana@gteveryday.com")?.active).toBe(true);
-  expect(body.assignees.find((a) => a.email === "erik@gteveryday.com")?.active).toBe(false);
+  expect(saved[0]).not.toHaveProperty("assignees");
 });

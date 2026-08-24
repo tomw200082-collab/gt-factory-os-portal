@@ -13,6 +13,13 @@
 //     which contradicted the table; the production-report surface even
 //     hard-coded operator||admin and locked planners out. Reconciled here.)
 //   - Admin is the ONLY role with `admin` axis grants.
+//   - The `sales` axis (tranche 173, Tom 2026-08-24). The sales workspace
+//     bypassed this table and hard-coded `role === 'admin'` on every endpoint
+//     and on its own layout gate, so a second person working leads had to be
+//     made a system administrator. Granted to `sales_rep` (execute) and to
+//     admin (execute+override) only: planner deliberately does NOT get it —
+//     making planner a sales role would also hand the workspace to the
+//     accounting planner, which nobody asked for.
 //   - Viewer is the ONLY role with strictly-read grants on all three axes.
 //
 // The lattice is encoded as a static truth table keyed (role, axis) → level.
@@ -22,6 +29,7 @@
 //             level separately — approve is gated server-side on the
 //             planning:execute capability plus self-approval block)
 //   admin:    null < "read" < "execute+override"
+//   sales:    null < "read" < "execute" < "execute+override"
 //
 // A `required` capability of the form "<axis>:<min_level>" is granted when
 // the role's grant on that axis is at or above min_level.
@@ -29,16 +37,18 @@
 
 import type { Role } from "@/lib/contracts/enums";
 
-export type CapabilityAxis = "stock" | "planning" | "admin";
+export type CapabilityAxis = "stock" | "planning" | "admin" | "sales";
 
 export type StockLevel = "read" | "execute" | "execute+override" | null;
 export type PlanningLevel = "read" | "execute" | "execute+override" | null;
 export type AdminLevel = "read" | "execute" | "execute+override" | null;
+export type SalesLevel = "read" | "execute" | "execute+override" | null;
 
 export interface CapabilityGrants {
   stock: StockLevel;
   planning: PlanningLevel;
   admin: AdminLevel;
+  sales: SalesLevel;
 }
 
 // Truth table — source: plan §B.2. Changing these values changes the portal's
@@ -49,21 +59,35 @@ export const ROLE_CAPABILITY_LATTICE: Record<Role, CapabilityGrants> = {
     stock: "read",
     planning: "read",
     admin: "read",
+    sales: null,
   },
   operator: {
     stock: "execute",
     planning: "read",
     admin: null,
+    sales: null,
   },
   planner: {
     stock: "execute",
     planning: "execute+override",
     admin: null,
+    sales: null,
   },
   admin: {
     stock: "execute+override",
     planning: "execute+override",
     admin: "execute+override",
+    sales: "execute+override",
+  },
+  // Narrow on purpose: a sales rep works leads and has no standing anywhere in
+  // the factory. Everything outside the sales axis is null, which also means
+  // the sidebar hides those rows rather than padlocking them
+  // (isCapabilityPermanentlyUnreachable).
+  sales_rep: {
+    stock: null,
+    planning: null,
+    admin: null,
+    sales: "execute",
   },
 };
 
@@ -80,6 +104,9 @@ export type CapabilityRequirement =
   | "admin:read"
   | "admin:execute"
   | "admin:execute+override"
+  | "sales:read"
+  | "sales:execute"
+  | "sales:execute+override"
   | "viewer:read";
 
 const LEVEL_ORDER: Record<string, number> = {

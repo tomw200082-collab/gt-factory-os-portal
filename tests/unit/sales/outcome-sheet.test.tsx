@@ -1,18 +1,56 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OutcomeSheet } from "@/app/(sales)/_components/OutcomeSheet";
-import { OUTCOME_LABELS, OUTCOME_TITLES, UI } from "@/app/(sales)/_lib/labels";
+import { OUTCOME_LABELS, OUTCOME_TITLES, STATUS_LABELS, UI } from "@/app/(sales)/_lib/labels";
 
 afterEach(cleanup);
 
 describe("outcome sheet", () => {
-  it("offers exactly the four outcomes, and no way to declare a win", () => {
+  it("offers the five outcomes, and lets none of them declare a win unproven", () => {
+    // Was: "no way to declare a win" — the sheet had four outcomes and a close
+    // was simply unreachable, so a deal Tom closed on the phone and invoiced in
+    // Green Invoice was either not recorded or recorded as something else.
+    // A close is now offered, and is still not clickable in the sense that
+    // mattered: it commits nothing until it has evidence (D8, Tom 2026-08-24).
     render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
     expect(screen.getByText(OUTCOME_LABELS.answered_progressing)).toBeTruthy();
     expect(screen.getByText(OUTCOME_LABELS.no_answer)).toBeTruthy();
     expect(screen.getByText(OUTCOME_LABELS.whatsapp_sent)).toBeTruthy();
     expect(screen.getByText(OUTCOME_LABELS.lost)).toBeTruthy();
-    expect(screen.queryByText("הומר ✓")).toBeNull();
+    expect(screen.getByText(STATUS_LABELS.won)).toBeTruthy();
+  });
+
+  it("will not close a deal without a Green Invoice document number", () => {
+    const onSubmit = vi.fn();
+    render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-won"));
+
+    const confirm = screen.getByTestId("won-confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    // Whitespace is not a document number either.
+    fireEvent.change(screen.getByTestId("won-document-number"), {
+      target: { value: "   " },
+    });
+    expect((screen.getByTestId("won-confirm") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("closes a deal on the document number, and says so is what it sent", () => {
+    const onSubmit = vi.fn();
+    render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-won"));
+    fireEvent.change(screen.getByTestId("won-document-number"), {
+      target: { value: "  GI-2026-0042  " },
+    });
+    fireEvent.click(screen.getByTestId("won-confirm"));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0]).toEqual({
+      result: "won",
+      document_number: "GI-2026-0042",
+    });
   });
 
   it("records a no-answer without asking anything else", () => {
@@ -34,6 +72,62 @@ describe("outcome sheet", () => {
     const vars = onSubmit.mock.calls[0][0];
     expect(vars.result).toBe("answered_progressing");
     expect(typeof vars.next_touch_at).toBe("string");
+  });
+
+  it("records the outcome the user chose, not the one the date step assumed", () => {
+    // D4. The exact path: a call that went unanswered, and a callback agreed for
+    // a date that is not one of the presets. This used to submit
+    // `answered_progressing` — the date step took `{ result:
+    // 'answered_progressing' }` from a constant and every button on it spread
+    // that in, whichever outcome had (or had not) been declared to get there.
+    const onSubmit = vi.fn();
+    render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+
+    fireEvent.click(screen.getByTestId("outcome-pick-date-no_answer"));
+    // Nothing on screen may be false, and that includes what a tap is about to
+    // record: the step names the outcome before it commits it.
+    expect(screen.getByTestId("outcome-declared").textContent).toContain(
+      OUTCOME_LABELS.no_answer,
+    );
+
+    fireEvent.change(screen.getByLabelText(UI.pickDate), {
+      target: { value: "2026-09-03" },
+    });
+    fireEvent.click(screen.getByTestId("next-touch-custom"));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const vars = onSubmit.mock.calls[0][0];
+    expect(vars.result).toBe("no_answer");
+    expect(typeof vars.next_touch_at).toBe("string");
+  });
+
+  it("carries a whatsapp hand-off into the date step as itself", () => {
+    const onSubmit = vi.fn();
+    render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-pick-date-whatsapp_sent"));
+    fireEvent.click(screen.getByTestId("next-touch-tomorrow"));
+    expect(onSubmit.mock.calls[0][0].result).toBe("whatsapp_sent");
+  });
+
+  it("offers no way into the date step without declaring an outcome first", () => {
+    // The root-level "שנה תאריך" was the door that made the invention possible:
+    // it reached the date step with nothing chosen. The date step is a
+    // disclosure under an outcome now, so there is no orphan route to it.
+    render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    expect(screen.queryByTestId("outcome-pick-date")).toBeNull();
+  });
+
+  it("forgets the declared outcome when the user goes back", () => {
+    // Otherwise "לא ענה → שנה תאריך → back → ענה, מתקדם" would still be
+    // carrying no_answer, which is the same class of lie in the other
+    // direction.
+    const onSubmit = vi.fn();
+    render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-pick-date-no_answer"));
+    fireEvent.click(screen.getByTestId("outcome-back"));
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    fireEvent.click(screen.getByTestId("next-touch-tomorrow"));
+    expect(onSubmit.mock.calls[0][0].result).toBe("answered_progressing");
   });
 
   it("will not close a lead as lost without a reason", () => {
