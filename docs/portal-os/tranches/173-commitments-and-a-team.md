@@ -1,8 +1,7 @@
 # Tranche 173 — a promise is shown, and four people can work the queue
 
-**Status:** built — tsc 0, eslint 0 errors, vitest 1434/1434, playwright @mocked 101/102
-(the one failure pre-dates this tranche: `sales-today.spec.ts:297` fails identically with
-every change here stashed — see "Not ours" below)
+**Status:** built — CI green. eslint 0 errors · tsc 0 · vitest 1434/1434 ·
+playwright @mocked 102/102 · registry check passed (PR #220, `ci` run 32767230689)
 **Origin:** the 2026-08-24 sales-queue-integrity masterprompt, written from live measurement of
 Postgres `rvadsozabmxkkrktwgnv`, the Shopify Admin API and the Make API. It overturns one sentence
 this repo's own tranche 164 specified, checked it out, and shipped.
@@ -154,14 +153,28 @@ page-level harness the sales suite did not have).
 - [x] The three tranche-164 tests that encode the old doctrine are rewritten, none deleted
 - [x] tsc 0 · eslint 0 errors · vitest 1434/1434 · playwright @mocked 101/102
 
-## Not ours
+## A wrong call, corrected
 
-`tests/e2e/sales-today.spec.ts:297` ("the card leaves the queue optimistically on שלי")
-fails on this branch **with every change in this tranche stashed**, deterministically
-(9 × locator resolved to visible, twice over). It is the gate-iteration-2 INTER-NEW-2
-fix regressing, it pre-dates this work, and it is not touched here — reported rather
-than folded in, because fixing it means editing `_lib/api.ts` cache keys well outside
-what D1–D8 asked for.
+While this tranche was being built, `tests/e2e/sales-today.spec.ts:297` ("the card leaves
+the queue optimistically on שלי") failed deterministically in the authoring sandbox — nine
+times per run, twice over, and identically **with every change in this tranche stashed**.
+That last fact is why it was reported as a pre-existing regression of the tranche-172
+INTER-NEW-2 fix, and left alone.
+
+**That call was wrong.** The test passes in CI: line 95 of the `ci` run, 102/102. The
+stash experiment was sound as far as it went — it did prove this tranche did not cause the
+failure — but it could not distinguish "broken on main" from "broken in this sandbox", and
+the conclusion drawn from it overreached in exactly that gap.
+
+The cause is environmental: this image ships Chromium 1194 while Playwright 1.59.1 expects
+1217, and the local runs were forced onto the older binary through `PW_CHROME_PATH`
+(the §7.7 landmine, which bites in a second way nobody had written down — it does not only
+make the browser hard to find, it can change a timing-sensitive result). CI installs the
+matching browser via `npx playwright install --with-deps chromium`.
+
+**No regression exists in `_lib/api.ts`.** The lesson worth keeping: a green local suite and
+a red local suite are both claims about *this machine* until CI has spoken, and "fails with
+my changes stashed" narrows a cause without locating it.
 
 ## Not executed here
 
