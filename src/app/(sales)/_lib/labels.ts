@@ -176,13 +176,17 @@ export const UI = {
   dailyCommitment: (shown: number, remaining: number) =>
     `היום: ${shown} שיחות · עוד ${remaining} ממתינות בתור`,
   // "Why these?" has to be answerable from the screen. The count above says
-  // what is owed today; this says the rule that produced it — one quota, and
-  // the Hebrew ("לכל התור") is still exactly right, because the quota is still
-  // one number for the whole morning. What changed in tranche 173 is who spends
-  // it: only the untouched backlog does. A due follow-up is a promise already
-  // made and passes the quota untouched, so no section can be starved by an
-  // earlier one any more.
-  dailyCapRule: (cap: number) => `מתוך מכסה יומית של ${cap} לכל התור`,
+  // what is owed today; this says the rule that produced it.
+  //
+  // It used to read "…לכל התור" — a daily quota for the WHOLE queue. That was
+  // true while new leads and follow-ups shared one budget, and tranche 173 made
+  // it false: the quota now governs untouched new leads alone, and a callback
+  // you already promised passes it untouched. Leaving the old wording would
+  // have been a sentence on screen that overstates what it caps, which is the
+  // one thing this workspace is not allowed to do. So the string names what it
+  // actually governs, and names what it does not.
+  dailyCapRule: (cap: number) =>
+    `מתוך מכסה יומית של ${cap} לידים חדשים · מעקבים שהתחייבת אליהם אינם נספרים`,
   // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
   // past. This one states the lead's age as a property of the lead, which is
   // what makes an old lead feel old on the card.

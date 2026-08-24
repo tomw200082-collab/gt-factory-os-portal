@@ -256,6 +256,13 @@ describe("today queue", () => {
     const rules = screen.getAllByTestId("today-daily-cap-rule");
     expect(rules).toHaveLength(1);
     expect(rules[0].textContent).toBe(UI.dailyCapRule(15));
+
+    // And the rule it states must be the rule that actually runs. The string
+    // used to say the quota was "לכל התור" — for the whole queue — which was
+    // true only while follow-ups shared the budget. A sentence that overstates
+    // what it caps is exactly the kind of false thing this screen may not show.
+    expect(rules[0].textContent).toContain("לידים חדשים");
+    expect(rules[0].textContent).not.toContain("לכל התור");
   });
 
   it("says nothing about a quota that is not biting", () => {

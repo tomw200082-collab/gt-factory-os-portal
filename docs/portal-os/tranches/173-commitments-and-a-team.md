@@ -108,6 +108,7 @@ tests/unit/sales/sales-capability.test.ts
 tests/unit/sales/labels.test.ts
 tests/e2e/sales-assignment.spec.ts
 tests/e2e/sales-outcome-integrity.spec.ts
+playwright.config.ts
 docs/portal-os/tranches/173-commitments-and-a-team.md
 docs/portal-os/tranches/_active.txt
 docs/portal-os/registry.md
@@ -153,28 +154,92 @@ page-level harness the sales suite did not have).
 - [x] The three tranche-164 tests that encode the old doctrine are rewritten, none deleted
 - [x] tsc 0 · eslint 0 errors · vitest 1434/1434 · playwright @mocked 101/102
 
-## A wrong call, corrected
+## A second review pass, and a false sentence it caught
+
+A review of the driving masterprompt found four defects in the *instructions*, two of
+which had already been faithfully implemented. Both are fixed here.
+
+**`dailyCapRule` was left saying something that stopped being true.** The original S1
+instruction was explicit — "Leave `dailyCapRule` alone. Its Hebrew string … stays true
+after this change" — and it was followed, with a source comment written to defend it. It
+does not stay true. The string read *"מתוך מכסה יומית של N לכל התור"*: a daily quota **for
+the whole queue**. That held while new leads and follow-ups shared one budget, and this
+tranche is precisely the change that ends the sharing. Afterwards the quota governs
+untouched new leads alone and a promised callback passes it untouched, so the sentence
+overstated what it caps — on the one screen whose first rule is that nothing on it may be
+false. Now:
+
+```
+מתוך מכסה יומית של N לידים חדשים · מעקבים שהתחייבת אליהם אינם נספרים
+```
+
+and the test no longer just calls `UI.dailyCapRule(cap)` — it asserts the rendered string
+names new leads and does **not** claim "לכל התור", so the false version cannot come back.
+
+Worth naming plainly: an instruction being explicit is not the same as it being right, and
+this one was carried into the product because it was followed rather than checked.
+
+**`playwright.config.ts` is hardened** so the trap described below cannot be re-sprung: the
+correct `PW_CHROME_PATH` binary is named next to the escape hatch, and the webServer now
+pins `NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH` — without it every @mocked sales spec 307s to the
+sign-in wall and fails on locators that never existed, a harness failure that reads exactly
+like a feature failure.
+
+(The other two defects were in the backend half — the reminder de-duplication was not
+atomic, and the digest cron drifted an hour every winter. Both fixed in
+`gt-factory-os#236`, migration 0334.)
+
+## A wrong call, corrected — twice
 
 While this tranche was being built, `tests/e2e/sales-today.spec.ts:297` ("the card leaves
 the queue optimistically on שלי") failed deterministically in the authoring sandbox — nine
-times per run, twice over, and identically **with every change in this tranche stashed**.
-That last fact is why it was reported as a pre-existing regression of the tranche-172
-INTER-NEW-2 fix, and left alone.
+times per run, and identically **with every change in this tranche stashed**. It was
+reported as a pre-existing regression of the tranche-172 INTER-NEW-2 fix, and left alone.
 
-**That call was wrong.** The test passes in CI: line 95 of the `ci` run, 102/102. The
-stash experiment was sound as far as it went — it did prove this tranche did not cause the
-failure — but it could not distinguish "broken on main" from "broken in this sandbox", and
-the conclusion drawn from it overreached in exactly that gap.
+**Wrong once:** the test passes in CI — line 95 of the `ci` run, 102/102. The stash
+experiment was sound as far as it went and did prove this tranche did not cause the
+failure, but it cannot distinguish "broken on main" from "broken on this machine", and
+the conclusion overreached in exactly that gap.
 
-The cause is environmental: this image ships Chromium 1194 while Playwright 1.59.1 expects
-1217, and the local runs were forced onto the older binary through `PW_CHROME_PATH`
-(the §7.7 landmine, which bites in a second way nobody had written down — it does not only
-make the browser hard to find, it can change a timing-sensitive result). CI installs the
-matching browser via `npx playwright install --with-deps chromium`.
+**Wrong twice:** the first correction blamed the version — "Chromium 1194 while Playwright
+1.59.1 expects 1217" — and called the effect "timing-sensitive". Both halves are wrong,
+and each sends the next person somewhere useless: the version framing invites installing
+1217, and the timing framing invites waits, retries and `expect.poll`, none of which can
+ever work here.
 
-**No regression exists in `_lib/api.ts`.** The lesson worth keeping: a green local suite and
-a red local suite are both claims about *this machine* until CI has spoken, and "fails with
-my changes stashed" narrows a cause without locating it.
+**What it actually is.** Two binaries of the *same* revision 1194 ship in this image, and
+only one of them fails:
+
+```
+PW_CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome                 → 5 passed, 1 failed
+PW_CHROME_PATH=/opt/pw-browsers/chromium_headless_shell-1194/.../headless_shell   → 6 passed
+```
+
+Same tree, same commit, same env. The revision is not the variable; the **mode** is. On the
+full Chromium build (new-headless) **no synthesised mouse event is delivered to the page at
+all while a fixed overlay is mounted** — measured with capture-phase listeners on both the
+button and `document`: `locator.click()` → `[]`, `page.mouse.click()` → `[]`,
+`dispatchEvent` → the handler fires. It is not a race and not a hit-test interception; it is
+total input suppression, gated on the presence of the overlay. So the outcome POST never
+fires, the optimistic drop never happens, and the assertion after it fails while pointing
+squarely at `_lib/api.ts`, which is correct.
+
+**The tranche-172 INTER-NEW-2 fix is present and correct** — verified behaviourally, not
+just read: `TODAY_PREFIX = ["sales","today"]` and `dropFromTodayCaches` uses
+`qc.getQueriesData({ queryKey: TODAY_PREFIX })`, a TanStack v5 prefix match, so it patches
+`["sales","today","<email>"]` as well as `["sales","today","all"]`. **No regression exists
+in `_lib/api.ts` and nobody should go looking for one.**
+
+`playwright.config.ts` is hardened in this tranche so the trap cannot be re-sprung: the
+correct binary is named next to the `PW_CHROME_PATH` comment, and the webServer now pins
+`NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH` (without it every @mocked sales spec 307s to the sign-in
+wall and fails on locators that never exist — a harness failure that reads as a feature
+failure, and plausibly part of how the original wrong conclusion was reached).
+
+**The lesson worth keeping:** a red local suite and a green local suite are both claims
+about *this machine* until CI has spoken; "fails with my changes stashed" narrows a cause
+without locating it; and a correction issued fast can be as wrong as what it replaced —
+this one had to be made twice.
 
 ## Not executed here
 
