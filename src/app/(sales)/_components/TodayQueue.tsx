@@ -59,7 +59,12 @@ function Section({
   onArm,
   onPostpone,
   onLost,
-}: { type: TodayItemType; rows: TodayRow[] } & Omit<TodayQueueProps, "rows">) {
+  configuredCap,
+}: {
+  type: TodayItemType;
+  rows: TodayRow[];
+  configuredCap: number;
+} & Omit<TodayQueueProps, "rows">) {
   const [shown, setShown] = useState(PAGE);
 
   // Two limits, in order: the daily commitment decides what is owed today, the
@@ -100,7 +105,9 @@ function Section({
           className="s-nums text-[12px]"
           style={{ color: "hsl(var(--s-fg-muted))" }}
         >
-          {UI.dailyCommitment(committed.length, deferred)}{" "}
+          {UI.dailyCommitment(committed.length, deferred)}
+          {" · "}
+          <span data-testid="today-daily-cap-rule">{UI.dailyCapRule(configuredCap)}</span>{" "}
           {/* The sentence named a number of waiting leads and offered no way to
               reach them — a count that states a backlog should open it. */}
           <Link
@@ -175,6 +182,7 @@ export function TodayQueue({
             type={type}
             rows={section}
             dailyCap={share}
+            configuredCap={dailyCap}
             slaHours={slaHours}
             roster={roster}
             templates={templates}

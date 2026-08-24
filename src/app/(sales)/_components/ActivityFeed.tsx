@@ -6,7 +6,7 @@
 // had (audit admin-F7). Supervising a second person used to mean opening their
 // leads one at a time.
 
-import { EVENT_LABELS, UI } from "../_lib/labels";
+import { EVENT_LABELS, UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
 import type { ActivityRow } from "../_lib/types";
 
@@ -38,7 +38,7 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
             {EVENT_LABELS[row.event_type] ?? row.event_type}
           </span>
           <span className="ms-auto flex items-baseline gap-2">
-            <span style={{ color: "hsl(var(--s-fg-faint))" }}>{row.actor}</span>
+            <span style={{ color: "hsl(var(--s-fg-faint))" }}>{actorLabel(row.actor)}</span>
             <span aria-hidden style={{ color: "hsl(var(--s-fg-faint))" }}>
               ·
             </span>
