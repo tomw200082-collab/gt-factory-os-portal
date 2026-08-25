@@ -15,11 +15,22 @@ export const SECTION_ALARM_COUNT = 10;
 /**
  * Sections that are workload, and so subject to the daily commitment.
  *
- * A conversion is news and a returning customer is the one case that must never
- * go quiet again — neither is work you can defer to tomorrow, so neither is
- * capped, however long the backlog behind them is.
+ * Exactly one section is. An untouched new lead is work nobody has been
+ * promised anything about, and how much of that backlog is owed today is a
+ * number Tom sets. The other three are not workload at all: a conversion is
+ * news, a returning customer is the one case that must never go quiet again,
+ * and a due follow-up is a callback the rep already promised, on a date they
+ * chose. None of those three can be deferred to tomorrow, so none is capped,
+ * however long the backlog behind them is.
+ *
+ * `due_follow_up` sat in this list until tranche 173, which is not a bug this
+ * file introduced by accident — tranche 164 specified it, tested it and ticked
+ * it off. Against the live shape (189 untouched leads, cap 15) one shared
+ * budget drained in render order rendered the follow-up section as zero cards:
+ * a promise made to a named person lost to the backlog, every morning, in
+ * silence.
  */
-export const CAPPED_SECTIONS: TodayItemType[] = ["new_lead", "due_follow_up"];
+export const CAPPED_SECTIONS: TodayItemType[] = ["new_lead"];
 
 /**
  * Cap the queue at the admin-owned daily commitment.
@@ -31,9 +42,10 @@ export const CAPPED_SECTIONS: TodayItemType[] = ["new_lead", "due_follow_up"];
  * The cap is **one budget across the whole queue**, not one per section. It was
  * applied per section, so a cap of 15 produced 15 new leads *and* 15 follow-ups
  * — thirty calls from a setting whose own label reads "כמה שיחות ביום" (gate
- * P1). Sections draw from the budget in the order they are rendered, which is
- * the order the queue already means: conversions and returning customers first
- * (never capped — neither is deferrable), then new leads, then follow-ups.
+ * P1). The budget now has exactly one claimant, so "one budget" and "one per
+ * section" describe the same behaviour and the 15+15=30 bug cannot return by
+ * either route. Everything ahead of new leads in render order — conversions,
+ * returning customers, due follow-ups — passes through untouched.
  *
  * `budget` is what is left after earlier sections took their share; pass the
  * full daily cap for the first capped section.

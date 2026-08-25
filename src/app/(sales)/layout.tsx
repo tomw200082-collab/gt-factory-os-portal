@@ -31,13 +31,15 @@ export const metadata: Metadata = {
  * IndexedDB repositories, so gating first paint on a seed would cost a spinner
  * for nothing).
  *
- * Access is admin-only in v1. The gate that actually holds is this one plus the
- * server-side check on every sales endpoint — the middleware role table is a
- * documented no-op until app_users.role is projected into the JWT.
+ * Access is the `sales` capability, held by `sales_rep` and by admin. This gate
+ * plus the server-side check on every sales endpoint are the two that actually
+ * hold — the middleware role table is a documented no-op until app_users.role is
+ * projected into the JWT, which is exactly why changing only the API would give
+ * a sales rep 2xx from every endpoint and still bounce them off the screen.
  */
 export default function SalesLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGate minimum="admin:execute">
+    <RoleGate minimum="sales:execute">
       <div className={rubik.variable}>
         <SalesShell>{children}</SalesShell>
       </div>

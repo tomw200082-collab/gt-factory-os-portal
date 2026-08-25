@@ -16,6 +16,7 @@ import {
   useAttention,
   useLeadEvents,
   useLeads,
+  useConvert,
   useOutcome,
   useOutreach,
   useSetNextTouch,
@@ -58,6 +59,11 @@ export default function AttentionPage() {
   const capture = useOutcomeCapture();
   const pendingLead = leads.data?.find((l) => l.id === capture.pending?.leadId) ?? null;
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const convert = useConvert(capture.pending?.leadId ?? "");
+  // convert_lead answers 200 {converted:false} when the lead is no longer open.
+  // That is not an HTTP error and carries no error.message, so it needs its own
+  // channel — otherwise a close that did nothing reads as a close that worked.
+  const [convertNote, setConvertNote] = useState<string | null>(null);
   const answerSheetOpen = Boolean(capture.pending && (pendingLead || outcome.isPending));
 
   // The answered lead leaves /attention the moment it is answered for, and the
@@ -193,10 +199,34 @@ export default function AttentionPage() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending}
-          error={outcome.error?.message ?? null}
+          busy={outcome.isPending || convert.isPending}
+          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={(vars) => {
             if (!vars.result) return;
+            // `won` is not an outcome — record_outcome refuses it, because a
+            // close is evidence-only. It goes to convert_lead, which is also
+            // the only writer that emits the `converted` event v_sales_today
+            // needs to keep showing the deal.
+            if (vars.result === "won") {
+              if (!vars.document_number) return;
+              setConvertNote(null);
+              convert.mutate(
+                { document_number: vars.document_number },
+                {
+                  onSuccess: (res) => {
+                    // A close that did not happen must not be celebrated. The
+                    // intent stays armed, so the sheet stays open on this lead.
+                    if (!res.converted) {
+                      setConvertNote(UI.wonNotOpen);
+                      return;
+                    }
+                    capture.clear();
+                    setToast(UI.wonSaved);
+                  },
+                },
+              );
+              return;
+            }
             outcome.mutate(
               { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
               {

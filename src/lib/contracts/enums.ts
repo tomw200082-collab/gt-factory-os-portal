@@ -17,9 +17,18 @@
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// ROLES — unchanged. Locked decision 5.
+// ROLES — locked decision 5, extended once.
+//
+// `sales_rep` joined in tranche 173. The sales workspace had bypassed the
+// capability lattice entirely and hard-coded `role === 'admin'`, which meant
+// the only way to let a second person work leads was to make them a system
+// administrator. Tom's decision (2026-08-24) was a `sales` axis on the existing
+// lattice — not a fourth registry, and not by widening `admin|planner`.
+//
+// This constant and `private_core.app_users`' role CHECK are one fact in two
+// places: migration 0333 extends the CHECK, and drift between them is a bug.
 // ---------------------------------------------------------------------------
-export const ROLES = ["operator", "planner", "admin", "viewer"] as const;
+export const ROLES = ["operator", "planner", "admin", "viewer", "sales_rep"] as const;
 export type Role = (typeof ROLES)[number];
 
 // ---------------------------------------------------------------------------

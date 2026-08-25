@@ -355,6 +355,27 @@ export function useOutcome(leadId: string) {
   });
 }
 
+export interface ConvertVars {
+  document_number: string;
+  amount?: number;
+  currency?: string;
+}
+
+/**
+ * A deal closed on the phone, on Green Invoice evidence.
+ *
+ * Not folded into useOutcome: `won` is evidence-only and record_outcome refuses
+ * it, so this is a different endpoint over a different database function. It is
+ * also NOT optimistic — a conversion is the one event nobody wants to see
+ * celebrated and then withdrawn, and it stays in the queue afterwards as a
+ * conversion rather than leaving it.
+ */
+export function useConvert(leadId: string) {
+  return useSalesMutation<ConvertVars, { lead_id: string; converted: boolean }>(
+    (vars) => request(`/api/sales/leads/${leadId}/convert`, jsonBody(vars)),
+  );
+}
+
 export interface QuickAddVars {
   contact_name: string;
   phone?: string;
@@ -375,7 +396,8 @@ export function useSaveSettings() {
       whatsapp_templates?: WhatsappTemplates;
       lost_reasons?: string[];
       queue?: QueueSettings;
-      assignees?: AssigneeEntry[];
+      // No `assignees`: the roster is derived from private_core.app_users (D6)
+      // and the endpoint no longer accepts one.
     },
     unknown
   >((vars) =>

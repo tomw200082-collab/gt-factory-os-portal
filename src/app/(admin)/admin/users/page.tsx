@@ -39,7 +39,10 @@ interface AppUser {
   has_password: boolean;
 }
 
-const ROLES = ["admin", "planner", "operator", "viewer"] as const;
+// A second, duplicated copy of src/lib/contracts/enums.ts ROLES. It is the only
+// UI that assigns a role, so a value missing here cannot be given to anyone —
+// the two lists must be extended together.
+const ROLES = ["admin", "planner", "operator", "viewer", "sales_rep"] as const;
 type Role = (typeof ROLES)[number];
 
 // ---------------------------------------------------------------------------
@@ -357,6 +360,8 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
     "Can submit daily forms (Goods Receipt, Production Actual, Physical Count). Read access to stock and orders.",
   viewer:
     "Read-only access to dashboard and stock. Cannot submit forms or create records.",
+  sales_rep:
+    "Works the sales workspace only \u2014 leads, callbacks and conversions. No standing anywhere in the factory: no forms, no planning, no stock.",
 };
 
 export default function AdminUsersPage() {

@@ -96,9 +96,12 @@ describe("settings form", () => {
     );
   });
 
-  it("keeps the deactivation warning visible while the box is unchecked", () => {
-    // The warning was gated on person.active, so it vanished at the moment it
-    // became relevant — unchecking removed the sentence explaining the cost.
+  it("states what each person still has open, without offering to strand it", () => {
+    // Was: the deactivation toggle, and a warning gated on person.active that
+    // vanished at the moment it became relevant. The toggle is gone — people are
+    // deactivated in /admin/users, which is the only registry now (D6) — but the
+    // count is exactly the fact an admin needs before going there, so it stays
+    // and is no longer conditional on anything.
     render(
       <SettingsForm
         settings={settings}
@@ -107,19 +110,35 @@ describe("settings form", () => {
       />,
     );
     expect(screen.getByTestId("person-open-dana@gt.co.il").textContent).toBe(
-      UI.deactivateWarning(4),
+      UI.personOpenLeads(4),
     );
-    fireEvent.click(screen.getByTestId("person-active-dana@gt.co.il"));
-    expect(screen.getByTestId("person-open-dana@gt.co.il").textContent).toBe(
-      UI.deactivateWarning(4),
-    );
+    expect(screen.queryByTestId("person-active-dana@gt.co.il")).toBeNull();
   });
 
   it("names every repeated control by what it acts on", () => {
-    // Four buttons announcing "הסר" and a toggle announcing "פעיל" name nothing.
+    // Four buttons announcing "הסר" name nothing. (The roster's "פעיל" toggle
+    // was the other half of this case and no longer exists — see above.)
     render(<SettingsForm settings={settings} onSave={noop} />);
     expect(screen.getByLabelText(UI.removeItemNamed("אין תקציב"))).toBeTruthy();
-    expect(screen.getByLabelText(UI.personActiveNamed("דנה"))).toBeTruthy();
+  });
+
+  it("sends the reader to the one place a person can be added or removed", () => {
+    // A list you cannot edit and that does not say why reads as broken.
+    render(<SettingsForm settings={settings} onSave={noop} />);
+    expect(screen.getByTestId("people-registry-link").getAttribute("href")).toBe(
+      "/admin/users",
+    );
+    expect(screen.queryByTestId("person-add")).toBeNull();
+  });
+
+  it("never writes a roster back, because it is not the registry", () => {
+    // The settings PUT stopped accepting `assignees` in the same change; a form
+    // that still sent one would be writing into a void.
+    const saves: Array<Record<string, unknown>> = [];
+    render(<SettingsForm settings={settings} onSave={(v) => saves.push(v)} />);
+    fireEvent.submit(screen.getByTestId("settings-form"));
+    expect(saves).toHaveLength(1);
+    expect(saves[0]).not.toHaveProperty("assignees");
   });
 
   it("separates a section heading from the field labels inside it", () => {
@@ -133,10 +152,9 @@ describe("settings form", () => {
     ).toBe("settings-queue-title");
   });
 
-  it("agrees the open-lead warning with its count", () => {
-    expect(UI.deactivateWarning(1)).toContain("ליד פתוח אחד");
-    expect(UI.deactivateWarning(1)).toContain("אותו");
-    expect(UI.deactivateWarning(3)).toContain("3 לידים פתוחים");
+  it("agrees the open-lead count with its number", () => {
+    expect(UI.personOpenLeads(1)).toContain("ליד פתוח אחד");
+    expect(UI.personOpenLeads(3)).toContain("3 לידים פתוחים");
   });
 });
 

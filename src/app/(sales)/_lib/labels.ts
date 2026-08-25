@@ -44,6 +44,10 @@ export const EVENT_LABELS: Record<string, string> = {
   imported: "יובא",
   outreach: "פנייה יצאה",
   outcome: "תוצאת שיחה",
+  // Written by the morning digest (migration 0334). Without a label here the
+  // drawer timeline renders the raw token "reminder_sent" on a Hebrew screen —
+  // and this is the one event type a rep will see most mornings.
+  reminder_sent: "תזכורת נשלחה",
 };
 
 /**
@@ -172,10 +176,17 @@ export const UI = {
   dailyCommitment: (shown: number, remaining: number) =>
     `היום: ${shown} שיחות · עוד ${remaining} ממתינות בתור`,
   // "Why these?" has to be answerable from the screen. The count above says
-  // what is owed today; this says the rule that produced it — one quota for the
-  // whole queue, which is also why a later section can read 0 while an earlier
-  // one is full.
-  dailyCapRule: (cap: number) => `מתוך מכסה יומית של ${cap} לכל התור`,
+  // what is owed today; this says the rule that produced it.
+  //
+  // It used to read "…לכל התור" — a daily quota for the WHOLE queue. That was
+  // true while new leads and follow-ups shared one budget, and tranche 173 made
+  // it false: the quota now governs untouched new leads alone, and a callback
+  // you already promised passes it untouched. Leaving the old wording would
+  // have been a sentence on screen that overstates what it caps, which is the
+  // one thing this workspace is not allowed to do. So the string names what it
+  // actually governs, and names what it does not.
+  dailyCapRule: (cap: number) =>
+    `מתוך מכסה יומית של ${cap} לידים חדשים · מעקבים שהתחייבת אליהם אינם נספרים`,
   // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
   // past. This one states the lead's age as a property of the lead, which is
   // what makes an old lead feel old on the card.
@@ -184,6 +195,25 @@ export const UI = {
   sortByAge: "מיין לפי גיל",
   nextTouchPreview: (date: string) => `המגע הבא: ${date}`,
   chooseAnotherDate: "שנה תאריך",
+  // A close is proven by a Green Invoice document number (Tom 2026-08-24).
+  // Free text is rejected — "סגרנו עם דני" is not evidence, and `won` has been
+  // evidence-only since 0322.
+  wonTitle: "סגירת עסקה",
+  wonEvidenceLabel: "מספר מסמך ב-Green Invoice",
+  wonEvidenceHint: "סגירה נרשמת רק מול מספר מסמך. המספר נשמר כאסמכתה.",
+  wonEvidenceRequired: "צריך מספר מסמך כדי לסגור",
+  wonSaved: "נסגר ✓",
+  // convert_lead returns false — not an error — when the lead is no longer
+  // open. Announcing "נסגר ✓" for that is the workspace telling the user a
+  // thing happened that did not, which is exactly the race a second person on
+  // the queue creates: one rep marks אבוד while the other is closing the deal.
+  wonNotOpen: "הליד כבר נסגר או סומן אבוד בינתיים — רענן ובדוק לפני שתנסה שוב",
+  // The date step is a disclosure under an outcome that has already been
+  // chosen, so it states which one it is about. It used to be reachable from a
+  // bare "שנה תאריך" with nothing declared, and then wrote answered_progressing
+  // whichever date was tapped — "לא ענה, but call back Thursday" was recorded
+  // as a conversation that went well.
+  dateForOutcome: (outcome: string) => `התוצאה שתירשם: ${outcome}`,
   undo: "בטל",
   undone: "שוחזר",
   discardChanges: "יש שינויים שלא נשמרו — לצאת בכל זאת?",
@@ -248,15 +278,14 @@ export const UI = {
   addItem: "הוסף",
   lastChangedBy: (actor: string, when: string) => `שונה על ידי ${actor} · ${when}`,
   peopleTitle: "אנשי מכירות",
-  personName: "שם",
-  personEmail: "אימייל",
-  personActive: "פעיל",
-  personActiveNamed: (name: string) => `פעיל – ${name}`,
-  addPerson: "הוסף",
-  deactivateWarning: (n: number) =>
-    n === 1
-      ? "יש לו ליד פתוח אחד — שייך אותו קודם"
-      : `יש לו ${n} לידים פתוחים — שייך אותם קודם`,
+  // The roster is derived from the system's users, not edited here (D6). The
+  // sentence says so plainly, because a list you cannot change and that does
+  // not explain why reads as broken.
+  peopleDerived: "הרשימה נגזרת ממשתמשי המערכת שיש להם הרשאת מכירות. הוספה והשבתה נעשות במסך המשתמשים.",
+  peopleRegistryLink: "מסך המשתמשים",
+  peopleEmpty: "אין עדיין אנשי מכירות פעילים.",
+  personOpenLeads: (n: number) =>
+    n === 1 ? "ליד פתוח אחד" : `${n} לידים פתוחים`,
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
   showMore: (n: number) => `הצג עוד ${leads(n)}`,

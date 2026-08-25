@@ -175,8 +175,15 @@ test("the two quick outcomes show the date they are about to schedule @mocked", 
 
   await expect(page.getByTestId("outcome-preview-no_answer")).toContainText("המגע הבא");
   await expect(page.getByTestId("outcome-preview-whatsapp_sent")).toContainText("המגע הבא");
-  // And a way to disagree with it.
-  await expect(page.getByTestId("outcome-pick-date")).toBeVisible();
+
+  // And a way to disagree with it — one per outcome, sitting under the outcome
+  // it belongs to. There used to be a single bare "שנה תאריך" at the root of
+  // the sheet, which reached the date step with NOTHING declared and then
+  // submitted answered_progressing whichever date was tapped: "no answer, call
+  // back Thursday" was recorded as a conversation that went well (D4).
+  await expect(page.getByTestId("outcome-pick-date-no_answer")).toBeVisible();
+  await expect(page.getByTestId("outcome-pick-date-whatsapp_sent")).toBeVisible();
+  await expect(page.getByTestId("outcome-pick-date")).toHaveCount(0);
 });
 
 test("the backdrop cannot dismiss the sheet while the write is in the air @mocked", async ({

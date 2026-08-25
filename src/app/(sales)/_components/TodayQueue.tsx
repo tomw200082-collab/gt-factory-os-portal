@@ -4,8 +4,10 @@
 //
 // Order is the product: conversions first because that is the reason to open
 // the app in the morning, then a returning customer (the one that must never go
-// quiet again), then untouched new leads, then today's follow-ups. The view
-// already returns rows in this order; grouping here makes the reason legible.
+// quiet again), then today's promised callbacks, and only then the untouched
+// backlog. The three ahead of the backlog are commitments and news; the backlog
+// is the only part of the morning whose size is a choice. The view already
+// returns rows in this order; grouping here makes the reason legible.
 
 import Link from "next/link";
 import { useState } from "react";
@@ -22,8 +24,8 @@ import { TodayCard } from "./TodayCard";
 const SECTION_ORDER: TodayItemType[] = [
   "conversion",
   "returning_customer",
-  "new_lead",
   "due_follow_up",
+  "new_lead",
 ];
 
 /**
@@ -161,9 +163,12 @@ export function TodayQueue({
   onPostpone,
   onLost,
 }: TodayQueueProps) {
-  // "כמה שיחות ביום" is one number for the day. Handing the full cap to every
+  // "כמה שיחות ביום" is one number for the day, and since tranche 173 it has a
+  // single claimant: the untouched backlog. Handing the full cap to every
   // section spent it twice — 15 new leads and 15 follow-ups from a cap of 15
-  // (gate P1). Sections draw from a single budget in render order instead.
+  // (gate P1) — and the over-correction that fixed it starved the follow-ups
+  // instead. Sections still draw from one budget in render order; only one of
+  // them draws anything.
   let budget = dailyCap;
 
   // "Why these?" is a question about the whole queue, so it is answered once,

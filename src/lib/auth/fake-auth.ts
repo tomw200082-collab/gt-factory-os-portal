@@ -63,6 +63,13 @@ export const FAKE_USERS: Record<Role, DevShimSession> = {
     role: "admin",
     theme_preference: "light",
   },
+  sales_rep: {
+    user_id: "aaaaaaaa-0000-0000-0000-0000000000a5",
+    display_name: "Erik (sales)",
+    email: "sales@fake.gtfactory",
+    role: "sales_rep",
+    theme_preference: "light",
+  },
   viewer: {
     user_id: "aaaaaaaa-0000-0000-0000-0000000000a4",
     display_name: "Guest (viewer)",

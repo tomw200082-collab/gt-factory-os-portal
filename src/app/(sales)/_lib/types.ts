@@ -203,3 +203,13 @@ export interface TodayPayload {
   rows: TodayRow[];
   queue: QueueSettings;
 }
+
+/**
+ * The lead a just-recorded "אבוד" can be taken back from, and the date it was
+ * carrying before. Owned by the toast that offers the reversal — never by the
+ * screen — so a new toast cannot inherit a previous toast's target.
+ */
+export interface UndoTarget {
+  leadId: string;
+  previousNextTouch: string | null;
+}

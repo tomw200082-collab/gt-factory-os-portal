@@ -11,15 +11,24 @@
 // with a phone that was against an ear a second ago.
 
 import { useEffect, useRef, useState } from "react";
-import { LOST_REASONS, OUTCOME_LABELS, OUTCOME_TITLES, UI } from "../_lib/labels";
+import { LOST_REASONS, OUTCOME_LABELS, OUTCOME_TITLES, STATUS_LABELS, UI } from "../_lib/labels";
 import { fmtDate, toDateInputValue } from "../_lib/format";
 import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 
+/**
+ * `won` is not an OutcomeResult and cannot be: sales_core.record_outcome
+ * refuses it (won is evidence-only, D4/D12), so a close travels to a different
+ * endpoint over sales_core.convert_lead. The caller routes on it.
+ */
+export type SheetResult = OutcomeResult | "won";
+
 export interface OutcomeSubmit {
-  result?: OutcomeResult;
+  result?: SheetResult;
   next_touch_at?: string | null;
   reason?: string | null;
+  /** Green Invoice document number. Present only when result is "won". */
+  document_number?: string;
 }
 
 export interface OutcomeSheetProps {
@@ -49,7 +58,7 @@ export interface OutcomeSheetProps {
   onDismiss: () => void;
 }
 
-type Step = "root" | "next-touch" | "lost-reason";
+type Step = "root" | "next-touch" | "lost-reason" | "won-evidence";
 
 function atNineAM(daysFromNow: number): string {
   const d = new Date();
@@ -93,9 +102,19 @@ export function OutcomeSheet({
   const [step, setStep] = useState<Step>(
     mode === "next-touch" ? "next-touch" : mode === "lost" ? "lost-reason" : "root",
   );
+  // Which outcome the date step is a disclosure under.
+  //
+  // The sheet used to reach that step from a root-level "שנה תאריך" with no
+  // outcome declared at all, and every date button on it submitted
+  // `{ result: 'answered_progressing' }`. So the one path a rep takes when a
+  // call went unanswered but a callback was agreed — the exact case this whole
+  // workspace exists to keep — wrote down a conversation that went well. The
+  // outcome is chosen first now, and travels here.
+  const [dateFor, setDateFor] = useState<OutcomeResult | null>(null);
   const [reason, setReason] = useState<string>("");
   const [otherReason, setOtherReason] = useState<string>("");
   const [customDate, setCustomDate] = useState<string>(toDateInputValue(new Date()));
+  const [documentNumber, setDocumentNumber] = useState<string>("");
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Focus trap + Escape, mirroring MobileNav's dialog handling.
@@ -143,9 +162,10 @@ export function OutcomeSheet({
   const reasons = lostReasons?.length ? lostReasons : LOST_REASONS;
   const freeTextReason = reasons[reasons.length - 1];
   const chosenReason = reason === freeTextReason ? otherReason.trim() : reason;
-  // A card's "דחה" only moves the date; the full loop also records the outcome.
-  const progressing: OutcomeSubmit =
-    mode === "outcome" ? { result: "answered_progressing" } : {};
+  // A card's "דחה" only moves the date; the full loop also records the outcome
+  // — the one the user actually chose on the step before this.
+  const declared: OutcomeSubmit =
+    mode === "outcome" && dateFor ? { result: dateFor } : {};
 
   return (
     <div
@@ -201,7 +221,10 @@ export function OutcomeSheet({
               data-testid="outcome-answered_progressing"
               disabled={busy}
               className="s-btn s-btn-primary min-h-[56px] text-base"
-              onClick={() => setStep("next-touch")}
+              onClick={() => {
+                setDateFor("answered_progressing");
+                setStep("next-touch");
+              }}
             >
               {OUTCOME_LABELS.answered_progressing}
             </button>
@@ -223,6 +246,21 @@ export function OutcomeSheet({
               >
                 {UI.nextTouchPreview(fmtDate(nextBusinessTouchPreview(1).toISOString()))}
               </p>
+              {/* The date is a disclosure under this outcome, not a sibling of
+                  it: whatever date is chosen here, what gets recorded is still
+                  "לא ענה". */}
+              <button
+                type="button"
+                data-testid="outcome-pick-date-no_answer"
+                disabled={busy}
+                className="s-btn s-btn-ghost self-start text-[13px]"
+                onClick={() => {
+                  setDateFor("no_answer");
+                  setStep("next-touch");
+                }}
+              >
+                {UI.chooseAnotherDate}
+              </button>
             </div>
             <div className="flex flex-col gap-1">
               <button
@@ -241,15 +279,34 @@ export function OutcomeSheet({
               >
                 {UI.nextTouchPreview(fmtDate(nextBusinessTouchPreview(2).toISOString()))}
               </p>
+              <button
+                type="button"
+                data-testid="outcome-pick-date-whatsapp_sent"
+                disabled={busy}
+                className="s-btn s-btn-ghost self-start text-[13px]"
+                onClick={() => {
+                  setDateFor("whatsapp_sent");
+                  setStep("next-touch");
+                }}
+              >
+                {UI.chooseAnotherDate}
+              </button>
             </div>
+            {/* A close, and the only outcome on this sheet that asks for
+                evidence before it will commit. It sits above אבוד and below the
+                three that describe a conversation, because it is the rarest and
+                the most consequential — and it used to be impossible: a deal
+                closed on the phone and invoiced in Green Invoice had no way
+                into the system at all, so it was either not recorded or
+                recorded as something it was not. */}
             <button
               type="button"
-              data-testid="outcome-pick-date"
+              data-testid="outcome-won"
               disabled={busy}
-              className="s-btn s-btn-ghost"
-              onClick={() => setStep("next-touch")}
+              className="s-btn s-btn-ghost min-h-[56px] text-base"
+              onClick={() => setStep("won-evidence")}
             >
-              {UI.chooseAnotherDate}
+              {STATUS_LABELS.won}
             </button>
             <button
               type="button"
@@ -270,18 +327,32 @@ export function OutcomeSheet({
                 type="button"
                 data-testid="outcome-back"
                 className="s-btn s-btn-ghost self-start"
-                onClick={() => setStep("root")}
+                onClick={() => {
+                  setDateFor(null);
+                  setStep("root");
+                }}
               >
                 {UI.back}
               </button>
             ) : null}
             <p className="s-eyebrow">{UI.nextTouchTitle}</p>
+            {/* Nothing on screen may be false, and that includes what a tap is
+                about to record. */}
+            {mode === "outcome" && dateFor ? (
+              <p
+                data-testid="outcome-declared"
+                className="text-[13px]"
+                style={{ color: "hsl(var(--s-fg-muted))" }}
+              >
+                {UI.dateForOutcome(OUTCOME_LABELS[dateFor])}
+              </p>
+            ) : null}
             <button
               type="button"
               data-testid="next-touch-tomorrow"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => onSubmit({ ...progressing, next_touch_at: atNineAM(1) })}
+              onClick={() => onSubmit({ ...declared, next_touch_at: atNineAM(1) })}
             >
               {UI.tomorrow}
             </button>
@@ -289,7 +360,7 @@ export function OutcomeSheet({
               type="button"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => onSubmit({ ...progressing, next_touch_at: atNineAM(3) })}
+              onClick={() => onSubmit({ ...declared, next_touch_at: atNineAM(3) })}
             >
               {UI.inThreeDays}
             </button>
@@ -297,7 +368,7 @@ export function OutcomeSheet({
               type="button"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => onSubmit({ ...progressing, next_touch_at: atNineAM(7) })}
+              onClick={() => onSubmit({ ...declared, next_touch_at: atNineAM(7) })}
             >
               {UI.inAWeek}
             </button>
@@ -322,7 +393,7 @@ export function OutcomeSheet({
               className="s-btn s-btn-primary"
               onClick={() =>
                 onSubmit({
-                  ...progressing,
+                  ...declared,
                   next_touch_at: new Date(`${customDate}T09:00:00`).toISOString(),
                 })
               }
@@ -404,6 +475,56 @@ export function OutcomeSheet({
             {!chosenReason ? (
               <p role="status" aria-live="polite" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
                 {UI.lostReasonRequired}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {step === "won-evidence" ? (
+          <div className="flex flex-col gap-2">
+            {mode === "outcome" ? (
+              <button
+                type="button"
+                data-testid="outcome-back"
+                className="s-btn s-btn-ghost self-start"
+                onClick={() => setStep("root")}
+              >
+                {UI.back}
+              </button>
+            ) : null}
+            <p className="s-eyebrow">{UI.wonTitle}</p>
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                {UI.wonEvidenceLabel}
+              </span>
+              <input
+                className="s-input"
+                data-testid="won-document-number"
+                // The number is Latin digits inside an RTL sheet; without this
+                // it reads back reversed on some keyboards.
+                dir="ltr"
+                inputMode="text"
+                value={documentNumber}
+                onChange={(e) => setDocumentNumber(e.target.value)}
+              />
+            </label>
+            <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+              {UI.wonEvidenceHint}
+            </p>
+            <button
+              type="button"
+              data-testid="won-confirm"
+              disabled={busy || !documentNumber.trim()}
+              className="s-btn s-btn-primary"
+              onClick={() =>
+                onSubmit({ result: "won", document_number: documentNumber.trim() })
+              }
+            >
+              {UI.save}
+            </button>
+            {!documentNumber.trim() ? (
+              <p role="status" aria-live="polite" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+                {UI.wonEvidenceRequired}
               </p>
             ) : null}
           </div>

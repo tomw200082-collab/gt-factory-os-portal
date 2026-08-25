@@ -83,12 +83,16 @@ describe("today queue", () => {
       }),
       row({ lead_id: "B", item_type: "returning_customer", is_existing_customer: true }),
     ]);
+    // Commitments and news first, the backlog last. A promised callback ranks
+    // above an untouched lead because someone was told it would happen today
+    // (tranche 173); before that it rendered underneath the backlog, which is
+    // also where it lost the daily budget.
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual([
       TODAY_SECTION_LABELS.conversion,
       TODAY_SECTION_LABELS.returning_customer,
-      TODAY_SECTION_LABELS.new_lead,
       TODAY_SECTION_LABELS.due_follow_up,
+      TODAY_SECTION_LABELS.new_lead,
     ]);
   });
 
@@ -252,6 +256,13 @@ describe("today queue", () => {
     const rules = screen.getAllByTestId("today-daily-cap-rule");
     expect(rules).toHaveLength(1);
     expect(rules[0].textContent).toBe(UI.dailyCapRule(15));
+
+    // And the rule it states must be the rule that actually runs. The string
+    // used to say the quota was "לכל התור" — for the whole queue — which was
+    // true only while follow-ups shared the budget. A sentence that overstates
+    // what it caps is exactly the kind of false thing this screen may not show.
+    expect(rules[0].textContent).toContain("לידים חדשים");
+    expect(rules[0].textContent).not.toContain("לכל התור");
   });
 
   it("says nothing about a quota that is not biting", () => {
@@ -263,28 +274,68 @@ describe("today queue", () => {
     expect(screen.queryByTestId("today-daily-cap-rule")).toBeNull();
   });
 
-  it("spends one daily budget across the queue, not one per section", () => {
-    // A cap of 15 used to mean 15 new leads *and* 15 follow-ups — thirty calls
-    // from a setting whose label reads "כמה שיחות ביום" (gate P1).
+  it("spends one daily budget, and spends it only on the untouched backlog", () => {
+    // Two regressions guarded by one case, because the second was the
+    // over-correction for the first.
+    //
+    // A cap of 15 once meant 15 new leads *and* 15 follow-ups — thirty calls
+    // from a setting whose label reads "כמה שיחות ביום" (gate P1). The fix
+    // collapsed both sections onto a single budget drained in render order,
+    // which made the follow-up section render zero cards against the live shape
+    // (tranche 173). The budget is one number, and a promised callback does not
+    // draw on it at all.
     renderQueue(
       [
         ...Array.from({ length: 20 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
         ...Array.from({ length: 20 }, (_, i) =>
-          row({ lead_id: `F${i}`, item_type: "due_follow_up" }),
+          row({ lead_id: `F${i}`, item_type: "due_follow_up", status: "working" }),
         ),
       ],
       15,
     );
-    // New leads render first and take the whole budget; follow-ups get none of
-    // it and say so, rather than opening a second allowance.
+    // The backlog is the one claimant: 15 owed today, 5 deferred, and no second
+    // allowance opened anywhere behind it.
     const newSection = screen.getByTestId("today-section-new_lead");
     expect(within(newSection).getByTestId("today-daily-commitment").textContent).toContain(
       UI.dailyCommitment(15, 5),
     );
+    // Thirty calls cannot reappear from the other direction either: the quota
+    // sentence exists once for the whole queue, so no section is quietly
+    // holding a budget of its own.
+    expect(screen.getAllByTestId("today-daily-cap-rule")).toHaveLength(1);
+    // The promises are all on screen and defer nothing. `queryBy` rather than
+    // an assertion on `dailyCommitment(0, N)`: a section that defers nothing
+    // must not print a deferral sentence at all.
     const followSection = screen.getByTestId("today-section-due_follow_up");
-    expect(within(followSection).getByTestId("today-daily-commitment").textContent).toContain(
-      UI.dailyCommitment(0, 20),
+    expect(within(followSection).queryByTestId("today-daily-commitment")).toBeNull();
+    expect(within(followSection).getByTestId("today-section-count").textContent).toBe("20");
+  });
+
+  it("never defers a promised callback behind the daily cap", () => {
+    // D1. A follow-up is a commitment already made: the rep told someone they
+    // would call back today. The cap is a workload limit on leads nobody has
+    // been promised anything about, and it may not eat a promise.
+    renderQueue(
+      [
+        ...Array.from({ length: 20 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+        ...Array.from({ length: 3 }, (_, i) =>
+          row({
+            lead_id: `F${i}`,
+            item_type: "due_follow_up",
+            status: "working",
+            next_touch_at: new Date(Date.now() - (i + 1) * 3600e3).toISOString(),
+          }),
+        ),
+      ],
+      15,
     );
+    const followSection = screen.getByTestId("today-section-due_follow_up");
+    expect(within(followSection).getAllByTestId(/^today-card-/).length).toBe(3);
+    // And it is not merely rendered — nothing about it is deferred, so the
+    // section states no remainder at all.
+    expect(
+      within(followSection).queryByTestId("today-daily-commitment"),
+    ).toBeNull();
   });
 
   it("never defers a conversion or a returning customer behind the cap", () => {

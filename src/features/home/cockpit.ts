@@ -39,6 +39,7 @@ import {
   Package,
   PackageCheck,
   PackageOpen,
+  PhoneCall,
   Plug,
   Receipt,
   Scale,
@@ -85,6 +86,8 @@ export interface HomeTile {
 // Role coarse-rank — kept identical to SideNav.ROLE_ORDER so the card-home and
 // the sidebar curate the same way (no "home offers it, sidebar hides it" drift).
 const ROLE_RANK: Record<Role, number> = {
+  // Identical to NAV_ROLE_ORDER, including sales_rep at 0 — see the note there.
+  sales_rep: 0,
   viewer: 1,
   operator: 2,
   planner: 3,
@@ -110,6 +113,24 @@ export const HOME_GROUP_LABEL: Record<HomeGroupKey, { en: string; he: string }> 
 // is kept ≤ 7 (tranche 090 §C.6).
 // ---------------------------------------------------------------------------
 export const HOME_TILES: readonly HomeTile[] = [
+  // ——— Sales (tranche 173) —————————————————————————————————————————————
+  // The one tile a sales_rep can see, and their whole cockpit. minRole is
+  // "sales_rep" (rank 0) rather than "viewer" so the floor admits them without
+  // admitting them to anything else, and `required` is the sales capability, so
+  // in practice this renders for sales_rep and admin and for nobody else.
+  //
+  // No `he` field: the sales workspace itself is Hebrew-first by Tom's
+  // authorization (CLAUDE.md, /apps + (sales) route group), but /home's Hebrew
+  // exception is scoped to the viewer cockpit alone, and this list is complete.
+  {
+    href: "/sales/today",
+    label: "Sales",
+    blurb: "Today's callbacks, new leads and conversions.",
+    icon: PhoneCall,
+    group: "overview",
+    minRole: "sales_rep",
+    required: "sales:execute",
+  },
   // ——— Overview ———————————————————————————————————————————————————————
   {
     href: "/dashboard",
@@ -377,6 +398,18 @@ export interface RoleCockpit {
 }
 
 export const ROLE_COCKPIT: Record<Role, RoleCockpit> = {
+  // Sales rep — one place to be, and /home is not it. The hero tile is the
+  // queue; groupOrder is empty because every factory group is either invisible
+  // to them or none of their business, and an empty group renders as nothing
+  // rather than as an empty heading (buildHomeCockpit skips groups with no
+  // tiles). English per CLAUDE.md: the Hebrew exception on /home is the viewer
+  // cockpit only, and the Hebrew surfaces live inside the (sales) group itself.
+  sales_rep: {
+    primaryHref: "/sales/today",
+    groupOrder: [],
+    lang: "en",
+    dir: "ltr",
+  },
   // Owner / superuser — sees every group (everything), pulse-first.
   admin: {
     primaryHref: "/dashboard",
