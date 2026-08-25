@@ -124,11 +124,6 @@ export const NAV_ROLE_ORDER: Record<Role, number> = {
   // factory nav entry (every one of which floors at viewer) is ever listed for
   // them, which is the truthful answer — they have no execute standing here.
   sales_rep: 0,
-  // Rank 3, level with planner and never above it: sales_planner IS a planner
-  // in the factory (migration 0336) — the extra it carries is the sales axis,
-  // which no factory nav entry asks for and which `required_capability`
-  // grants on its own.
-  sales_planner: 3,
   viewer: 1,
   operator: 2,
   planner: 3,
@@ -178,7 +173,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         label: "Apps",
         icon: LayoutGrid,
         min_role: "sales_rep",
-        roles: ["admin", "sales_rep", "sales_planner"],
+        roles: ["admin", "sales_rep", "planner"],
         required_capability: "viewer:read",
         placement: "command",
       },
@@ -216,7 +211,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         // Tranche 138 — the bookkeeper's queue (Dorin/office). Operators
         // (Dennis/Maxim) never work credits, so scope it out of their sidebar
         // via the exact allow-list; the route stays reachable for them by URL.
-        roles: ["viewer", "planner", "admin", "sales_planner"],
+        roles: ["viewer", "planner", "admin"],
       },
     ],
   },
@@ -276,7 +271,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         // Tranche 138 — ledger read-model for verification/debug (Tom + office
         // usage, not floor usage). Out of the operator sidebar; reachable by
         // URL/⌘K for everyone the middleware already admits.
-        roles: ["viewer", "planner", "admin", "sales_planner"],
+        roles: ["viewer", "planner", "admin"],
       },
     ],
   },

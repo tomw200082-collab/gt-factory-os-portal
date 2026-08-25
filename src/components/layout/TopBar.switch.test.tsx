@@ -50,12 +50,20 @@ describe("SalesSwitch", () => {
     expect(link.getAttribute("href")).toBe("/sales/today");
   });
 
-  for (const role of ["operator", "planner", "viewer"] as Role[]) {
+  // planner left this list in tranche 175: it holds the sales axis now, so the
+  // switch is supposed to render for it. Covered positively below.
+  for (const role of ["operator", "viewer"] as Role[]) {
     it(`renders nothing for ${role}`, () => {
       renderAs(role);
       expect(screen.queryByTestId("topbar-switch-sales")).toBeNull();
     });
   }
+
+  it("renders for planner too — a planner works leads since tranche 175", () => {
+    renderAs("planner");
+    const link = screen.getByTestId("topbar-switch-sales");
+    expect(link.getAttribute("href")).toBe("/sales/today");
+  });
 
   it("T5 — is labelled at every width, phone included", () => {
     renderAs("admin");

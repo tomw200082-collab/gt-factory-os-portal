@@ -42,14 +42,7 @@ interface AppUser {
 // A second, duplicated copy of src/lib/contracts/enums.ts ROLES. It is the only
 // UI that assigns a role, so a value missing here cannot be given to anyone —
 // the two lists must be extended together.
-const ROLES = [
-  "admin",
-  "planner",
-  "operator",
-  "viewer",
-  "sales_rep",
-  "sales_planner",
-] as const;
+const ROLES = ["admin", "planner", "operator", "viewer", "sales_rep"] as const;
 type Role = (typeof ROLES)[number];
 
 // ---------------------------------------------------------------------------
@@ -68,10 +61,10 @@ function RoleBadge({ role }: { role: string }): JSX.Element {
       </Badge>
     );
   }
-  if (role === "planner" || role === "sales_planner") {
+  if (role === "planner") {
     return (
       <Badge tone="info" dotted>
-        {role}
+        planner
       </Badge>
     );
   }
@@ -362,15 +355,13 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
     "Full access including user management, masters, and system config. Assign sparingly.",
   planner:
-    "Can create and approve purchase recommendations, manage forecast, and review stock. Cannot change system config.",
+    "Can create and approve purchase recommendations, manage forecast, and review stock. Also works the sales workspace and can be assigned leads. Cannot change system config.",
   operator:
     "Can submit daily forms (Goods Receipt, Production Actual, Physical Count). Read access to stock and orders.",
   viewer:
     "Read-only access to dashboard and stock. Cannot submit forms or create records.",
   sales_rep:
     "Works the sales workspace only \u2014 leads, callbacks and conversions. No standing anywhere in the factory: no forms, no planning, no stock.",
-  sales_planner:
-    "Planner and sales rep in one: everything a planner can do, plus the sales workspace and the right to be assigned leads. No user management or system config.",
 };
 
 export default function AdminUsersPage() {

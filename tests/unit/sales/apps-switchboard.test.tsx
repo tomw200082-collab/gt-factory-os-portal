@@ -83,7 +83,11 @@ describe("/apps switchboard", () => {
 
   it("ignores a remembered sales choice once the role can no longer use it", () => {
     document.cookie = "gt.app.v1=sales; path=/";
-    setRole("planner");
+    // operator, not planner: planner holds the sales axis since tranche 175, so
+    // it is no longer an example of a role the cookie should be ignored for.
+    // The behaviour under test is the cookie losing to the capability, which
+    // needs a role that genuinely lacks it.
+    setRole("operator");
     render(<AppsPage />);
     expect(router.replace).toHaveBeenCalledWith("/home");
   });

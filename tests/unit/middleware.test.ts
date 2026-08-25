@@ -84,10 +84,12 @@ describe("middleware — auth gating", () => {
   // app_users.role reaches the JWT, so these prove the prefix ordering rather
   // than a live gate; the enforcing gates are (sales)/layout.tsx and the
   // server-side check on every sales endpoint.
-  it("authenticated /sales with a non-admin role → 307 to /dashboard?forbidden", async () => {
+  it("authenticated /sales with a non-sales role → 307 to /dashboard?forbidden", async () => {
+    // operator, not planner: planner joined the /sales allow-list in tranche
+    // 175, so it no longer demonstrates a role being turned away.
     mockUpdate.mockResolvedValue({
       response: NextResponse.next(),
-      user: { app_metadata: { role: "planner" } },
+      user: { app_metadata: { role: "operator" } },
     });
     const res = await run("/sales/today");
     expect(res.status).toBe(307);

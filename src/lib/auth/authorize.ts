@@ -16,10 +16,19 @@
 //   - The `sales` axis (tranche 173, Tom 2026-08-24). The sales workspace
 //     bypassed this table and hard-coded `role === 'admin'` on every endpoint
 //     and on its own layout gate, so a second person working leads had to be
-//     made a system administrator. Granted to `sales_rep` (execute) and to
-//     admin (execute+override) only: planner deliberately does NOT get it —
-//     making planner a sales role would also hand the workspace to the
-//     accounting planner, which nobody asked for.
+//     made a system administrator. Granted to `sales_rep` (execute), to
+//     `planner` (execute, tranche 175) and to admin (execute+override).
+//   - Planner holds `sales:execute` since 2026-08-25 (Tom, explicit). 173 had
+//     left it out on the grounds that it would also hand the workspace to the
+//     accounting planner — which it does, and Tom accepted that cost when the
+//     alternative was measured. Tranche 174 had tried the other way, a
+//     `sales_planner` preset that was planner ∪ sales_rep, and it was wrong:
+//     this table is only the portal half, and the api gates the factory on 61
+//     `role === 'planner'` literals across 35 files that a sixth role would
+//     have had to be taught one by one. A role that has to be re-taught in 61
+//     places to mean what it already means is not a preset, it is a rename
+//     with a long tail. 174 is reverted; the surviving cost is one bookkeeper
+//     seeing a lead queue.
 //   - Viewer is the ONLY role with strictly-read grants on all three axes.
 //
 // The lattice is encoded as a static truth table keyed (role, axis) → level.
@@ -71,7 +80,7 @@ export const ROLE_CAPABILITY_LATTICE: Record<Role, CapabilityGrants> = {
     stock: "execute",
     planning: "execute+override",
     admin: null,
-    sales: null,
+    sales: "execute",
   },
   admin: {
     stock: "execute+override",
@@ -86,18 +95,6 @@ export const ROLE_CAPABILITY_LATTICE: Record<Role, CapabilityGrants> = {
   sales_rep: {
     stock: null,
     planning: null,
-    admin: null,
-    sales: "execute",
-  },
-  // planner + sales_rep, and nothing that is in neither (Tom 2026-08-25,
-  // migration 0336). Alex and Avi work leads and plan production; a user holds
-  // exactly one role, so the combination needs a row of its own. Widening
-  // `planner` is the alternative and is what the note above refused — it would
-  // hand the workspace to the accounting planner. No admin axis: a selling
-  // planner is not a system administrator.
-  sales_planner: {
-    stock: "execute",
-    planning: "execute+override",
     admin: null,
     sales: "execute",
   },
