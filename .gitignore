@@ -31,4 +31,11 @@ playwright-report/
 # excluded.
 .claude/skills/*
 !.claude/skills/impeccable/
+#
+# Exception: the apple-design skill (Apple HIG design rules, generalised for
+# cross-platform UI) is vendored on the same terms, so portal design reviews
+# run against one pinned copy instead of a per-machine install. Upstream
+# states no licence; see gt-factory-os-production-brain/.claude/skills/VENDORED.md
+# for the provenance ledger covering both copies.
+!.claude/skills/apple-design/
 design-system/
