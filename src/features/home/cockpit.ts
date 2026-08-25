@@ -88,6 +88,11 @@ export interface HomeTile {
 const ROLE_RANK: Record<Role, number> = {
   // Identical to NAV_ROLE_ORDER, including sales_rep at 0 — see the note there.
   sales_rep: 0,
+  // Rank 3, level with planner and never above it: sales_planner IS a planner
+  // in the factory (migration 0336) — the extra it carries is the sales axis,
+  // which no factory nav entry asks for and which `required_capability`
+  // grants on its own.
+  sales_planner: 3,
   viewer: 1,
   operator: 2,
   planner: 3,
@@ -414,6 +419,16 @@ export const ROLE_COCKPIT: Record<Role, RoleCockpit> = {
   admin: {
     primaryHref: "/dashboard",
     groupOrder: ["overview", "triage", "planning", "office", "stock", "admin"],
+    lang: "en",
+    dir: "ltr",
+  },
+  // Selling planner — the planner cockpit, plus the sales tile the capability
+  // gate lets through into "overview". The landing page stays the weekly buying
+  // decision: it is the appointment that has a deadline, and the lead queue is
+  // one tile away.
+  sales_planner: {
+    primaryHref: "/planning/procurement",
+    groupOrder: ["overview", "triage", "planning", "office", "stock"],
     lang: "en",
     dir: "ltr",
   },

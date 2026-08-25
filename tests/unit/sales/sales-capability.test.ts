@@ -19,17 +19,52 @@ import { ROLE_COCKPIT, buildHomeCockpit } from "@/features/home/cockpit";
 // ---------------------------------------------------------------------------
 
 describe("the sales capability", () => {
-  it("is held by sales_rep and admin, and by nobody else", () => {
+  it("is held by the two sales roles and admin, and by nobody else", () => {
     const holders = ROLES.filter((r) => authorizeCapability(r, "sales:execute"));
-    expect([...holders].sort()).toEqual(["admin", "sales_rep"]);
+    expect([...holders].sort()).toEqual(["admin", "sales_planner", "sales_rep"]);
   });
 
   it("is not granted to planner, which is the whole point of a new role", () => {
     // Making `planner` a sales role would also hand the workspace to the
     // accounting planner, which nobody asked for. This is the alternative the
-    // decision rejected, kept here so it cannot be re-adopted by accident.
+    // decision rejected, kept here so it cannot be re-adopted by accident —
+    // and it is why Alex and Avi got `sales_planner` (Tom 2026-08-25) rather
+    // than a wider `planner`. If this ever passes because planner was widened,
+    // the bookkeeper has been handed the lead queue.
     expect(ROLE_CAPABILITY_LATTICE.planner.sales).toBeNull();
     expect(authorizeCapability("planner", "sales:read")).toBe(false);
+  });
+
+  // ——— sales_planner (migration 0336, Tom 2026-08-25) ————————————————————
+  // Alex and Avi work leads AND plan production. A user holds exactly one
+  // role, so the combination is a preset of its own: the union of `planner`
+  // and `sales_rep`, and nothing that is in neither.
+
+  it("gives a selling planner exactly planner's grants plus the sales axis", () => {
+    const planner = ROLE_CAPABILITY_LATTICE.planner;
+    const selling = ROLE_CAPABILITY_LATTICE.sales_planner;
+    expect(selling.stock).toBe(planner.stock);
+    expect(selling.planning).toBe(planner.planning);
+    expect(selling.sales).toBe(ROLE_CAPABILITY_LATTICE.sales_rep.sales);
+  });
+
+  it("does not make a selling planner an administrator", () => {
+    // The one grant that is in neither parent role. Sales access was never a
+    // reason to hand out user management — that is what 0333 was fixing.
+    expect(ROLE_CAPABILITY_LATTICE.sales_planner.admin).toBeNull();
+    expect(authorizeCapability("sales_planner", "admin:read")).toBe(false);
+  });
+
+  it("ranks a selling planner level with planner, never above it", () => {
+    expect(NAV_ROLE_ORDER.sales_planner).toBe(NAV_ROLE_ORDER.planner);
+    expect(NAV_ROLE_ORDER.sales_planner).toBeLessThan(NAV_ROLE_ORDER.admin);
+  });
+
+  it("lands a selling planner in the factory, with the lead queue one tile away", () => {
+    const view = buildHomeCockpit("sales_planner");
+    expect(view.primary?.href).toBe(ROLE_COCKPIT.planner.primaryHref);
+    const hrefs = view.groups.flatMap((g) => g.tiles.map((t) => t.href));
+    expect(hrefs).toContain("/sales/today");
   });
 
   it("gives a sales rep no execute standing anywhere in the factory", () => {

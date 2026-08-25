@@ -89,6 +89,18 @@ export const ROLE_CAPABILITY_LATTICE: Record<Role, CapabilityGrants> = {
     admin: null,
     sales: "execute",
   },
+  // planner + sales_rep, and nothing that is in neither (Tom 2026-08-25,
+  // migration 0336). Alex and Avi work leads and plan production; a user holds
+  // exactly one role, so the combination needs a row of its own. Widening
+  // `planner` is the alternative and is what the note above refused — it would
+  // hand the workspace to the accounting planner. No admin axis: a selling
+  // planner is not a system administrator.
+  sales_planner: {
+    stock: "execute",
+    planning: "execute+override",
+    admin: null,
+    sales: "execute",
+  },
 };
 
 // Minimum-level strings used as `required_capability` on nav manifest items
