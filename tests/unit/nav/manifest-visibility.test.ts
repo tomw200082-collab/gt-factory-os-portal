@@ -82,9 +82,12 @@ describe("operator scoping (roles allow-list overrides the min_role floor)", () 
 
   it("navItemAllowsRole honors the exact allow-list, not just the floor", () => {
     const credit = itemByHref("/credit-tracking");
-    expect(credit.roles).toEqual(["viewer", "planner", "admin"]);
+    // sales_planner is on the list because it is a planner in the factory
+    // (migration 0336) — the sales axis it also carries changes nothing here.
+    expect(credit.roles).toEqual(["viewer", "planner", "admin", "sales_planner"]);
     expect(navItemAllowsRole("operator", credit)).toBe(false);
     expect(navItemAllowsRole("viewer", credit)).toBe(true);
+    expect(navItemAllowsRole("sales_planner", credit)).toBe(true);
   });
 });
 

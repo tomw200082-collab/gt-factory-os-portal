@@ -25,10 +25,25 @@
 // administrator. Tom's decision (2026-08-24) was a `sales` axis on the existing
 // lattice — not a fourth registry, and not by widening `admin|planner`.
 //
+// `sales_planner` joined next (Tom 2026-08-25). Alex and Avi work leads and
+// plan production, and a user holds exactly one role, so "planner plus sales"
+// needs a preset that says so. Widening `planner` is the alternative and is
+// what the decision above refused: it would grant the sales workspace to the
+// accounting planner, who did not ask for it. The role grants nothing new —
+// it is the union of `planner` and `sales_rep`, with no admin axis.
+//
 // This constant and `private_core.app_users`' role CHECK are one fact in two
-// places: migration 0333 extends the CHECK, and drift between them is a bug.
+// places: migrations 0333 and 0336 extend the CHECK, and drift between them is
+// a bug.
 // ---------------------------------------------------------------------------
-export const ROLES = ["operator", "planner", "admin", "viewer", "sales_rep"] as const;
+export const ROLES = [
+  "operator",
+  "planner",
+  "admin",
+  "viewer",
+  "sales_rep",
+  "sales_planner",
+] as const;
 export type Role = (typeof ROLES)[number];
 
 // ---------------------------------------------------------------------------

@@ -46,7 +46,7 @@ import { updateSupabaseSession } from "@/lib/supabase/middleware";
 //     group (planning:execute → planner+admin) — carved out BEFORE the
 //     /admin prefix.
 //   - (po) layout gates viewer:read → all four roles.
-const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
+const FACTORY_ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   // More-specific first: /inbox/approvals/* must match before /inbox;
   // /admin/economics + /admin/decision-board before /admin; /stock/movement-log
   // before /stock.
@@ -62,8 +62,11 @@ const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   // any further portal change", and leaving the new role out would have made
   // that false — the day app_users.role reaches the JWT, every sales_rep would
   // be bounced off their own workspace by the one layer nobody was watching.
-  { prefix: "/sales", allow: ["admin", "sales_rep"] },
-  { prefix: "/apps", allow: ["operator", "planner", "admin", "viewer", "sales_rep"] },
+  { prefix: "/sales", allow: ["admin", "sales_rep", "sales_planner"] },
+  {
+    prefix: "/apps",
+    allow: ["operator", "planner", "admin", "viewer", "sales_rep", "sales_planner"],
+  },
   { prefix: "/inbox/approvals", allow: ["planner", "admin"] },
   { prefix: "/admin/economics", allow: ["planner", "admin"] },
   { prefix: "/admin/decision-board", allow: ["planner", "admin"] },
@@ -84,6 +87,18 @@ const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   // /inbox, /dashboard, /profile — any authenticated role. Explicitly
   // listed here for documentation; they match nothing above.
 ];
+
+// sales_planner (migration 0336, Tom 2026-08-25) is a planner in the factory
+// plus the sales axis, so every gate that admits planner admits it too. Derived
+// rather than typed into each of the nine planner rows above: nine copies of
+// one fact is nine chances to add the tenth row and forget. The two rows that
+// do NOT mention planner — /sales and /apps — name it explicitly, because
+// there the role is admitted for the sales axis and not as a planner.
+const ROLE_GATES = FACTORY_ROLE_GATES.map((gate) =>
+  gate.allow.includes("planner") && !gate.allow.includes("sales_planner")
+    ? { ...gate, allow: [...gate.allow, "sales_planner"] }
+    : gate,
+);
 
 function findRoleGate(
   pathname: string,
