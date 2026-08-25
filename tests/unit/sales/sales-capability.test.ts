@@ -16,55 +16,39 @@ import { ROLE_COCKPIT, buildHomeCockpit } from "@/features/home/cockpit";
 // letting a second person work leads meant making them a system administrator.
 // Tom's decision (2026-08-24) was a `sales` axis on the existing lattice — not
 // a fourth registry, and not by widening `admin|planner`.
+//
+// Tranche 175 (Tom, 2026-08-25) widened it to `planner` after all, with the
+// cost named and accepted: Alex and Avi plan production and work leads, a user
+// holds one role, and the api gates the factory on 61 `role === 'planner'`
+// literals that a sixth role would have to be taught one by one. The
+// bookkeeper is a planner and now sees the lead queue. That is the trade, not
+// an oversight — these assertions exist so it stays a decision.
 // ---------------------------------------------------------------------------
 
 describe("the sales capability", () => {
-  it("is held by the two sales roles and admin, and by nobody else", () => {
+  it("is held by sales_rep, planner and admin, and by nobody else", () => {
     const holders = ROLES.filter((r) => authorizeCapability(r, "sales:execute"));
-    expect([...holders].sort()).toEqual(["admin", "sales_planner", "sales_rep"]);
+    expect([...holders].sort()).toEqual(["admin", "planner", "sales_rep"]);
   });
 
-  it("is not granted to planner, which is the whole point of a new role", () => {
-    // Making `planner` a sales role would also hand the workspace to the
-    // accounting planner, which nobody asked for. This is the alternative the
-    // decision rejected, kept here so it cannot be re-adopted by accident —
-    // and it is why Alex and Avi got `sales_planner` (Tom 2026-08-25) rather
-    // than a wider `planner`. If this ever passes because planner was widened,
-    // the bookkeeper has been handed the lead queue.
-    expect(ROLE_CAPABILITY_LATTICE.planner.sales).toBeNull();
-    expect(authorizeCapability("planner", "sales:read")).toBe(false);
+  it("still reaches nobody below planner — operator and viewer hold nothing", () => {
+    // The half of 173's isolation that survives 175. Widening went one row, not
+    // to everyone authenticated: the floor people are the ones who would have
+    // no business in a lead queue and no way to tell it was a mistake.
+    expect(ROLE_CAPABILITY_LATTICE.operator.sales).toBeNull();
+    expect(ROLE_CAPABILITY_LATTICE.viewer.sales).toBeNull();
+    expect(authorizeCapability("operator", "sales:read")).toBe(false);
+    expect(authorizeCapability("viewer", "sales:read")).toBe(false);
   });
 
-  // ——— sales_planner (migration 0336, Tom 2026-08-25) ————————————————————
-  // Alex and Avi work leads AND plan production. A user holds exactly one
-  // role, so the combination is a preset of its own: the union of `planner`
-  // and `sales_rep`, and nothing that is in neither.
-
-  it("gives a selling planner exactly planner's grants plus the sales axis", () => {
-    const planner = ROLE_CAPABILITY_LATTICE.planner;
-    const selling = ROLE_CAPABILITY_LATTICE.sales_planner;
-    expect(selling.stock).toBe(planner.stock);
-    expect(selling.planning).toBe(planner.planning);
-    expect(selling.sales).toBe(ROLE_CAPABILITY_LATTICE.sales_rep.sales);
-  });
-
-  it("does not make a selling planner an administrator", () => {
-    // The one grant that is in neither parent role. Sales access was never a
-    // reason to hand out user management — that is what 0333 was fixing.
-    expect(ROLE_CAPABILITY_LATTICE.sales_planner.admin).toBeNull();
-    expect(authorizeCapability("sales_planner", "admin:read")).toBe(false);
-  });
-
-  it("ranks a selling planner level with planner, never above it", () => {
-    expect(NAV_ROLE_ORDER.sales_planner).toBe(NAV_ROLE_ORDER.planner);
-    expect(NAV_ROLE_ORDER.sales_planner).toBeLessThan(NAV_ROLE_ORDER.admin);
-  });
-
-  it("lands a selling planner in the factory, with the lead queue one tile away", () => {
-    const view = buildHomeCockpit("sales_planner");
-    expect(view.primary?.href).toBe(ROLE_COCKPIT.planner.primaryHref);
-    const hrefs = view.groups.flatMap((g) => g.tiles.map((t) => t.href));
-    expect(hrefs).toContain("/sales/today");
+  it("gives a selling planner the factory too — the point of widening it", () => {
+    // Why 174's sales_planner was reverted: a planner already passes every
+    // factory gate, on both halves. Granting the sales axis to the role they
+    // already hold is the whole change.
+    expect(authorizeCapability("planner", "sales:execute")).toBe(true);
+    expect(authorizeCapability("planner", "stock:execute")).toBe(true);
+    expect(authorizeCapability("planner", "planning:execute+override")).toBe(true);
+    expect(ROLE_CAPABILITY_LATTICE.planner.admin).toBeNull();
   });
 
   it("gives a sales rep no execute standing anywhere in the factory", () => {

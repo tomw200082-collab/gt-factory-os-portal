@@ -31,7 +31,8 @@ export const metadata: Metadata = {
  * IndexedDB repositories, so gating first paint on a seed would cost a spinner
  * for nothing).
  *
- * Access is the `sales` capability, held by `sales_rep` and by admin. This gate
+ * Access is the `sales` capability, held by `sales_rep`, by `planner` (tranche
+ * 175, Tom 2026-08-25) and by admin. This gate
  * plus the server-side check on every sales endpoint are the two that actually
  * hold — the middleware role table is a documented no-op until app_users.role is
  * projected into the JWT, which is exactly why changing only the API would give
