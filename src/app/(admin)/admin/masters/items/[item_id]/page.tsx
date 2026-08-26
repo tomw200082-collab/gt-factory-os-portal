@@ -291,9 +291,14 @@ export default function AdminItemDetailPage({
   const { item_id } = use(params);
 
   // --- Data: item row (list-filter pattern; upstream has no GET-by-id) -----
+  // include_archived=true is required here: the list endpoint hides archived
+  // items by default, and this page finds its own row inside that list. Without
+  // it, every discontinued item's detail page would render "not found" and the
+  // Archive screen's View link would dead-end. Arriving here means the item was
+  // looked up by id, which is exactly the deliberate-search case.
   const itemQuery = useQuery<ItemsListResponse>({
     queryKey: ["admin", "masters", "item", item_id],
-    queryFn: () => fetchJson("/api/items?limit=1000"),
+    queryFn: () => fetchJson("/api/items?limit=1000&include_archived=true"),
   });
 
   const row = itemQuery.data?.rows.find((r) => r.item_id === item_id);
