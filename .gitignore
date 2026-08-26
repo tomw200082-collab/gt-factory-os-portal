@@ -38,4 +38,24 @@ playwright-report/
 # states no licence; see gt-factory-os-production-brain/.claude/skills/VENDORED.md
 # for the provenance ledger covering both copies.
 !.claude/skills/apple-design/
+#
+# Exception: the interface-rules set vendored 2026-08-26 from boraoztunc/skills
+# (Tom's direction). The seven `better-*` domain skills plus `interface-review`
+# are jakubkrehel/skills, MIT — LICENSE-jakubkrehel and NOTICE-jakubkrehel.md
+# travel with them. `web-design-guidelines` and `vercel-react-best-practices`
+# come from the same re-publisher. Provenance and routing:
+# .claude/skills/VENDORED.md.
+!.claude/skills/better-accessibility/
+!.claude/skills/better-colors/
+!.claude/skills/better-interface/
+!.claude/skills/better-layout/
+!.claude/skills/better-typography/
+!.claude/skills/better-ui/
+!.claude/skills/better-writing/
+!.claude/skills/interface-review/
+!.claude/skills/web-design-guidelines/
+!.claude/skills/vercel-react-best-practices/
+!.claude/skills/LICENSE-jakubkrehel
+!.claude/skills/NOTICE-jakubkrehel.md
+!.claude/skills/VENDORED.md
 design-system/
