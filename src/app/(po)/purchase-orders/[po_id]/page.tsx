@@ -58,6 +58,11 @@ interface PurchaseOrderRow {
   source_recommendation_id: string | null;
   source_type?: "recommendation" | "manual";
   manual_reason?: string | null;
+  // 0301 cancel provenance. Optional because rows cancelled before 0301 carry
+  // no reason, and older API builds do not return the fields at all.
+  cancelled_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by_snapshot?: string | null;
   created_by_user_id: string;
   created_by_snapshot: string;
   created_at: string;
@@ -89,6 +94,10 @@ interface PurchaseOrderLineRow {
   actual_last_receipt_at: string | null;
   source_recommendation_id: string | null;
   notes: string | null;
+  // 0301 cancel provenance — see PurchaseOrderRow.
+  cancelled_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by_snapshot?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -550,12 +559,20 @@ export default function PurchaseOrderDetailPage({
   const [cancelConfirming, setCancelConfirming] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
+  // 0301: cancelling is permanent (a PO can never be deleted, and CANCELLED is
+  // terminal), so the reason is captured at the moment of the decision — it is
+  // the only record of why the order went away.
+  const [cancelReason, setCancelReason] = useState("");
 
   const cancelMut = useMutation({
     mutationFn: async () => {
       const res = await fetch(
         `/api/purchase-orders/${encodeURIComponent(po_id)}/cancel`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cancel_reason: cancelReason.trim() }),
+        },
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -571,6 +588,7 @@ export default function PurchaseOrderDetailPage({
       void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
       setCancelConfirming(false);
       setCancelError(null);
+      setCancelReason("");
       setCancelSuccess(true);
       router.refresh();
     },
@@ -589,7 +607,16 @@ export default function PurchaseOrderDetailPage({
   });
 
   const canCancelRole = session.role === "planner" || session.role === "admin";
-  const canCancelPo = (po?.status === "OPEN" || po?.status === "DRAFT") && canCancelRole;
+  // APPROVED_TO_ORDER is cancellable too — the API has allowed it since 0258
+  // (the office manager can discard a PO sitting in the placement queue), but
+  // this gate had never been widened to match.
+  const canCancelPo =
+    (po?.status === "OPEN" || po?.status === "DRAFT" || po?.status === "APPROVED_TO_ORDER") &&
+    canCancelRole;
+  // The API requires 3-500 chars; mirror it here so the button is disabled
+  // rather than the request bouncing back as a 422.
+  const cancelReasonValid =
+    cancelReason.trim().length >= 3 && cancelReason.trim().length <= 500;
 
   // --- Edit PO mutation (notes + expected_receive_date) ---------------------
   const [editing, setEditing] = useState(false);
@@ -662,12 +689,23 @@ export default function PurchaseOrderDetailPage({
   // --- Line cancel state ----------------------------------------------------
   const [lineCancelConfirmId, setLineCancelConfirmId] = useState<string | null>(null);
   const [lineCancelError, setLineCancelError] = useState<string | null>(null);
+  // 0301: same mandatory reason as the header cancel. This path carries more
+  // weight than it looks — on a PARTIAL PO the header can no longer be
+  // cancelled, so cancelling the open lines is the only way to retire the
+  // remainder, and it should say why.
+  const [lineCancelReason, setLineCancelReason] = useState("");
+  const lineCancelReasonValid =
+    lineCancelReason.trim().length >= 3 && lineCancelReason.trim().length <= 500;
 
   const lineCancelMut = useMutation({
     mutationFn: async (poLineId: string) => {
       const res = await fetch(
         `/api/purchase-order-lines/${encodeURIComponent(poLineId)}/cancel`,
-        { method: "POST" },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cancel_reason: lineCancelReason.trim() }),
+        },
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -681,6 +719,7 @@ export default function PurchaseOrderDetailPage({
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "detail", po_id] });
       setLineCancelConfirmId(null);
       setLineCancelError(null);
+      setLineCancelReason("");
     },
     onError: (err: unknown) => {
       setLineCancelError((err as Error).message ?? "Cancel failed. Try again.");
@@ -1125,6 +1164,22 @@ export default function PurchaseOrderDetailPage({
                             Over-received
                           </Link>
                         )}
+                        {/* 0301: a cancelled line explains itself in place —
+                            the alternative is digging through the history tab
+                            to find out why a line vanished from receiving. */}
+                        {line.line_status === "CANCELLED" && line.cancelled_reason && (
+                          <span
+                            className="text-3xs text-fg-faint"
+                            title={
+                              line.cancelled_by_snapshot
+                                ? `Cancelled by ${line.cancelled_by_snapshot}`
+                                : undefined
+                            }
+                            data-testid="po-line-cancel-reason-text"
+                          >
+                            {line.cancelled_reason}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
@@ -1165,12 +1220,25 @@ export default function PurchaseOrderDetailPage({
                               Cancel this line? It closes permanently and won&apos;t
                               appear in future goods-receipt sessions.
                             </span>
+                            <textarea
+                              className="input min-h-[3rem] w-56 text-3xs"
+                              value={lineCancelReason}
+                              onChange={(e) => setLineCancelReason(e.target.value)}
+                              maxLength={500}
+                              rows={2}
+                              autoFocus
+                              aria-label="Reason for cancelling this line"
+                              placeholder="Reason — kept on the record"
+                              disabled={lineCancelMut.isPending}
+                              data-testid="po-line-cancel-reason"
+                            />
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 className="btn btn-danger btn-xs"
                                 onClick={() => lineCancelMut.mutate(line.po_line_id)}
-                                disabled={lineCancelMut.isPending}
+                                disabled={lineCancelMut.isPending || !lineCancelReasonValid}
+                                data-testid="po-line-cancel-confirm"
                               >
                                 {lineCancelMut.isPending ? "Cancelling…" : "Cancel line"}
                               </button>
@@ -1352,6 +1420,26 @@ export default function PurchaseOrderDetailPage({
                   po.manual_reason && po.manual_reason.trim().length > 0
                     ? po.manual_reason
                     : <span className="text-fg-faint">None provided</span>,
+              } as FieldRow,
+            ]
+          : []),
+        // 0301: on a cancelled PO, "why" is the first thing anyone opening this
+        // page wants. Shown only when cancelled, and honest about the POs that
+        // were cancelled before the reason was captured.
+        ...(po.status === "CANCELLED"
+          ? [
+              {
+                label: "Cancel reason",
+                value:
+                  po.cancelled_reason && po.cancelled_reason.trim().length > 0
+                    ? po.cancelled_reason
+                    : <span className="text-fg-faint">Not recorded (cancelled before reasons were captured)</span>,
+              } as FieldRow,
+              {
+                label: "Cancelled",
+                value: po.cancelled_at
+                  ? `${fmtDateTime(po.cancelled_at)}${po.cancelled_by_snapshot ? ` · ${po.cancelled_by_snapshot}` : ""}`
+                  : <span className="text-fg-faint">—</span>,
               } as FieldRow,
             ]
           : []),
@@ -1678,24 +1766,49 @@ export default function PurchaseOrderDetailPage({
               </button>
             )}
             {canCancelPo && cancelConfirming && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-fg-muted">Cancel this PO?</span>
-                <button
-                  type="button"
-                  className="btn btn-sm bg-danger text-fg-inverted hover:bg-danger/90"
-                  onClick={() => cancelMut.mutate()}
-                  disabled={cancelMut.isPending}
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="po-cancel-reason"
+                  className="text-xs text-fg-muted"
                 >
-                  {cancelMut.isPending ? "Cancelling…" : "Yes, cancel"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => { setCancelConfirming(false); setCancelError(null); }}
+                  Why is this PO being cancelled? This is kept on the record.
+                </label>
+                <textarea
+                  id="po-cancel-reason"
+                  className="input min-h-[3.5rem] w-full max-w-sm text-sm"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  autoFocus
+                  placeholder="e.g. Supplier discontinued the item — re-sourcing elsewhere"
                   disabled={cancelMut.isPending}
-                >
-                  Keep
-                </button>
+                  data-testid="po-cancel-reason"
+                />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    className="btn btn-sm bg-danger text-fg-inverted hover:bg-danger/90"
+                    onClick={() => cancelMut.mutate()}
+                    disabled={cancelMut.isPending || !cancelReasonValid}
+                    data-testid="po-cancel-confirm"
+                  >
+                    {cancelMut.isPending ? "Cancelling…" : "Yes, cancel"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { setCancelConfirming(false); setCancelError(null); }}
+                    disabled={cancelMut.isPending}
+                  >
+                    Keep
+                  </button>
+                  {!cancelReasonValid && (
+                    <span className="text-xs text-fg-muted">
+                      Add a reason (3+ characters) to continue.
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
