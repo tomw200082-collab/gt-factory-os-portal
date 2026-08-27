@@ -15,6 +15,21 @@ on:
   pull_request:
     branches: [main]
 
+# One guard run per PR at a time. This job averages 7.8 minutes (measured
+# 2026-08-27), and without this every push to a PR started a fresh run while
+# every superseded run kept going to completion — five pushes in a row billed
+# ~40 minutes for four results nobody would ever read. Only the newest commit's
+# result can gate a merge. The backend's typecheck.yml has had this since
+# PR #212; this workflow never got the same fix, and it is the single largest
+# consumer of the Actions allowance.
+concurrency:
+  group: portal-pr-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -24,33 +39,91 @@ jobs:
       # path is active for the @mocked e2e (no Supabase backend needed).
       NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH: 'true'
     steps:
+      # Cost gate. lint / tsc / vitest / playwright read source, not prose — a
+      # PR touching only docs or markdown cannot change their result, yet still
+      # paid the full ~7.8 minutes.
+      #
+      # This is a step-level gate, not a workflow-level `paths-ignore`, on
+      # purpose: a workflow skipped by paths-ignore reports NO status, and a
+      # required check that never reports blocks the merge button forever.
+      # The job still runs and still reports — it just skips the expensive half.
+      #
+      # The registry presence check below is deliberately OUTSIDE the gate: it
+      # exists to validate docs/portal-os/** additions, so it must run on
+      # exactly the docs-only PRs the gate skips. It costs seconds.
+      - name: Decide whether any source file changed
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          files=$(gh api \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')
+
+          # Conservative by design: anything not clearly prose/asset counts as
+          # source. A wrong "skip" would let a broken PR merge green; a wrong
+          # "run" only costs minutes.
+          if printf '%s\n' "$files" | grep -qvE '^(docs/|\.claude/|.*\.md$|.*\.(png|jpe?g|gif|svg|pdf|csv|xlsx)$|LICENSE$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Source files changed — running lint + typecheck + tests."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Only prose/asset files changed — skipping lint, typecheck, unit tests and e2e."
+          fi
+          printf '%s\n' "$files" | sed 's/^/  /'
+
       - uses: actions/checkout@v4
         with:
+          # Full history is required by the registry check's
+          # `origin/main...HEAD` merge-base diff. `filter: blob:none` keeps that
+          # history while fetching file contents on demand, which is materially
+          # cheaper on a repo carrying ~158 branches.
           fetch-depth: 0
+          filter: blob:none
 
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install
+        if: steps.gate.outputs.run == 'true'
         run: npm ci
 
       - name: Lint
+        if: steps.gate.outputs.run == 'true'
         run: npx eslint .
 
       - name: Typecheck
+        if: steps.gate.outputs.run == 'true'
         run: npx tsc --noEmit
 
       - name: Unit tests (vitest)
+        if: steps.gate.outputs.run == 'true'
         run: npx vitest run
 
+      # Without this cache the chromium build was re-downloaded on every single
+      # run. The key is bound to the lockfile, so a Playwright version bump
+      # invalidates it and a fresh browser is fetched exactly once.
+      - name: Cache Playwright browsers
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Install Playwright (chromium)
+        if: steps.gate.outputs.run == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: E2E — mocked focus flow (no backend)
         # Runs only @mocked specs (browser-stubbed API), so it never depends on
         # a live Supabase backend. Tranche 036.
+        if: steps.gate.outputs.run == 'true'
         run: npx playwright test --grep @mocked
 
       - name: Registry presence check for new portal-os artifacts
