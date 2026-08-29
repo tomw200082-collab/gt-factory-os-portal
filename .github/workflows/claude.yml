@@ -23,6 +23,14 @@ on:
   pull_request:
     types: [opened]
 
+# Serialise per issue/PR so two @claude mentions on the same thread cannot
+# race. Deliberately NOT cancel-in-progress: cancelling would kill a Claude
+# run mid-work, and this workflow is not a measurable cost (11 runs, 0.5 min
+# total in the 2026-08-27 sample).
+concurrency:
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   claude:
     if: |
