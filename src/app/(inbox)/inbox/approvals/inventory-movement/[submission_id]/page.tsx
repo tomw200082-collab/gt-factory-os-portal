@@ -43,15 +43,6 @@ interface InventoryMovementDetail {
   open_questions?: string[];
   evidence?: Array<{ type: string; ref: string; url?: string }>;
   credit_task_ids?: string[];
-  // Posted audit lines — filled on approval. Never used to pre-fill.
-  lines: Array<{
-    direction: string;
-    item_type: string;
-    item_id: string;
-    quantity: string;
-    unit: string;
-    reason_code: string;
-  }>;
 }
 
 // Mirrors the backend InventoryMovementPostedLine shape — inlined here
@@ -89,11 +80,13 @@ interface LineDraft {
   origin?: Pick<ProposedLine, "source" | "confidence" | "evidence_ref">;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
+// Where a proposed line or a piece of evidence came from (`source` / `type`).
+const ORIGIN_LABELS: Record<string, string> = {
   gi_document: "Green Invoice document",
   credit_task: "Picking shortage",
   purchase_order: "Purchase order",
   note_parse: "LionWheel note",
+  lionwheel_task: "LionWheel task",
   manual: "Manual",
 };
 
@@ -103,11 +96,6 @@ const CONFIDENCE_LABELS: Record<string, string> = {
   low: "Low confidence — check",
 };
 
-const EVIDENCE_LABELS: Record<string, string> = {
-  gi_document: "Green Invoice",
-  lionwheel_task: "LionWheel task",
-  credit_task: "Picking shortage",
-};
 
 const REASON_CODES = [
   "goods_pickup",
@@ -146,6 +134,10 @@ const KIND_LABELS: Record<string, string> = {
   subcontract: "Subcontract",
   other: "Other",
 };
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
 
 function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
@@ -224,6 +216,9 @@ export default function InventoryMovementReviewPage() {
   });
 
   const d = detailQuery.data;
+  const openQuestions = d?.open_questions ?? [];
+  const evidence = d?.evidence ?? [];
+  const creditTaskIds = d?.credit_task_ids ?? [];
 
   // Pre-fill the editor from the proposal's proposed_lines, once, on first
   // load; edits after that are preserved. Never from `lines` — those are the
@@ -356,9 +351,7 @@ export default function InventoryMovementReviewPage() {
         title="Approved — stock posted"
         description={
           `Posted ${posted.length} movement line${posted.length === 1 ? "" : "s"} to the stock ledger.` +
-          (outcome.suppliedShortages > 0
-            ? ` ${outcome.suppliedShortages} picking shortage${outcome.suppliedShortages === 1 ? "" : "s"} marked supplied.`
-            : "")
+          (outcome.suppliedShortages > 0 ? ` ${plural(outcome.suppliedShortages, "picking shortage")} marked supplied.` : "")
         }
         action={
           <>
@@ -555,27 +548,27 @@ export default function InventoryMovementReviewPage() {
         </div>
       ) : null}
 
-      {d?.open_questions && d.open_questions.length > 0 ? (
+      {openQuestions.length > 0 ? (
         <div
           className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
           data-testid="im-review-open-questions"
         >
           <div className="font-semibold">Open questions — answer before approving</div>
           <ul dir="rtl" className="mt-2 list-disc space-y-1 pr-5 text-fg">
-            {d.open_questions.map((q, i) => (
+            {openQuestions.map((q, i) => (
               <li key={i}>{q}</li>
             ))}
           </ul>
         </div>
       ) : null}
 
-      {d?.evidence && d.evidence.length > 0 ? (
+      {evidence.length > 0 ? (
         <div className="mb-5 rounded-md border border-border/60 p-4 text-sm" data-testid="im-review-evidence">
           <div className="mb-1 text-xs font-semibold text-fg-muted">Evidence</div>
           <ul className="space-y-1">
-            {d.evidence.map((e, i) => (
+            {evidence.map((e, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-fg-muted">{EVIDENCE_LABELS[e.type] ?? e.type}</span>
+                <span className="text-fg-muted">{ORIGIN_LABELS[e.type] ?? e.type}</span>
                 {e.url ? (
                   <a href={e.url} target="_blank" rel="noreferrer" className="text-primary underline" dir="auto">
                     {e.ref}
@@ -591,12 +584,12 @@ export default function InventoryMovementReviewPage() {
         </div>
       ) : null}
 
-      {d?.credit_task_ids && d.credit_task_ids.length > 0 ? (
+      {creditTaskIds.length > 0 ? (
         <div className="mb-5 flex items-start gap-2 text-xs text-fg-muted" data-testid="im-review-credit-tasks">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
           <span>
-            {d.credit_task_ids.length} linked picking shortage{d.credit_task_ids.length === 1 ? "" : "s"}: approving
-            marks each one supplied when the approved Out quantity of its item covers it.
+            {plural(creditTaskIds.length, "linked picking shortage")}: approving marks each one supplied when the
+            approved Out quantity of its item covers it.
           </span>
         </div>
       ) : null}
@@ -740,7 +733,7 @@ export default function InventoryMovementReviewPage() {
               </button>
               {l.origin ? (
                 <div className="w-full text-3xs text-fg-subtle" data-testid="im-review-line-origin">
-                  Proposed from {SOURCE_LABELS[l.origin.source] ?? l.origin.source} ·{" "}
+                  Proposed from {ORIGIN_LABELS[l.origin.source] ?? l.origin.source} ·{" "}
                   <span className={l.origin.confidence === "high" ? "text-success-fg" : "text-warning-fg"}>
                     {CONFIDENCE_LABELS[l.origin.confidence] ?? l.origin.confidence}
                   </span>
