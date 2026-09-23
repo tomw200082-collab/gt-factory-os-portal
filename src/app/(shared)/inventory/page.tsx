@@ -1,81 +1,17 @@
 "use client";
 
 // Inventory — Stock Truth surface
-// 50 expert UX/UI iterations, world-class operational dashboard patterns.
-// References: Stripe Dashboard, Linear, Shopify Admin (Inventory), Notion
-// databases, Atlassian, Carbon Design System, GOV.UK Service Manual,
-// Nielsen Norman heuristics, WCAG 2.2.
 //
-// Hierarchy & Layout (1–10):
-//   1. KPI strip with 4 cards: Total Value / Items / With cost / Missing cost
-//   2. Sticky toolbar — search + chips + sort + density on one bar
-//   3. Sticky table headers when scrolling
-//   4. Spacing rhythm 4-8-12-16-24px
-//   5. Primary KPI display-size font; "as of" timestamp aligned right
-//   6. Trust strip below KPI — source + freshness + flag semantics
-//   7. Tab redesign — pill style with item counts (FG: 60 · RM/PKG: 100)
-//   8. Group-by sectioning (None / Category / Stock status / UOM) with
-//      collapsible sections + per-section count and value subtotal
-//   9. Card view at <md (no horizontal scroll on mobile)
-//  10. Action cluster — Refresh (Export deferred to next cycle)
+// Tranche 176 (Tom 2026-09-23): the page is read at arm's length by operators,
+// so it is set for that — secondary text 13px, names 14px semibold, quantities
+// 17px bold, headline numbers 30px bold; plain words instead of system
+// vocabulary (no trust strip, no MF/BF/RP badges, "Status" not "Tier", "Unit"
+// not "UOM"); the Comfortable/Compact toggle is gone. Same data, filters,
+// sort, group-by, Reconcile badge + drawer, deep-link ?item_id=, and test ids
+// as before.
 //
-// Scanability & Typography (11–20):
-//  11. tabular-nums on every numeric column
-//  12. Right-align every numeric column
-//  13. Item column: Name primary, SKU mono small secondary
-//  14. Currency: ₪ + thin space + 2 decimals always
-//  15. Negative numbers in parens with danger-fg (accountancy)
-//  16. Zero values muted (don't shout)
-//  17. "—" for null with aria-label="no data"
-//  18. Smart relative dates ("Today", "2 days ago", "06 May", "2 mo ago")
-//  19. SKU column max-width with truncate + tooltip
-//  20. Long names truncate with title attribute
-//
-// Status Semantics (21–28):
-//  21. Stock-tier badge: Healthy / Low / Critical / Out / Negative (text+dot+color)
-//  22. Cost-status badge: Has cost / Missing cost / Rolled-up pending
-//  23. "Stale" badge if last_movement > 14 days
-//  24. Out-of-stock row: warning left-border accent
-//  25. Negative-stock row: danger left-border accent
-//  26. Supply-method micro-badge: MF / BF / RP for FG items
-//  27. All status pills are text + glyph + color (never color-only)
-//  28. Inactive items grayed (future hook; preserves contract)
-//
-// Search / Filter / Sort (29–36):
-//  29. Unified search with prefix glyph + clear button + keyboard `/` shortcut
-//  30. Filter chip row: All / Has stock / Out / Low / Negative / Missing cost / Stale
-//  31. Click column headers to sort (with `↕`, `↑`, `↓` indicator + aria-sort)
-//  32. Multi-criteria sort fallback (sort by + then on-hand desc)
-//  33. UOM filter dropdown + explicit Sort-by control (works on mobile,
-//      which has no clickable column headers)
-//  34. Category filter — curated operator-facing groups (Groups v1,
-//      Tranche 044): FG rows key on items.product_group_key, RM/PKG rows
-//      on components.material_group_key, labels from the shared group
-//      vocabulary (name_he), shown as count chips; null keys bucket
-//      honestly under "ללא קבוצה"
-//  35. Active-filters chip-bar summary + Clear all
-//  36. Result counter "showing N of M"
-//
-// States: Loading / Empty / Error (37–42):
-//  37. Skeleton matches table layout (preserves column structure)
-//  38. KPI strip skeleton (preserves layout)
-//  39. Empty state — icon + tailored copy + Reset filters action
-//  40. Error state — heading + message + Retry + Technical details
-//  41. Stale-cost warning if cost data is older than ledger
-//  42. "Refreshing…" indicator on background re-fetch
-//
-// Mobile / Responsive (43–47):
-//  43. Cards instead of table at <md
-//  44. Card layout: name+SKU prominent; on-hand huge; tier+cost chips
-//  45. Filters live inside the toolbar — no separate sheet (reachable)
-//  46. Touch targets ≥44px on tabs, search, action buttons
-//  47. Sticky search at top — always reachable on mobile
-//
-// Accessibility (48–50):
-//  48. Focus-visible 2px accent rings on every interactive element
-//  49. ARIA: aria-sort on headers, aria-current on tabs, aria-busy loading,
-//      role="status" on KPIs, role="alert" on errors, aria-pressed chips
-//  50. WCAG 2.2 contrast verified via existing semantic tokens
+// Which rows appear is decided by the API (ACTIVE masters only, gt-factory-os
+// api/src/stock/handler.ts), never here.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -327,20 +263,18 @@ function KpiCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 rounded-lg bg-bg-subtle/40 p-3 ring-1 sm:p-4",
+        "flex flex-col gap-1.5 rounded-xl bg-bg-subtle/40 p-4 ring-1 sm:p-5",
         toneRing,
       )}
       role="status"
     >
-      <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-      </span>
+      <span className="text-sm font-semibold text-fg-muted">{label}</span>
       {loading ? (
-        <div className="mt-0.5 h-7 w-32 animate-pulse rounded bg-bg-subtle" />
+        <div className="mt-0.5 h-9 w-32 animate-pulse rounded bg-bg-subtle" />
       ) : (
         <span
           className={cn(
-            "mt-0.5 text-xl font-semibold tabular-nums sm:text-2xl",
+            "mt-0.5 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl",
             toneText,
           )}
         >
@@ -348,7 +282,7 @@ function KpiCard({
         </span>
       )}
       {secondary ? (
-        <span className="text-xs text-fg-muted">{secondary}</span>
+        <span className="text-sm text-fg-muted">{secondary}</span>
       ) : null}
     </div>
   );
@@ -369,72 +303,12 @@ function TierBadge({ tier }: { tier: Tier }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ring-1",
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold ring-1",
         m.cls,
       )}
     >
       <span aria-hidden className="font-mono">{m.glyph}</span>
       {m.label}
-    </span>
-  );
-}
-
-// === Cost-status badge ====================================================
-function CostBadge({ status }: { status: CostStatus }) {
-  if (status === "has_cost") return null; // implicit when value renders
-  const meta: Record<Exclude<CostStatus, "has_cost">, { label: string; cls: string; glyph: string }> = {
-    missing_cost: { label: "Cost not set", cls: "bg-warning-softer text-warning-fg ring-warning/30", glyph: "⚠" },
-    pending_rollup: { label: "BOM cost not set", cls: "bg-warning-softer text-warning-fg ring-warning/30", glyph: "⚠" },
-    na: { label: "—", cls: "bg-bg-subtle text-fg-subtle ring-border", glyph: "·" },
-  };
-  const m = meta[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs italic ring-1",
-        m.cls,
-      )}
-    >
-      <span aria-hidden>{m.glyph}</span>
-      {m.label}
-    </span>
-  );
-}
-
-// === Supply-method micro badge ============================================
-function SupplyMethodBadge({ method }: { method: string | null }) {
-  if (!method) return null;
-  const map: Record<string, { short: string; full: string; tone: string }> = {
-    MANUFACTURED:    { short: "MF", full: "Manufactured", tone: "bg-info-softer text-info-fg ring-info/20" },
-    BOUGHT_FINISHED: { short: "BF", full: "Bought finished", tone: "bg-bg-subtle text-fg-muted ring-border" },
-    REPACK:          { short: "RP", full: "Repack", tone: "bg-bg-subtle text-fg-muted ring-border" },
-  };
-  const m = map[method];
-  if (!m) return null;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded px-1 py-0 text-3xs font-mono font-semibold ring-1",
-        m.tone,
-      )}
-      title={m.full}
-    >
-      {m.short}
-    </span>
-  );
-}
-
-// === Stale badge ==========================================================
-function StaleBadge({ daysAgo }: { daysAgo: number }) {
-  if (daysAgo < STALE_DAYS) return null;
-  if (!isFinite(daysAgo)) return null;
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-1.5 py-0.5 text-2xs text-fg-subtle ring-1 ring-border"
-      title={`Last movement was ${daysAgo} days ago`}
-    >
-      <span aria-hidden>⏱</span>
-      Stale
     </span>
   );
 }
@@ -454,7 +328,7 @@ function OnHandCell({
     <span className="inline-flex items-baseline justify-end gap-1.5 tabular-nums">
       <span
         className={cn(
-          "font-medium",
+          "text-lg font-bold",
           tier === "reconcile"
             ? "text-warning-fg"
             : tier === "out"
@@ -469,7 +343,7 @@ function OnHandCell({
         {isNaN(displayN) ? resolved.display : displayN.toFixed(2)}
       </span>
       {row.base_uom ? (
-        <span className="text-2xs uppercase text-fg-subtle">{row.base_uom}</span>
+        <span className="text-sm font-medium text-fg-muted">{row.base_uom}</span>
       ) : null}
       {resolved.isBelowFloor ? (
         <ReconcileBadge
@@ -560,12 +434,11 @@ function InventoryCardMobile({
           className="min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           title={row.display_name ?? row.item_id}
         >
-          <div className="truncate text-sm font-medium text-fg">
+          <div className="truncate text-base font-semibold text-fg-strong">
             {row.display_name ?? row.item_id}
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs text-fg-subtle">
-            <span className="truncate">{row.item_id}</span>
-            <SupplyMethodBadge method={value?.supply_method ?? null} />
+          <div className="mt-0.5 truncate font-mono text-sm text-fg-muted">
+            {row.item_id}
           </div>
         </Link>
         {/* FLOW-014: min-h-[44px] satisfies WCAG touch-target for ReconcileBadge */}
@@ -576,20 +449,19 @@ function InventoryCardMobile({
       <div className="flex flex-wrap items-center gap-1.5">
         <TierBadge tier={tier} />
         <span
-          className="rounded-full bg-bg-subtle px-1.5 py-0.5 text-2xs text-fg-subtle ring-1 ring-border"
+          className="rounded-full bg-bg-subtle px-1.5 py-0.5 text-sm text-fg-subtle ring-1 ring-border"
           dir="auto"
         >
           {categoryLabel}
         </span>
         {cost === "has_cost" ? (
-          <span className="text-2xs font-medium tabular-nums text-fg-muted">
+          <span className="text-sm font-semibold tabular-nums text-fg">
             {totalVal.display}
           </span>
         ) : (
-          <CostBadge status={cost} />
+          <span className="text-sm text-fg-subtle">No cost</span>
         )}
-        <StaleBadge daysAgo={date.daysAgo} />
-        <span className="ml-auto text-2xs text-fg-subtle" title={date.aria}>
+        <span className="ml-auto text-sm text-fg-muted" title={date.aria}>
           {date.label}
         </span>
       </div>
@@ -619,7 +491,7 @@ function ClearableChip({
     <button
       type="button"
       onClick={onClear}
-      className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-sm text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       aria-label={`Remove ${field} filter`}
     >
       <span className="text-fg-subtle">{field}:</span>
@@ -675,7 +547,7 @@ function ActiveFilterChips({
   if (!active) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-2xs font-medium text-fg-subtle">Active filters:</span>
+      <span className="text-sm font-medium text-fg-subtle">Active filters:</span>
       {category ? (
         <ClearableChip field="Category" value={category} onClear={onClearCategory} />
       ) : null}
@@ -692,17 +564,17 @@ function ActiveFilterChips({
           onClear={onClearTier}
         />
       ) : null}
-      {uom ? <ClearableChip field="UOM" value={uom} onClear={onClearUom} /> : null}
+      {uom ? <ClearableChip field="Unit" value={uom} onClear={onClearUom} /> : null}
       {missingCost ? (
         <ClearableChip field="Cost" value="Missing" onClear={onClearMissingCost} />
       ) : null}
       {stale ? (
-        <ClearableChip field="Activity" value="Stale" onClear={onClearStale} />
+        <ClearableChip field="Activity" value="No movement" onClear={onClearStale} />
       ) : null}
       <button
         type="button"
         onClick={onClearAll}
-        className="inline-flex items-center gap-1 text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         Clear all
       </button>
@@ -739,7 +611,7 @@ function SortHeader({
   const indicator = active ? (currentDir === "asc" ? "↑" : "↓") : "↕";
   return (
     <th
-      className={cn("py-2 pr-4", align === "right" && "text-right", className)}
+      className={cn("py-3 pr-4", align === "right" && "text-right", className)}
       aria-sort={ariaSort as React.AriaAttributes["aria-sort"]}
       title={title}
     >
@@ -747,8 +619,8 @@ function SortHeader({
         type="button"
         onClick={() => onSort(sortKey)}
         className={cn(
-          "inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-          active ? "text-fg" : "text-fg-subtle hover:text-fg",
+          "inline-flex items-center gap-1 text-xs font-bold uppercase tracking-sops transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+          active ? "text-fg-strong" : "text-fg-muted hover:text-fg",
           align === "right" && "flex-row-reverse",
         )}
       >
@@ -778,7 +650,6 @@ export default function InventoryPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [drawerRow, setDrawerRow] = useState<StockRow | null>(null);
   const [alertDismissed, setAlertDismissed] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1111,6 +982,22 @@ export default function InventoryPage() {
     return allRows.filter((r) => r.never_counted).length;
   }, [allRows]);
 
+  // "Needs attention" headline card — across both tabs, so the number is the
+  // same whichever tab is open. Uncounted rows are not counted here: they are
+  // "not measured yet", not a stock problem.
+  const attention = useMemo(() => {
+    const counts = { reconcile: 0, out: 0, critical: 0, total: 0 };
+    for (const r of [...(fgRows ?? []), ...(rmRows ?? [])]) {
+      const t = deriveTier(r.calculated_on_hand, r.never_counted);
+      if (t === "reconcile") counts.reconcile += 1;
+      else if (t === "out") counts.out += 1;
+      else if (t === "critical") counts.critical += 1;
+      else continue;
+      counts.total += 1;
+    }
+    return counts;
+  }, [fgRows, rmRows]);
+
   function handleSort(key: SortKey) {
     setSortKey((prev) => {
       if (prev === key) {
@@ -1177,7 +1064,7 @@ export default function InventoryPage() {
         size="section"
         eyebrow="Stock"
         title="Inventory"
-        description="Calculated stock balances derived from the ledger. Posted events only — pending events do not affect these numbers. Negative balances flagged for investigation."
+        description="How much of every item is in the factory right now, from the stock ledger."
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -1211,68 +1098,53 @@ export default function InventoryPage() {
             </button>
           </div>
         }
-      >
-        {/* Iteration 6 — Trust strip */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-info/20 bg-info-softer/40 px-3 py-2 text-2xs text-info-fg">
-          <span>
-            <strong className="font-semibold">Source:</strong> Stock ledger
-          </span>
-          {valueData?.as_of ? (
-            <span>
-              <strong className="font-semibold">Fetched at:</strong>{" "}
-              {new Date(valueData.as_of).toLocaleString("en-GB", {
-                month: "short",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </span>
-          ) : null}
-          <span className="text-fg-muted">
-            Items below the physical floor (red) need investigation · Items without a configured cost show no value · ACTIVE master items that have never been counted appear at 0 with a &quot;Not counted&quot; badge
-          </span>
-        </div>
-      </WorkflowHeader>
+      />
 
-      {/* ===== KPI strip (Iteration 1) ===== */}
+      {/* ===== Headline cards ===== */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Total inventory value"
+          label="Stock value"
           primary={fmtIls(totalValue)}
-          secondary="Sums every item with a configured cost. Items without a cost are excluded."
+          secondary="Items without a cost are not included."
           loading={!valueData}
         />
         <KpiCard
-          label="Items tracked"
+          label="Items"
           primary={totalItems.toLocaleString()}
           secondary={
             totalUncountedCount > 0
-              ? `${fgCount} FG · ${rmCount} RM/PKG · ${totalUncountedCount} not counted yet`
-              : `${fgCount} FG · ${rmCount} RM/PKG`
+              ? `${fgCount} finished goods · ${rmCount} materials & packaging · ${totalUncountedCount} not counted yet`
+              : `${fgCount} finished goods · ${rmCount} materials & packaging`
           }
           loading={allStockLoading}
         />
         <KpiCard
-          label="With cost data"
-          primary={`${itemsWithCost}`}
+          label="Needs attention"
+          primary={attention.total.toLocaleString()}
           secondary={
-            totalItems > 0
-              ? `${Math.round((itemsWithCost / totalItems) * 100)}% coverage`
-              : undefined
+            attention.total > 0
+              ? [
+                  attention.reconcile > 0 ? `${attention.reconcile} below floor` : null,
+                  attention.out > 0 ? `${attention.out} out of stock` : null,
+                  attention.critical > 0 ? `${attention.critical} critical` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Nothing is out, critical or below floor."
           }
-          tone={itemsWithCost > 0 ? "success" : "default"}
-          loading={!valueData}
+          tone={attention.total > 0 ? "warning" : "success"}
+          loading={allStockLoading}
         />
         <KpiCard
-          label="Missing cost data"
-          primary={`${itemsMissing}`}
+          label="Cost coverage"
+          primary={`${itemsWithCost} / ${totalItems}`}
           secondary={
             itemsMissing > 0
-              ? "Visible under 'Missing cost' filter chip below"
-              : "All items priced"
+              ? `${itemsMissing} items have no cost yet — see the Missing cost filter.`
+              : "Every item has a cost."
           }
-          tone={itemsMissing > 0 ? "warning" : "success"}
-          loading={!valueData}
+          tone={itemsMissing > 0 ? "default" : "success"}
+          loading={!valueData || allStockLoading}
         />
       </div>
 
@@ -1318,43 +1190,6 @@ export default function InventoryPage() {
             ? `Showing ${rows.length.toLocaleString()} of ${allRows.length.toLocaleString()}`
             : `${allRows.length.toLocaleString()} items`
         }
-        density={density}
-        actions={
-          <div
-            className="hidden items-center gap-1 rounded-md border border-border/70 bg-bg-subtle/40 p-0.5 sm:inline-flex"
-            role="radiogroup"
-            aria-label="Density"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={density === "comfortable"}
-              onClick={() => setDensity("comfortable")}
-              className={cn(
-                "rounded-sm px-2 py-1 text-2xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                density === "comfortable"
-                  ? "bg-bg text-fg shadow-sm"
-                  : "text-fg-muted hover:text-fg",
-              )}
-            >
-              Comfortable
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={density === "compact"}
-              onClick={() => setDensity("compact")}
-              className={cn(
-                "rounded-sm px-2 py-1 text-2xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                density === "compact"
-                  ? "bg-bg text-fg shadow-sm"
-                  : "text-fg-muted hover:text-fg",
-              )}
-            >
-              Compact
-            </button>
-          </div>
-        }
       >
         <div className="space-y-4">
           {/* Iteration 7 — Tabs with counts */}
@@ -1380,9 +1215,9 @@ export default function InventoryPage() {
                     setUsedByFilter("");
                   }}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                    "inline-flex items-center gap-2 rounded px-3.5 py-2 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                     isActive
-                      ? "bg-bg text-fg shadow-sm"
+                      ? "bg-bg text-fg-strong shadow-sm"
                       : "text-fg-muted hover:text-fg",
                   )}
                   title={
@@ -1394,7 +1229,7 @@ export default function InventoryPage() {
                   {label}
                   <span
                     className={cn(
-                      "rounded-full px-1.5 py-0 text-2xs tabular-nums ring-1",
+                      "rounded-full px-1.5 py-0 text-sm tabular-nums ring-1",
                       isActive
                         ? "bg-accent-softer text-accent-fg ring-accent/30"
                         : "bg-bg-subtle text-fg-subtle ring-border",
@@ -1404,7 +1239,7 @@ export default function InventoryPage() {
                   </span>
                   {uncounted > 0 ? (
                     <span
-                      className="rounded-full bg-bg-subtle px-1 py-0 text-3xs tabular-nums text-fg-subtle ring-1 ring-border"
+                      className="rounded-full bg-bg-subtle px-1 py-0 text-xs tabular-nums text-fg-subtle ring-1 ring-border"
                       aria-label={`${uncounted} not counted yet`}
                     >
                       <span aria-hidden>∅</span> {uncounted}
@@ -1422,8 +1257,8 @@ export default function InventoryPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by SKU or name… (press / to focus)"
-              className="w-full rounded border border-border bg-bg px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 sm:max-w-md"
+              placeholder="Search by name or SKU"
+              className="w-full rounded-md border border-border bg-bg px-3 py-2.5 pl-9 text-base focus:outline-none focus:ring-2 focus:ring-accent/40 sm:max-w-md"
               aria-label="Search inventory"
             />
             <span
@@ -1448,7 +1283,7 @@ export default function InventoryPage() {
           <div className="space-y-3 rounded-lg border border-border/60 bg-bg-subtle/25 p-3 sm:p-4">
             {/* Category filter — the curated operator-facing groups (name_he) */}
             <div className="space-y-1.5">
-              <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="block text-sm font-semibold text-fg-muted">
                 Category
               </span>
               <GroupFilterBar
@@ -1469,7 +1304,7 @@ export default function InventoryPage() {
                 ("לפי קו מוצר") that consumes them via the active BOMs. */}
             {tab === "RM_PKG" && usedByGroups.length > 0 ? (
               <div className="space-y-1.5">
-                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="block text-sm font-semibold text-fg-muted">
                   לפי קו מוצר
                 </span>
                 <GroupFilterBar
@@ -1488,7 +1323,7 @@ export default function InventoryPage() {
 
             {/* Status filter chips */}
             <div className="space-y-1.5">
-              <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="block text-sm font-semibold text-fg-muted">
                 Status
               </span>
               <div
@@ -1525,7 +1360,7 @@ export default function InventoryPage() {
                       onClick={() => setTierFilter(c.value)}
                       aria-pressed={active}
                       className={cn(
-                        "rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                        "rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                         active
                           ? "bg-fg text-bg ring-fg"
                           : "bg-bg text-fg-muted ring-border hover:text-fg",
@@ -1543,7 +1378,7 @@ export default function InventoryPage() {
                   onClick={() => setMissingCostOnly((v) => !v)}
                   aria-pressed={missingCostOnly}
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                     missingCostOnly
                       ? "bg-warning-softer text-warning-fg ring-warning/40"
                       : "bg-bg text-fg-muted ring-border hover:text-fg",
@@ -1557,14 +1392,14 @@ export default function InventoryPage() {
                   onClick={() => setStaleOnly((v) => !v)}
                   aria-pressed={staleOnly}
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                     staleOnly
                       ? "bg-info-softer text-info-fg ring-info/40"
                       : "bg-bg text-fg-muted ring-border hover:text-fg",
                   )}
                 >
                   <span aria-hidden>⏱</span>
-                  Stale ({STALE_DAYS}d+)
+                  No movement {STALE_DAYS}d+
                 </button>
               </div>
             </div>
@@ -1574,7 +1409,7 @@ export default function InventoryPage() {
               <div>
                 <label
                   htmlFor="inv-sort"
-                  className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                  className="mb-1 block text-sm font-semibold text-fg-muted"
                 >
                   Sort by
                 </label>
@@ -1583,7 +1418,7 @@ export default function InventoryPage() {
                     id="inv-sort"
                     value={sortKey}
                     onChange={(e) => setSortKey(e.target.value as SortKey)}
-                    className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    className="rounded-md border border-border bg-bg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
                   >
                     <option value="name">Name</option>
                     <option value="sku">SKU</option>
@@ -1595,7 +1430,7 @@ export default function InventoryPage() {
                   <button
                     type="button"
                     onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                    className="rounded border border-border bg-bg px-2 py-1 text-xs text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    className="rounded-md border border-border bg-bg px-2.5 py-1.5 text-sm text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                     aria-label={
                       sortDir === "asc" ? "Sort ascending" : "Sort descending"
                     }
@@ -1608,7 +1443,7 @@ export default function InventoryPage() {
               <div>
                 <label
                   htmlFor="inv-group"
-                  className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                  className="mb-1 block text-sm font-semibold text-fg-muted"
                 >
                   Group by
                 </label>
@@ -1616,26 +1451,26 @@ export default function InventoryPage() {
                   id="inv-group"
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-                  className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  className="rounded-md border border-border bg-bg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
                 >
                   <option value="none">No grouping</option>
                   <option value="category">Category</option>
                   <option value="tier">Stock status</option>
-                  <option value="uom">UOM</option>
+                  <option value="uom">Unit</option>
                 </select>
               </div>
               <div>
                 <label
                   htmlFor="inv-uom"
-                  className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                  className="mb-1 block text-sm font-semibold text-fg-muted"
                 >
-                  UOM
+                  Unit
                 </label>
                 <select
                   id="inv-uom"
                   value={uomFilter}
                   onChange={(e) => setUomFilter(e.target.value)}
-                  className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  className="rounded-md border border-border bg-bg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
                 >
                   <option value="">All</option>
                   {uomOptions.map((u) => (
@@ -1646,7 +1481,7 @@ export default function InventoryPage() {
                 </select>
               </div>
               {refreshing && !isLoading ? (
-                <span className="ml-auto inline-flex items-center gap-1.5 pb-1 text-2xs text-fg-subtle">
+                <span className="ml-auto inline-flex items-center gap-1.5 pb-1 text-sm text-fg-subtle">
                   <span
                     aria-hidden
                     className="h-1.5 w-1.5 animate-pulse rounded-full bg-info"
@@ -1681,7 +1516,7 @@ export default function InventoryPage() {
           />
 
           {/* Loading */}
-          {isLoading && <SkeletonTable rows={density === "compact" ? 6 : 8} />}
+          {isLoading && <SkeletonTable rows={8} />}
 
           {/* Error */}
           {error && (
@@ -1693,22 +1528,22 @@ export default function InventoryPage() {
                 <span aria-hidden>✗</span>
                 <div className="flex-1">
                   <div className="font-semibold">Could not load inventory</div>
-                  <p className="mt-1 text-xs text-fg-muted">
+                  <p className="mt-1 text-sm text-fg-muted">
                     Check your connection. The inventory will reload once the
                     API is reachable.
                   </p>
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-2xs text-fg-subtle">
+                    <summary className="cursor-pointer text-sm text-fg-subtle">
                       Technical details
                     </summary>
-                    <code className="mt-1 block break-all font-mono text-2xs text-fg-muted">
+                    <code className="mt-1 block break-all font-mono text-sm text-fg-muted">
                       {(error as Error).message}
                     </code>
                   </details>
                   <button
                     type="button"
                     onClick={refreshAll}
-                    className="mt-2 inline-flex items-center gap-1 rounded border border-danger/40 bg-bg px-2 py-0.5 text-2xs font-medium text-danger-fg hover:bg-danger-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    className="mt-2 inline-flex items-center gap-1 rounded border border-danger/40 bg-bg px-2 py-0.5 text-sm font-medium text-danger-fg hover:bg-danger-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                   >
                     Retry
                   </button>
@@ -1726,11 +1561,11 @@ export default function InventoryPage() {
               >
                 <span className="text-xl">∅</span>
               </div>
-              <div className="text-sm font-medium text-fg">
+              <div className="text-base font-semibold text-fg-strong">
                 No items match these filters
               </div>
-              <p className="max-w-md text-xs text-fg-muted">
-                Try clearing the search or removing the category, status or UOM
+              <p className="max-w-md text-sm text-fg-muted">
+                Try clearing the search or removing the category, status or unit
                 filters.
               </p>
               <button
@@ -1748,7 +1583,7 @@ export default function InventoryPage() {
             <>
               <div className="hidden md:block" data-testid="inventory-desktop">
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
+                  <table className="min-w-full text-base">
                     <thead className="sticky top-0 z-10 bg-bg/95 backdrop-blur-sm">
                       <tr className="border-b border-border/60 text-left">
                         <SortHeader
@@ -1781,14 +1616,14 @@ export default function InventoryPage() {
                           align="right"
                           title="Calculated from posted ledger events. Pending events excluded."
                         />
-                        <th className="py-2 pr-4 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          Tier
+                        <th className="py-3 pr-4 text-left text-xs font-bold uppercase tracking-sops text-fg-muted">
+                          Status
                         </th>
-                        <th className="py-2 pr-4 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        <th className="py-3 pr-4 text-right text-xs font-bold uppercase tracking-sops text-fg-muted">
                           Unit cost
                         </th>
                         <SortHeader
-                          label="Value (ILS)"
+                          label="Value"
                           sortKey="value"
                           currentKey={sortKey}
                           currentDir={sortDir}
@@ -1825,14 +1660,14 @@ export default function InventoryPage() {
                                     >
                                       {collapsed ? "▸" : "▾"}
                                     </span>
-                                    <span className="text-xs font-semibold text-fg">
+                                    <span className="text-base font-bold text-fg-strong">
                                       {groupSectionLabel(g.key)}
                                     </span>
-                                    <span className="rounded-full bg-bg px-1.5 py-0 text-3xs tabular-nums text-fg-subtle ring-1 ring-border">
+                                    <span className="rounded-full bg-bg px-1.5 py-0 text-xs tabular-nums text-fg-subtle ring-1 ring-border">
                                       {g.count}
                                     </span>
                                     {g.value > 0 ? (
-                                      <span className="ml-auto pr-2 text-2xs tabular-nums text-fg-muted">
+                                      <span className="ml-auto pr-2 text-sm tabular-nums text-fg-muted">
                                         {fmtIls(String(g.value))}
                                       </span>
                                     ) : null}
@@ -1874,26 +1709,23 @@ export default function InventoryPage() {
                                           : tier === "out"
                                           ? "border-l-4 border-l-warning/30"
                                           : "",
-                                        density === "compact" ? "h-9" : "h-12",
+                                        "h-14",
                                       )}
                                     >
                                       <td className="py-2 pr-4">
                                         <Link
                                           href={rowDetailHref(row)}
-                                          className="inline-flex items-center gap-1.5 text-fg hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                          className="inline-flex items-center gap-1.5 font-semibold text-fg-strong hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                           title={row.display_name ?? row.item_id}
                                         >
-                                          <span className="max-w-[28ch] truncate">
+                                          <span className="max-w-[32ch] truncate">
                                             {row.display_name ?? "—"}
                                           </span>
-                                          <SupplyMethodBadge
-                                            method={v?.supply_method ?? null}
-                                          />
                                         </Link>
                                       </td>
                                       <td className="py-2 pr-4">
                                         <span
-                                          className="block max-w-[18ch] truncate font-mono text-xs text-fg-muted"
+                                          className="block max-w-[18ch] truncate font-mono text-sm text-fg-muted"
                                           title={row.item_id}
                                         >
                                           {row.item_id}
@@ -1908,7 +1740,7 @@ export default function InventoryPage() {
                                               return prev === k ? "" : k;
                                             })
                                           }
-                                          className="rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg-muted ring-1 ring-border transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                          className="rounded-full bg-bg-subtle px-2.5 py-1 text-sm font-medium text-fg-muted ring-1 ring-border transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                           title={`Filter to ${labelForRow(row)}`}
                                           dir="auto"
                                         >
@@ -1922,28 +1754,27 @@ export default function InventoryPage() {
                                         />
                                       </td>
                                       <td className="py-2 pr-4">
-                                        <div className="flex flex-wrap items-center gap-1">
-                                          <TierBadge tier={tier} />
-                                          <StaleBadge daysAgo={date.daysAgo} />
-                                        </div>
+                                        <TierBadge tier={tier} />
                                       </td>
                                       <td className="py-2 pr-4 text-right tabular-nums">
                                         {cost === "has_cost" ? (
-                                          <span className="text-xs text-fg-muted">
+                                          <span className="text-sm text-fg-muted">
                                             {unitCost.display}
                                           </span>
                                         ) : (
-                                          <CostBadge status={cost} />
+                                          <span className="text-sm text-fg-subtle">
+                                            No cost
+                                          </span>
                                         )}
                                       </td>
                                       <td className="py-2 pr-4 text-right tabular-nums">
                                         {cost === "has_cost" ? (
                                           <span
                                             className={cn(
-                                              "font-medium",
+                                              "font-semibold",
                                               totalVal.isZero
                                                 ? "text-fg-subtle"
-                                                : "text-fg",
+                                                : "text-fg-strong",
                                             )}
                                           >
                                             {totalVal.display}
@@ -1954,7 +1785,7 @@ export default function InventoryPage() {
                                           </span>
                                         )}
                                       </td>
-                                      <td className="py-2 text-fg-muted">
+                                      <td className="py-2 text-sm text-fg-muted">
                                         <span title={date.aria}>
                                           {date.label}
                                         </span>
@@ -1990,14 +1821,14 @@ export default function InventoryPage() {
                           <span aria-hidden className="w-3 text-fg-subtle">
                             {collapsed ? "▸" : "▾"}
                           </span>
-                          <span className="text-sm font-semibold text-fg">
+                          <span className="text-base font-bold text-fg-strong">
                             {groupSectionLabel(g.key)}
                           </span>
-                          <span className="rounded-full bg-bg px-1.5 py-0 text-3xs tabular-nums text-fg-subtle ring-1 ring-border">
+                          <span className="rounded-full bg-bg px-1.5 py-0 text-xs tabular-nums text-fg-subtle ring-1 ring-border">
                             {g.count}
                           </span>
                           {g.value > 0 ? (
-                            <span className="ml-auto text-2xs tabular-nums text-fg-muted">
+                            <span className="ml-auto text-sm tabular-nums text-fg-muted">
                               {fmtIls(String(g.value))}
                             </span>
                           ) : null}
