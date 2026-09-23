@@ -2,10 +2,12 @@
 
 // Planner/bookkeeper-scoped Inventory-Movement approval surface.
 //
-// Route-print-pack proposals (returns / exchanges / pickups) arrive as a
-// free-text proposal — no structured item/qty. The reviewer enters the
-// confirmed line(s) here; approving posts one stock_ledger row per line via the
-// sanctioned backend mutation. Mirrors the physical-count approval page.
+// The daily stock-exceptions sweep proposes every non-pick stock move
+// (supplements, free goods, exchanges, returns, tastings, subcontract) with
+// proposed lines, a rationale, evidence and open questions (tranche 176). The
+// reviewer checks or edits the pre-filled lines here; approving posts one
+// stock_ledger row per line via the sanctioned backend mutation. Mirrors the
+// physical-count approval page.
 //
 // Consumes:
 //   GET  /api/inventory-movements/:submission_id
@@ -34,6 +36,14 @@ interface InventoryMovementDetail {
   submitted_by_display_name: string | null;
   event_at: string;
   submitted_at: string;
+  // The proposal (tranche 176 / backend 0350). Optional: older submissions and
+  // an API not yet on 0350 leave them out.
+  proposed_lines?: ProposedLine[];
+  rationale?: string | null;
+  open_questions?: string[];
+  evidence?: Array<{ type: string; ref: string; url?: string }>;
+  credit_task_ids?: string[];
+  // Posted audit lines — filled on approval. Never used to pre-fill.
   lines: Array<{
     direction: string;
     item_type: string;
@@ -56,6 +66,18 @@ interface PostedLine {
   stock_ledger_movement_id: string;
 }
 
+interface ProposedLine {
+  direction: "in" | "out";
+  item_type: "FG" | "RM" | "PKG";
+  item_id: string;
+  quantity: number;
+  unit: string;
+  reason_code: string;
+  source: string;
+  evidence_ref?: string | null;
+  confidence: string;
+}
+
 interface LineDraft {
   direction: "in" | "out";
   item_type: "FG" | "RM" | "PKG";
@@ -63,7 +85,29 @@ interface LineDraft {
   quantity: string;
   unit: string;
   reason_code: string;
+  // Where a pre-filled row came from; absent on rows the reviewer added.
+  origin?: Pick<ProposedLine, "source" | "confidence" | "evidence_ref">;
 }
+
+const SOURCE_LABELS: Record<string, string> = {
+  gi_document: "Green Invoice document",
+  credit_task: "Picking shortage",
+  purchase_order: "Purchase order",
+  note_parse: "LionWheel note",
+  manual: "Manual",
+};
+
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: "High confidence",
+  medium: "Medium confidence",
+  low: "Low confidence — check",
+};
+
+const EVIDENCE_LABELS: Record<string, string> = {
+  gi_document: "Green Invoice",
+  lionwheel_task: "LionWheel task",
+  credit_task: "Picking shortage",
+};
 
 const REASON_CODES = [
   "goods_pickup",
@@ -97,6 +141,9 @@ const KIND_LABELS: Record<string, string> = {
   return: "Return",
   tasting: "Tasting",
   goods_receipt: "Goods receipt",
+  supplement: "Supplement",
+  free_goods: "Free goods",
+  subcontract: "Subcontract",
   other: "Other",
 };
 
@@ -105,7 +152,7 @@ function kindLabel(kind: string): string {
 }
 
 type Outcome =
-  | { kind: "approved"; postedLines: PostedLine[] }
+  | { kind: "approved"; postedLines: PostedLine[]; suppliedShortages: number }
   | { kind: "rejected" }
   | { kind: "conflict"; detail: string }
   | { kind: "network"; message: string };
@@ -139,6 +186,8 @@ function friendlyConflict(reasonCode: string, fallback: string): string {
       return "A physical count is in progress for one of these items. Posting is blocked until the count clears.";
     case "SUBMISSION_NOT_FOUND":
       return "Submission not found. It may have been removed.";
+    case "LINES_ALREADY_RECORDED":
+      return "Stock lines were already recorded for this movement outside approval. Reject it so it can be proposed again.";
     default:
       return fallback || "This submission cannot be actioned in its current state. Refresh and try again.";
   }
@@ -176,22 +225,22 @@ export default function InventoryMovementReviewPage() {
 
   const d = detailQuery.data;
 
-  // Pre-populate form lines from the proposal's pre-filed inventory_movement_lines.
-  // FG-OUT and RM-GR proposals file structured lines at proposal time so the
-  // approver only needs to review + confirm, not re-enter from scratch.
-  // We seed once on first successful load; manual edits after that are preserved.
+  // Pre-fill the editor from the proposal's proposed_lines, once, on first
+  // load; edits after that are preserved. Never from `lines` — those are the
+  // posted audit lines, and pre-filling from them is how GI-20269 posted twice.
   useEffect(() => {
     if (prefilled.current) return;
-    if (!d || !d.lines || d.lines.length === 0) return;
+    if (!d?.proposed_lines || d.proposed_lines.length === 0) return;
     prefilled.current = true;
     setLines(
-      d.lines.map((l) => ({
-        direction: l.direction as LineDraft["direction"],
-        item_type: l.item_type as LineDraft["item_type"],
+      d.proposed_lines.map((l) => ({
+        direction: l.direction,
+        item_type: l.item_type,
         item_id: l.item_id,
-        quantity: l.quantity,
+        quantity: String(l.quantity),
         unit: l.unit,
-        reason_code: l.reason_code || (l.direction === "out" ? "goods_out" : "goods_pickup"),
+        reason_code: l.reason_code,
+        origin: { source: l.source, confidence: l.confidence, evidence_ref: l.evidence_ref ?? null },
       })),
     );
   }, [d]);
@@ -258,7 +307,8 @@ export default function InventoryMovementReviewPage() {
         // success state can list each posted ledger row and link out.
         const postedLines: PostedLine[] =
           body && Array.isArray(body.posted_lines) ? (body.posted_lines as PostedLine[]) : [];
-        setOutcome({ kind: "approved", postedLines });
+        const suppliedShortages: number = body?.credit_tasks?.supplied?.length ?? 0;
+        setOutcome({ kind: "approved", postedLines, suppliedShortages });
       } else if (res.status === 409 && body && "reason_code" in body) {
         setOutcome({ kind: "conflict", detail: friendlyConflict(body.reason_code, body.detail) });
       } else {
@@ -304,7 +354,12 @@ export default function InventoryMovementReviewPage() {
     return (
       <SuccessState
         title="Approved — stock posted"
-        description={`Posted ${posted.length} movement line${posted.length === 1 ? "" : "s"} to the stock ledger.`}
+        description={
+          `Posted ${posted.length} movement line${posted.length === 1 ? "" : "s"} to the stock ledger.` +
+          (outcome.suppliedShortages > 0
+            ? ` ${outcome.suppliedShortages} picking shortage${outcome.suppliedShortages === 1 ? "" : "s"} marked supplied.`
+            : "")
+        }
         action={
           <>
             <Link href="/inbox" className="btn btn-sm btn-primary">
@@ -488,6 +543,64 @@ export default function InventoryMovementReviewPage() {
         </div>
       ) : null}
 
+      {/* Tranche 176 — why this was proposed, what is still unknown, and the
+          evidence behind the pre-filled lines. Rationale / questions / refs
+          are Hebrew data values, rendered right-to-left. */}
+      {d?.rationale ? (
+        <div className="mb-5 rounded-md border border-border/60 bg-bg-subtle/40 p-4 text-sm" data-testid="im-review-rationale">
+          <div className="mb-1 text-xs font-semibold text-fg-muted">Why this was proposed</div>
+          <p dir="rtl" className="whitespace-pre-wrap text-fg">
+            {d.rationale}
+          </p>
+        </div>
+      ) : null}
+
+      {d?.open_questions && d.open_questions.length > 0 ? (
+        <div
+          className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
+          data-testid="im-review-open-questions"
+        >
+          <div className="font-semibold">Open questions — answer before approving</div>
+          <ul dir="rtl" className="mt-2 list-disc space-y-1 pr-5 text-fg">
+            {d.open_questions.map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {d?.evidence && d.evidence.length > 0 ? (
+        <div className="mb-5 rounded-md border border-border/60 p-4 text-sm" data-testid="im-review-evidence">
+          <div className="mb-1 text-xs font-semibold text-fg-muted">Evidence</div>
+          <ul className="space-y-1">
+            {d.evidence.map((e, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-fg-muted">{EVIDENCE_LABELS[e.type] ?? e.type}</span>
+                {e.url ? (
+                  <a href={e.url} target="_blank" rel="noreferrer" className="text-primary underline" dir="auto">
+                    {e.ref}
+                  </a>
+                ) : (
+                  <span className="text-fg" dir="auto">
+                    {e.ref}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {d?.credit_task_ids && d.credit_task_ids.length > 0 ? (
+        <div className="mb-5 flex items-start gap-2 text-xs text-fg-muted" data-testid="im-review-credit-tasks">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+          <span>
+            {d.credit_task_ids.length} linked picking shortage{d.credit_task_ids.length === 1 ? "" : "s"}: approving
+            marks each one supplied when the approved Out quantity of its item covers it.
+          </span>
+        </div>
+      ) : null}
+
       {/* FLOW-IM-009 — when the proposal is no longer pending, warn loudly
           above the editor and disable both actions (handled via canApprove /
           canReject below). */}
@@ -542,7 +655,7 @@ export default function InventoryMovementReviewPage() {
       >
         <div className="space-y-3">
           {lines.map((l, i) => (
-            <div key={i} className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-3">
+            <div key={i} className="flex flex-wrap items-end gap-2 rounded-md border border-border/60 p-3" data-testid="im-review-line">
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium text-fg-muted">Direction</span>
                 <select
@@ -572,6 +685,7 @@ export default function InventoryMovementReviewPage() {
                 <span className="text-xs font-medium text-fg-muted">Item code</span>
                 <input
                   className={inputCls}
+                  aria-label="Item code"
                   value={l.item_id}
                   onChange={(e) => updateLine(i, { item_id: e.target.value })}
                   placeholder="item / component code"
@@ -584,6 +698,7 @@ export default function InventoryMovementReviewPage() {
                 <span className="text-xs font-medium text-fg-muted">Qty</span>
                 <input
                   className={inputCls}
+                  aria-label="Qty"
                   type="number"
                   min="0"
                   step="any"
@@ -595,6 +710,7 @@ export default function InventoryMovementReviewPage() {
                 <span className="text-xs font-medium text-fg-muted">Unit</span>
                 <input
                   className={inputCls}
+                  aria-label="Unit"
                   value={l.unit}
                   onChange={(e) => updateLine(i, { unit: e.target.value })}
                 />
@@ -622,6 +738,19 @@ export default function InventoryMovementReviewPage() {
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+              {l.origin ? (
+                <div className="w-full text-3xs text-fg-subtle" data-testid="im-review-line-origin">
+                  Proposed from {SOURCE_LABELS[l.origin.source] ?? l.origin.source} ·{" "}
+                  <span className={l.origin.confidence === "high" ? "text-success-fg" : "text-warning-fg"}>
+                    {CONFIDENCE_LABELS[l.origin.confidence] ?? l.origin.confidence}
+                  </span>
+                  {l.origin.evidence_ref ? (
+                    <span className="ml-1 font-mono" dir="auto">
+                      ({l.origin.evidence_ref})
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ))}
           <button type="button" className="btn btn-sm" onClick={addLine}>
