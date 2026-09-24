@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OutcomeSheet } from "@/app/(sales)/_components/OutcomeSheet";
 import { OUTCOME_LABELS, OUTCOME_TITLES, STATUS_LABELS, UI } from "@/app/(sales)/_lib/labels";
+import { toDateInputValue } from "@/app/(sales)/_lib/format";
 
 afterEach(cleanup);
 
@@ -90,8 +91,13 @@ describe("outcome sheet", () => {
       OUTCOME_LABELS.no_answer,
     );
 
+    // Ten days out, not a fixed date: the input's min is today, and the fixed
+    // "2026-09-03" this used to type became a past date on 2026-09-04 — the
+    // input dropped it and the case failed for reasons unrelated to D4.
+    const inTenDays = new Date();
+    inTenDays.setDate(inTenDays.getDate() + 10);
     fireEvent.change(screen.getByLabelText(UI.pickDate), {
-      target: { value: "2026-09-03" },
+      target: { value: toDateInputValue(inTenDays) },
     });
     fireEvent.click(screen.getByTestId("next-touch-custom"));
 
