@@ -48,7 +48,7 @@ helper was never called) and `design-readiness/primitives.md`. Scores are not ch
 `/portal-scorecard`'s job. The `HeroBar` mention in `globals.css` is left alone.
 
 Numbered 178: `main` took 176 the same day (#227, which also fixed the expired date in
-`outcome-sheet.test.tsx`), and open PR #229 holds 177.
+`outcome-sheet.test.tsx`), and #229 took 177.
 
 Kept on purpose: `eslint-config-next` (loaded through `FlatCompat` in `eslint.config.mjs`, which knip
 cannot follow), `@vitest/expect` (the module jest-dom's matcher types augment), and the code under
