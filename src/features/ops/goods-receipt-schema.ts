@@ -39,6 +39,3 @@ export const goodsReceiptSchema = z.object({
   lines: z.array(goodsReceiptLineSchema).min(1, "At least one line is required"),
   notes: z.string().optional(),
 });
-
-export type GoodsReceiptLineFormValues = z.infer<typeof goodsReceiptLineSchema>;
-export type GoodsReceiptFormValues = z.infer<typeof goodsReceiptSchema>;

@@ -112,25 +112,6 @@ export interface PickConfirmSignal {
   [k: string]: unknown;
 }
 
-export interface PickConfirmResponse {
-  run_id: string;
-  submission_id: string;
-  status: "posted";
-  run_status: ProductionRunStatus;
-  linked_plan_id: string | null;
-  consumed: unknown[];
-  shortfalls: unknown[];
-  signals: PickConfirmSignal[];
-  idempotent_replay: boolean;
-}
-
-/** 409 body shape shared by pick-confirm + material-delta. */
-export interface PickConflict {
-  reason_code: string;
-  detail?: string;
-  offending_field?: string;
-}
-
 export interface MaterialDeltaBody {
   idempotency_key: string;
   event_at: string;
@@ -138,14 +119,6 @@ export interface MaterialDeltaBody {
   source: PickSource;
   direction: "consume" | "return";
   qty: number;
-  notes?: string | null;
-}
-
-export interface CreateUnplannedRunBody {
-  item_id: string;
-  target_qty: number;
-  uom: string;
-  stage?: ProductionStage;
   notes?: string | null;
 }
 

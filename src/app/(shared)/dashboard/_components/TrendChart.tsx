@@ -3,7 +3,6 @@
 // dashboard trend band.
 //
 //   - <TrendAreaChart>  — single-series area+line (production activity / value).
-//   - <MovementBars>    — grouped inbound/outbound bars (stock movement flow).
 //   - <RangeSelector>   — 7 / 14 / 30-day segmented control shared by the band.
 //
 // Interaction (meaningful, accessible):
@@ -19,7 +18,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import type { DayBucket, FlowDayBucket } from "../_lib/trends";
+import type { DayBucket } from "../_lib/trends";
 
 // Shared viewBox geometry. Rendered responsively (width:100%, fixed height).
 const VB_W = 320;
@@ -304,104 +303,6 @@ export function TrendAreaChart({
       />
       <span className="sr-only" aria-live="polite">
         {ax !== null ? `${buckets[ax].label}: ${fmt(buckets[ax].value)} ${unitLabel}` : ""}
-      </span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// MovementBars — grouped inbound/outbound bars.
-// ---------------------------------------------------------------------------
-export function MovementBars({
-  buckets,
-  ariaLabel,
-  className,
-}: {
-  buckets: FlowDayBucket[];
-  ariaLabel: string;
-  className?: string;
-}) {
-  const { drawn, reduce } = useDraw();
-  const { ref, active, handlers } = useActiveIndex(buckets.length);
-  const n = buckets.length;
-  const max = Math.max(1, ...buckets.map((b) => Math.max(b.inbound, b.outbound)));
-  const groupW = n > 0 ? INNER_W / n : INNER_W;
-  const barW = Math.max(1.5, Math.min(7, (groupW - 2) / 2));
-  const ax = active;
-
-  function barStyle(delayMs: number) {
-    return {
-      transformBox: "fill-box" as const,
-      transformOrigin: "bottom" as const,
-      transform: drawn ? "scaleY(1)" : "scaleY(0)",
-      transition: reduce ? undefined : `transform 600ms cubic-bezier(0.165,0.84,0.44,1) ${delayMs}ms`,
-    };
-  }
-  const groupCenter = (i: number) => PAD_X + i * groupW + groupW / 2;
-
-  return (
-    <div className={cn(className)}>
-      <div
-        ref={ref}
-        className="relative cursor-crosshair touch-pan-y rounded outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        tabIndex={0}
-        role="img"
-        aria-label={ariaLabel}
-        {...handlers}
-      >
-        <svg viewBox={`0 0 ${VB_W} ${VB_H}`} width="100%" height={VB_H} preserveAspectRatio="none" aria-hidden>
-          {ax !== null ? (
-            <rect x={PAD_X + ax * groupW} y={PAD_TOP} width={groupW} height={INNER_H} className="fill-bg-muted" opacity={0.6} rx={1} />
-          ) : null}
-          <line x1={PAD_X} y1={BASE_Y} x2={VB_W - PAD_X} y2={BASE_Y} className="stroke-border" strokeWidth={1} />
-          {buckets.map((b, i) => {
-            const gx = groupCenter(i);
-            const inH = (b.inbound / max) * INNER_H;
-            const outH = (b.outbound / max) * INNER_H;
-            return (
-              <g key={b.key}>
-                <rect
-                  x={gx - barW - 0.75}
-                  y={BASE_Y - inH}
-                  width={barW}
-                  height={Math.max(b.inbound > 0 ? 1 : 0, inH)}
-                  rx={1}
-                  className="fill-success"
-                  style={barStyle(i * 16)}
-                />
-                <rect
-                  x={gx + 0.75}
-                  y={BASE_Y - outH}
-                  width={barW}
-                  height={Math.max(b.outbound > 0 ? 1 : 0, outH)}
-                  rx={1}
-                  className="fill-fg-subtle"
-                  style={barStyle(i * 16 + 50)}
-                />
-              </g>
-            );
-          })}
-        </svg>
-
-        {ax !== null ? (
-          <Tooltip xPct={(groupCenter(ax) / VB_W) * 100}>
-            <div className="mb-0.5 font-semibold text-fg-strong">{buckets[ax].label}</div>
-            <div className="flex items-center gap-1.5 tabular-nums">
-              <span className="dot bg-success" aria-hidden />
-              <span className="text-fg-muted">In</span>
-              <span className="font-semibold text-fg-strong">{buckets[ax].inbound}</span>
-            </div>
-            <div className="flex items-center gap-1.5 tabular-nums">
-              <span className="dot bg-fg-subtle" aria-hidden />
-              <span className="text-fg-muted">Out</span>
-              <span className="font-semibold text-fg-strong">{buckets[ax].outbound}</span>
-            </div>
-          </Tooltip>
-        ) : null}
-      </div>
-      <AxisTicks buckets={buckets} />
-      <span className="sr-only" aria-live="polite">
-        {ax !== null ? `${buckets[ax].label}: ${buckets[ax].inbound} inbound, ${buckets[ax].outbound} outbound` : ""}
       </span>
     </div>
   );

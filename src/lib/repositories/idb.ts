@@ -98,19 +98,6 @@ export function getDb(): Promise<IDBPDatabase> {
   return dbPromise;
 }
 
-export async function resetDb(): Promise<void> {
-  if (typeof window === "undefined") return;
-  const db = await getDb();
-  for (const store of Object.values(STORES)) {
-    const tx = db.transaction(store, "readwrite");
-    await tx.store.clear();
-    await tx.done;
-  }
-  const metaTx = db.transaction(STORES.meta, "readwrite");
-  await metaTx.store.put({ id: "seed_flag", seeded: false });
-  await metaTx.done;
-}
-
 /**
  * Test-only hook: close the cached db handle and clear the cached
  * promise so the next getDb() call re-opens a fresh database. Used by

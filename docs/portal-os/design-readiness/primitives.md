@@ -26,10 +26,11 @@ Only 5 files: `Badge.tsx` (full-featured: tone/variant/size/dot/icon/tooltip),
 `ScrollFade.tsx`. **No `Button`, `Input`, `Card`, `Dialog`, `Select`, `Tabs`.**
 
 Reusable patterns living elsewhere (good, token-driven):
-`components/workflow/{WorkflowHeader,SectionCard,SectionHeading,FieldGrid,Wizard,
-FormActionsBar,ApprovalBanner}`, `components/feedback/states` (Empty/Loading),
-`components/overlays/{Drawer,ConfirmDialog}` (Radix), `components/patterns/
-{ListPage,FormPage,DetailPage}`, `components/badges/*` (wrap `Badge`).
+`components/workflow/{WorkflowHeader,SectionCard,SectionHeading,Wizard,
+FormActionsBar}`, `components/feedback/states` (Empty/Loading),
+`components/overlays/{Drawer,ConfirmDialog}` (Radix), `components/patterns/DetailPage`,
+`components/badges/*` (wrap `Badge`). (`FieldGrid`, `ApprovalBanner`, `ListPage` and
+`FormPage` were removed in tranche 178: nothing used them.)
 
 ## Why the thin React layer matters for a restyle
 With buttons as a CSS class applied inline, variant choice is distributed across

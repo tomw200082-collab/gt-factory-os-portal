@@ -105,6 +105,3 @@ export interface BlockersResponse {
   total_blocker_count: number;
   rows: BlockerRow[];
 }
-
-// 422 / 404 reason codes the endpoint can return.
-export type BlockersConflictReason = "RUN_NOT_FOUND" | "RUN_NOT_COMPLETED";

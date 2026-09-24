@@ -3,13 +3,10 @@
 import type {
   ComponentDto,
   ItemDto,
-  PlanningPolicyDto,
-  SupplierDto,
   SupplierItemDto,
 } from "@/lib/contracts/dto";
-import { GenericIdbRepo, KeyValueIdbRepo } from "./generic-repo";
+import { GenericIdbRepo } from "./generic-repo";
 import { IdbBomsRepo } from "./boms-repo";
-export { usersRepo } from "./users-repo";
 import { STORES, getDb } from "./idb";
 import { SEED_ITEMS } from "@/lib/fixtures/items";
 import { SEED_COMPONENTS } from "@/lib/fixtures/components";
@@ -98,29 +95,10 @@ export const componentsRepo = new GenericIdbRepo<ComponentDto>({
   searchFields: ["component_name", "component_class", "component_group"],
 });
 
-export const suppliersRepo = new GenericIdbRepo<SupplierDto>({
-  store: STORES.suppliers,
-  idOf: (row) => row.supplier_id,
-  searchFields: [
-    "supplier_name_official",
-    "supplier_name_short",
-    "primary_contact_name",
-  ],
-});
-
 export const supplierItemsRepo = new GenericIdbRepo<SupplierItemDto>({
   store: STORES.supplierItems,
   idOf: (row) => row.supplier_item_id,
   searchFields: ["supplier_id", "component_id", "item_id"],
-});
-
-// PlanningPolicyDto is intentionally narrower — flat text K/V, no audit
-// envelope, no optimistic concurrency. This is the structural decision
-// approved at Gate 1: a narrower repo, not a weakened audited generic.
-export const planningPolicyRepo = new KeyValueIdbRepo<PlanningPolicyDto>({
-  store: STORES.planningPolicy,
-  keyOf: (row) => row.key,
-  searchFields: ["key", "description", "value"],
 });
 
 export const bomsRepo = new IdbBomsRepo();

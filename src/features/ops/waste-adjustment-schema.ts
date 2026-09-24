@@ -52,5 +52,3 @@ export const wasteAdjustmentSchema = z
       });
     }
   });
-
-export type WasteAdjustmentFormValues = z.infer<typeof wasteAdjustmentSchema>;

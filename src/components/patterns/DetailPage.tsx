@@ -29,7 +29,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
-import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
@@ -377,23 +376,6 @@ function TabStrip({
 // Exported so the 4 Tranche-D pages share tone for "pending" placeholder
 // tab bodies and "this endpoint is not yet live" messages.
 // ---------------------------------------------------------------------------
-
-export function PendingTabPlaceholder({
-  reason,
-}: {
-  reason: string;
-}): JSX.Element {
-  return (
-    <SectionCard density="compact">
-      <div className="flex items-start gap-3">
-        <Badge tone="warning" dotted>
-          pending
-        </Badge>
-        <div className="text-sm text-fg-muted">{reason}</div>
-      </div>
-    </SectionCard>
-  );
-}
 
 export function DetailTabError({
   message,

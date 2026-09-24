@@ -3,18 +3,17 @@
 // ---------------------------------------------------------------------------
 // <EntityPickerPlus> — AMMC v1 Slice 3 (crystalline-drifting-dusk §C.1 #2).
 //
-// Extension of the existing <EntitySearchSelect> primitive. Adds:
+// Started as an extension of <EntitySearchSelect> (removed in tranche 178,
+// unused by then). Adds:
 //   1. `+ New <entityName>` row at the bottom of the list when `onCreateNew`
 //      is provided — clicking the row closes the dropdown and fires the
 //      callback, which the caller uses to open a Quick-Create drawer.
 //   2. Per-option readiness dot (green/yellow/red) when the caller supplies
 //      a `readinessPerOption` map.
 //
-// Implementation note: rather than touching EntitySearchSelect (the stable
-// existing primitive used by multiple live forms), EntityPickerPlus is a
-// new self-contained component that re-implements the same shape with
-// the additional affordances. Both components share the EntityOption
-// shape for compatibility.
+// Implementation note: EntityPickerPlus is self-contained. It keeps the
+// EntityOption shape (still exported from EntitySearchSelect.tsx) for
+// compatibility.
 // ---------------------------------------------------------------------------
 
 import { Check, ChevronDown, Plus, Search, X } from "lucide-react";

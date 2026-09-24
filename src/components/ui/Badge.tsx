@@ -12,8 +12,7 @@
 // ReadinessBadge (CONFIG), and the SectionCard border map (SectionCard is NOT
 // folded in — its border-only tone map stays where it is).
 //
-// Wrappers that compose this primitive: StatusBadge, ReadinessBadge,
-// ReadinessPill, ReconcileBadge. FreshnessBadge stays a standalone layout
+// Wrappers that compose this primitive: ReadinessPill, ReconcileBadge. FreshnessBadge stays a standalone layout
 // component but imports BADGE_TONE_CLASSES for its dot color.
 //
 // HARD RULE for Tranche 0A: no label-copy changes. Every consuming wrapper

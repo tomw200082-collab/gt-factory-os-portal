@@ -82,11 +82,6 @@ export function RoleGate(props: RoleGateProps) {
   return <>{props.children}</>;
 }
 
-export function useHasRole(...roles: Role[]): boolean {
-  const { session } = useSession();
-  return roles.includes(session.role);
-}
-
 export function useCapability(required: CapabilityRequirement): boolean {
   const { session } = useSession();
   return authorizeCapability(session.role, required);

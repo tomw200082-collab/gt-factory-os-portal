@@ -8,8 +8,8 @@
 // so this redirect lands the planner directly on the calendar view instead
 // of requiring an extra tap.
 //
-// KEEP the sibling _lib/ directory (usePurchaseCalendar) — left in place per
-// the tranche manifest; only page.tsx is replaced.
+// The sibling _lib/ (usePurchaseCalendar) that tranche 045 left in place was
+// removed in tranche 178: nothing imported it after this redirect.
 //
 // Pre-redirect page preserved in git history.
 // ---------------------------------------------------------------------------

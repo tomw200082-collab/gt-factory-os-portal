@@ -76,11 +76,6 @@ export interface PutPlanRecipeResponse {
   idempotent_replay: boolean;
 }
 
-export interface DeletePlanRecipeResponse {
-  plan_id: string;
-  cleared: boolean;
-}
-
 // ---------------------------------------------------------------------------
 // GET /api/production-plan/recipe-overrides/last?item_id=
 // ---------------------------------------------------------------------------

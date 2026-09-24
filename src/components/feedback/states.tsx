@@ -296,27 +296,3 @@ export function ErrorAlert({
     </div>
   );
 }
-
-export function StaleNotice({
-  title,
-  description,
-  action,
-}: BaseStateProps) {
-  return (
-    <div className="relative flex items-start gap-3 overflow-hidden rounded border border-warning/40 bg-warning-softer px-4 py-3.5 reveal">
-      <div className="absolute inset-y-0 left-0 w-[3px] bg-warning" aria-hidden />
-      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-warning/15 text-warning">
-        <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-warning-fg">{title}</div>
-        {description ? (
-          <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-            {description}
-          </div>
-        ) : null}
-      </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
-    </div>
-  );
-}

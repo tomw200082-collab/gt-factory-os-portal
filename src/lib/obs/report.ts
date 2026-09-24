@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Observability — reportError / reportWarning.
+// Observability — reportError.
 //
 // Single export surface so product code depends on one thing. Current impl
 // is intentionally minimal:
@@ -66,7 +66,7 @@ function forwardToPlatform(_report: ErrorReport): void {
   // Placeholder for Sentry / Datadog / custom-ingest. When
   // NEXT_PUBLIC_SENTRY_DSN lands and @sentry/nextjs is installed, replace
   // this body with Sentry.captureException(report). Until then, the sink
-  // is the console log emitted by reportError / reportWarning directly.
+  // is the console log emitted by reportError directly.
   //
   // Kept as a separate function so the future wiring is a single edit.
   // Intentionally a no-op.
@@ -81,19 +81,6 @@ export function reportError(
     // Always console.error so the browser devtools + any log-capture layer
     // picks it up.
     console.error("[obs:error]", report);
-    forwardToPlatform(report);
-  } catch {
-    // Never throw from the observer.
-  }
-}
-
-export function reportWarning(
-  msg: string,
-  context?: Record<string, unknown>,
-): void {
-  try {
-    const report = envelope("warning", msg, context);
-    console.warn("[obs:warning]", report);
     forwardToPlatform(report);
   } catch {
     // Never throw from the observer.
