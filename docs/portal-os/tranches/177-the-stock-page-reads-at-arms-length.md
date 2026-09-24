@@ -1,7 +1,7 @@
-# Tranche 176: the stock page reads at arm's length
+# Tranche 177: the stock page reads at arm's length
 
 status: built
-created: 2026-09-23
+created: 2026-09-23 (numbered 177 on 2026-09-24: 176 was taken the same day by the inventory-movement proposal prefill, PR #227)
 scorecard_target_category: ops_surface
 expected_delta: +0 on ops_surface (readability pass — no route, role or data change; a numeric delta would be invented)
 sizing: S

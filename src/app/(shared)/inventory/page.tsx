@@ -2,7 +2,7 @@
 
 // Inventory — Stock Truth surface
 //
-// Tranche 176 (Tom 2026-09-23): the page is read at arm's length by operators,
+// Tranche 177 (Tom 2026-09-23): the page is read at arm's length by operators,
 // so it is set for that — secondary text 13px, names 14px semibold, quantities
 // 17px bold, headline numbers 30px bold; plain words instead of system
 // vocabulary (no trust strip, no MF/BF/RP badges, "Status" not "Tier", "Unit"
