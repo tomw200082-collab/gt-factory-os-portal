@@ -3,7 +3,7 @@
 // shared BADGE_TONE_CLASSES tone lookup live in @/components/ui/Badge. This
 // file is kept at its historical path only as a re-export shim, so the ~55
 // callers that import them from "@/components/badges/StatusBadge" do not break.
-// (Tranche 176 removed the <StatusBadge> wrapper that also lived here; nothing
+// (Tranche 178 removed the <StatusBadge> wrapper that also lived here; nothing
 // rendered it.)
 // ---------------------------------------------------------------------------
 

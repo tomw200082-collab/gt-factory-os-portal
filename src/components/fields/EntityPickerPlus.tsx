@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // <EntityPickerPlus> — AMMC v1 Slice 3 (crystalline-drifting-dusk §C.1 #2).
 //
-// Started as an extension of <EntitySearchSelect> (removed in tranche 176,
+// Started as an extension of <EntitySearchSelect> (removed in tranche 178,
 // unused by then). Adds:
 //   1. `+ New <entityName>` row at the bottom of the list when `onCreateNew`
 //      is provided — clicking the row closes the dropdown and fires the

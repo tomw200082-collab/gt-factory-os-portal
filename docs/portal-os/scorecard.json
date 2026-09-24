@@ -135,8 +135,8 @@
       "evidence": [
         "Tranches 001-002: forbidden-string literals removed from src/",
         "Tranche 008: mobile-first shell + viewport metadata + responsive drawer",
-        "Tranche 009: error boundaries (segment + global + not-found) + reportError observability surface (reportWarning was never called; removed in tranche 176)",
-        "Tranche 011: security headers (HSTS, X-Frame, nosniff, Referrer, Permissions-Policy, CSP-Report-Only); the requireEnv/assertServerBootEnv helpers were never wired and were removed in tranche 176",
+        "Tranche 009: error boundaries (segment + global + not-found) + reportError observability surface (reportWarning was never called; removed in tranche 178)",
+        "Tranche 011: security headers (HSTS, X-Frame, nosniff, Referrer, Permissions-Policy, CSP-Report-Only); the requireEnv/assertServerBootEnv helpers were never wired and were removed in tranche 178",
         "Tranche 012: defensive upstream-shape tolerance pattern demonstrated on PO detail page",
         "TanStack cache keys prefix-compatible; shadcn primitives consistent"
       ],
@@ -149,7 +149,7 @@
         "Tranche 002: last src/ forbidden-string identifier eliminated",
         "Tranche 007: stale e2e spec deleted",
         "Tranche 009: error boundaries + reportError catch render-time regressions",
-        "Tranche 011: env-missing errors fail-fast at boot (NOT in effect: the helper was never wired; removed in tranche 176)",
+        "Tranche 011: env-missing errors fail-fast at boot (NOT in effect: the helper was never wired; removed in tranche 178)",
         "Tranche 015: 12-test role-boundary E2E matrix covers UI gates + direct API mutation attempts for viewer/operator/planner boundaries",
         "OS hooks + workflows wired",
         "Tranches 031-033: procurement epic shipped with 47 dedicated unit tests (decision engine, focus queue, FocusCard/FocusMode controllers, AddLineForm, calendar grid, PoLineEditor)",

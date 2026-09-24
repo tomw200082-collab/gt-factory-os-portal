@@ -1,4 +1,4 @@
-# Tranche 176 — dead code out
+# Tranche 178 — dead code out
 
 **Status:** built — see the PR for CI.
 **Origin:** Tom, 2026-09-23, in writing: *"אני רוצה להריץ simplification רציני מאוד לכל הקוד במערכת"*,
@@ -47,9 +47,8 @@ note was tranche 045 scope, not a consumer), `EntityPickerPlus.tsx`, `ui/Badge.t
 helper was never called) and `design-readiness/primitives.md`. Scores are not changed here; that is
 `/portal-scorecard`'s job. The `HeroBar` mention in `globals.css` is left alone.
 
-**S5** — unblock `ci` (Tom, 2026-09-24: "מאשר כל מה שישפר את המערכת"). `tests/unit/sales/outcome-sheet.test.tsx` typed the fixed date
-`2026-09-03` into a picker whose `min` is today; once that day passed, the test failed on every branch,
-`main` included. It now takes a date ten days out. Red-green checked: the old line fails, the new one passes.
+Numbered 178: `main` took 176 the same day (#227, which also fixed the expired date in
+`outcome-sheet.test.tsx`), and open PR #229 holds 177.
 
 Kept on purpose: `eslint-config-next` (loaded through `FlatCompat` in `eslint.config.mjs`, which knip
 cannot follow), `@vitest/expect` (the module jest-dom's matcher types augment), and the code under

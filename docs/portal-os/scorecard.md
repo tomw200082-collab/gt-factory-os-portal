@@ -161,7 +161,7 @@ When #1/#2 land, portal-side the work is M-or-smaller per shell.
 1. Path-specific role gates in middleware (belt-and-suspenders layer 3) — S
 2. Manifest completeness for remaining detail sub-pages — XS
 3. Per-item planning-policy overlay UI (depends on backend schema; portal portion is M)
-4. ~~Process.env → requireEnv migration sweep~~ — dropped: the helper was never wired and was removed in tranche 176
+4. ~~Process.env → requireEnv migration sweep~~ — dropped: the helper was never wired and was removed in tranche 178
 5. Graduate CSP from report-only after one clean production day — XS
 
 **Cross-lane coordination required (W1 backend + portal):**
