@@ -90,8 +90,11 @@ describe("outcome sheet", () => {
       OUTCOME_LABELS.no_answer,
     );
 
+    // The picker's min is today, so a hard-coded day expires (2026-09-03 did):
+    // take one ten days out instead.
+    const future = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
     fireEvent.change(screen.getByLabelText(UI.pickDate), {
-      target: { value: "2026-09-03" },
+      target: { value: future },
     });
     fireEvent.click(screen.getByTestId("next-touch-custom"));
 

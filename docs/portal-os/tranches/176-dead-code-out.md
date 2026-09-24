@@ -47,6 +47,10 @@ note was tranche 045 scope, not a consumer), `EntityPickerPlus.tsx`, `ui/Badge.t
 helper was never called) and `design-readiness/primitives.md`. Scores are not changed here; that is
 `/portal-scorecard`'s job. The `HeroBar` mention in `globals.css` is left alone.
 
+**S5** — unblock `ci` (Tom, 2026-09-24: "מאשר כל מה שישפר את המערכת"). `tests/unit/sales/outcome-sheet.test.tsx` typed the fixed date
+`2026-09-03` into a picker whose `min` is today; once that day passed, the test failed on every branch,
+`main` included. It now takes a date ten days out. Red-green checked: the old line fails, the new one passes.
+
 Kept on purpose: `eslint-config-next` (loaded through `FlatCompat` in `eslint.config.mjs`, which knip
 cannot follow), `@vitest/expect` (the module jest-dom's matcher types augment), and the code under
 `src/components/ui/` (only one stale comment in `ui/Badge.tsx` changes).
