@@ -144,8 +144,6 @@ export const NAV_LABELS = {
   settings: "הגדרות",
 } as const;
 
-export const TAB_LABELS: Record<LeadStatus, string> = STATUS_LABELS;
-
 /**
  * Everything else the user reads. "WhatsApp" stays Latin on purpose: it is the
  * product's own name, and Hebrew speakers read it that way.

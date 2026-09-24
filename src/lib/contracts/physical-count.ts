@@ -28,21 +28,6 @@ export const PhysicalCountOpenQuerySchema = z.object({
   item_type: z.enum(PHYSICAL_COUNT_ITEM_TYPES),
   item_id: z.string().min(1),
 });
-export type PhysicalCountOpenQuery = z.infer<
-  typeof PhysicalCountOpenQuerySchema
->;
-
-// Open-count 200 response shape (contract §1.2). snapshot_quantity
-// is NEVER returned pre-submit — blind count invariant (I10).
-export interface PhysicalCountOpenResponse {
-  snapshot_id: string;
-  item_type: PhysicalCountItemType;
-  item_id: string;
-  item_display_name: string;
-  unit_default: string;
-  opened_at: string;
-  idempotent_open: boolean;
-}
 
 // ===========================================================================
 // Submit envelope (POST /api/v1/mutations/physical-counts)
@@ -56,46 +41,6 @@ export const PhysicalCountSubmitSchema = z.object({
   unit: z.string().min(1),
   notes: z.string().max(2000).nullable().optional(),
 });
-export type PhysicalCountSubmit = z.infer<typeof PhysicalCountSubmitSchema>;
-
-// 201 Committed — auto-post path (|computed_delta| within threshold OR
-// both-zero zero-snapshot). Contract §1.4.
-// Note: quantity-like fields arrive as strings from the API (numeric
-// precision preservation); NOT coerced to number client-side.
-export interface PhysicalCountCommittedResponse {
-  submission_id: string;
-  status: "posted";
-  event_at: string;
-  posted_at: string;
-  item_type: PhysicalCountItemType;
-  item_id: string;
-  counted_quantity: string;
-  unit: string;
-  snapshot_quantity: string;
-  computed_delta: string;
-  new_anchor_applied: true;
-  anchor_source: "COUNT_AUTO";
-  idempotent_replay: boolean;
-}
-
-// 202 Pending Approval — threshold exceeded OR zero-snapshot with
-// non-zero count. Contract §1.4.
-export interface PhysicalCountPendingResponse {
-  submission_id: string;
-  status: "pending";
-  event_at: string;
-  submitted_at: string;
-  item_type: PhysicalCountItemType;
-  item_id: string;
-  counted_quantity: string;
-  unit: string;
-  snapshot_quantity: string;
-  computed_delta: string;
-  exception_id: string;
-  approval_reason: "count_variance_exceeds_threshold";
-  new_anchor_applied: false;
-  idempotent_replay: boolean;
-}
 
 // ===========================================================================
 // Approve / Reject / Cancel envelopes (contract §1.7, §1.9)
@@ -113,16 +58,6 @@ export const PhysicalCountRejectionRequestSchema = z.object({
 export const PhysicalCountCancelRequestSchema = z.object({
   idempotency_key: z.string().min(1).max(255),
 });
-
-export type PhysicalCountApprovalRequest = z.infer<
-  typeof PhysicalCountApprovalRequestSchema
->;
-export type PhysicalCountRejectionRequest = z.infer<
-  typeof PhysicalCountRejectionRequestSchema
->;
-export type PhysicalCountCancelRequest = z.infer<
-  typeof PhysicalCountCancelRequestSchema
->;
 
 // 200 Approved (contract §1.8)
 export interface PhysicalCountApprovalSuccessResponse {
@@ -150,13 +85,6 @@ export interface PhysicalCountRejectionSuccessResponse {
   idempotent_replay: boolean;
 }
 
-// 200 Cancelled (contract §1.9) — pure freeze-state release, no posting
-export interface PhysicalCountCancelSuccessResponse {
-  snapshot_id: string;
-  cancelled_at: string;
-  released: true;
-}
-
 // ===========================================================================
 // Conflict shapes (contract §1.2 409, §1.4 409, §1.8 409, §1.9 409)
 // ===========================================================================
@@ -181,13 +109,4 @@ export interface PhysicalCountConflictResponse {
   reason_code: PhysicalCountConflictReason | string;
   detail: string;
   offending_field?: string;
-}
-
-// 422 Validation (contract §1.4)
-export interface PhysicalCountValidationResponse {
-  validation_errors: Array<{
-    path: (string | number)[];
-    code: string;
-    message: string;
-  }>;
 }

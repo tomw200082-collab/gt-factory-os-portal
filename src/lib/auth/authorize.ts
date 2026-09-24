@@ -162,17 +162,6 @@ export function authorizeCapability(
 }
 
 /**
- * capabilitiesFor
- *
- * Returns the full capability grants object for a role. Useful for the
- * sidebar's subdued-state tooltip logic, where we want to show WHY an item
- * is not available (which axis is missing).
- */
-export function capabilitiesFor(role: Role): CapabilityGrants {
-  return ROLE_CAPABILITY_LATTICE[role];
-}
-
-/**
  * isCapabilityPermanentlyUnreachable — tranche 138 (D2, Tom-approved
  * 2026-07-23).
  *

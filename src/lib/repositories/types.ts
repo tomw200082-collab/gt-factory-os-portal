@@ -32,11 +32,6 @@ import type {
   BomHeadDto,
   BomLineDto,
   BomVersionDto,
-  ComponentDto,
-  ItemDto,
-  PlanningPolicyDto,
-  SupplierDto,
-  SupplierItemDto,
 } from "@/lib/contracts/dto";
 
 export interface QueryListParams {
@@ -57,10 +52,6 @@ export interface Repository<TDto> {
   setActive(id: string, active: boolean): Promise<TDto>;
 }
 
-export type ItemsRepo = Repository<ItemDto>;
-export type ComponentsRepo = Repository<ComponentDto>;
-export type SuppliersRepo = Repository<SupplierDto>;
-export type SupplierItemsRepo = Repository<SupplierItemDto>;
 // UsersRepo is defined inline in users-repo.ts — UserDto intentionally
 // does not carry an AuditMeta envelope, so it does not satisfy the
 // audited Repository<T> shape and is served by a custom ad-hoc object.
@@ -80,8 +71,6 @@ export interface KeyValueRepository<TDto> {
   put(row: TDto): Promise<TDto>;
   remove(key: string): Promise<void>;
 }
-
-export type PlanningPolicyRepo = KeyValueRepository<PlanningPolicyDto>;
 
 // ---------------------------------------------------------------------------
 // BomsRepo — three-table BOM model surface.

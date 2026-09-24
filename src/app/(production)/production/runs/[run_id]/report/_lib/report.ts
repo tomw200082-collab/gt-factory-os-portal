@@ -101,14 +101,6 @@ export interface ReportSuccess {
   idempotent_replay: boolean;
 }
 
-/** 409 conflict body shape (RUN_NOT_REPORTABLE / RUN_ALREADY_REPORTED /
- *  STALE_BOM_VERSION). */
-export interface ReportConflict {
-  reason_code: string;
-  detail?: string;
-  offending_field?: string;
-}
-
 /** Parse a NUMERIC-as-text input to a finite number, or NaN when the field is
  *  blank or unparseable. */
 export function parseQty(text: string): number {

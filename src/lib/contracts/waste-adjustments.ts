@@ -29,21 +29,6 @@ export const WASTE_REASON_CODES = [
 ] as const;
 export type WasteReasonCode = (typeof WASTE_REASON_CODES)[number];
 
-export const REASON_CODES_BY_DIRECTION: Record<
-  "loss" | "positive",
-  readonly WasteReasonCode[]
-> = {
-  loss: ["breakage", "spoilage", "production_waste", "sampling", "theft_loss", "correction", "other"],
-  positive: ["found_stock", "correction", "other"],
-};
-
-export const REASON_CODES_REQUIRING_NOTES: readonly WasteReasonCode[] = [
-  "theft_loss",
-  "found_stock",
-  "correction",
-  "other",
-];
-
 // ===========================================================================
 // Submit request (POST /api/v1/mutations/waste-adjustments)
 // ===========================================================================
@@ -59,8 +44,6 @@ export const WasteAdjustmentRequestSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
-export type WasteAdjustmentRequest = z.infer<typeof WasteAdjustmentRequestSchema>;
-
 // ===========================================================================
 // Approve / Reject request envelopes
 // ===========================================================================
@@ -74,45 +57,11 @@ export const WasteRejectionRequestSchema = z.object({
   rejection_reason: z.string().min(1).max(2000),
 });
 
-export type WasteApprovalRequest = z.infer<typeof WasteApprovalRequestSchema>;
-export type WasteRejectionRequest = z.infer<typeof WasteRejectionRequestSchema>;
-
 // ===========================================================================
 // Response shapes
 // ===========================================================================
 export type ItemType = "FG" | "RM" | "PKG";
 export type WasteApprovalReason = "positive_direction" | "loss_above_threshold";
-
-// 201 Committed (auto-post, direction=loss only)
-export interface WasteAdjustmentCommittedResponse {
-  submission_id: string;
-  status: "posted";
-  event_at: string;
-  posted_at: string;
-  direction: "loss";
-  item_type: ItemType;
-  item_id: string;
-  quantity: string; // precision-preserved
-  unit: string;
-  stock_ledger_movement_id: string;
-  idempotent_replay: boolean;
-}
-
-// 202 Pending Approval
-export interface WasteAdjustmentPendingResponse {
-  submission_id: string;
-  status: "pending";
-  event_at: string;
-  submitted_at: string;
-  direction: "loss" | "positive";
-  item_type: ItemType;
-  item_id: string;
-  quantity: string;
-  unit: string;
-  exception_id: string;
-  approval_reason: WasteApprovalReason;
-  idempotent_replay: boolean;
-}
 
 // 200 Approved
 export interface WasteApprovalSuccessResponse {
@@ -160,14 +109,5 @@ export interface WasteConflictResponse {
     item_type: string;
     item_id: string;
     batch_id_or_empty: string;
-  }>;
-}
-
-// 422 Validation
-export interface WasteValidationResponse {
-  validation_errors: Array<{
-    path: (string | number)[];
-    code: string;
-    message: string;
   }>;
 }

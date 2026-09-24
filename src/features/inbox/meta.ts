@@ -171,23 +171,10 @@ export function searchBag(row: InboxRow): string {
     .toLowerCase();
 }
 
-// Tone classes for severity, used in multiple places.
-export const SEV_RING: Record<InboxSeverity, string> = {
-  critical: "ring-danger/40",
-  warning: "ring-warning/40",
-  info: "ring-info/40",
-};
-
 export const SEV_DOT: Record<InboxSeverity, string> = {
   critical: "bg-danger",
   warning: "bg-warning",
   info: "bg-info",
-};
-
-export const SEV_TEXT: Record<InboxSeverity, string> = {
-  critical: "text-danger",
-  warning: "text-warning",
-  info: "text-info",
 };
 
 // Severity weight ladder — stroke widths, padding, shadow intensity.

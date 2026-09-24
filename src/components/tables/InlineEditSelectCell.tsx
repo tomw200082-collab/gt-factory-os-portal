@@ -443,30 +443,3 @@ export function InlineEditSelectCell({
     </Popover.Root>
   );
 }
-
-// Tiny helper: turn a list of strings into select options where label and
-// value coincide. Useful for distinct-value-derived option sets.
-export function stringsToOptions(
-  values: Array<string | null | undefined>,
-  countByValue?: Record<string, number>,
-): InlineEditSelectOption[] {
-  const seen = new Set<string>();
-  const out: InlineEditSelectOption[] = [];
-  for (const v of values) {
-    if (typeof v !== "string") continue;
-    const t = v.trim();
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
-    const count = countByValue?.[t];
-    out.push({
-      value: t,
-      label: t,
-      meta:
-        typeof count === "number"
-          ? `used by ${count} item${count === 1 ? "" : "s"}`
-          : undefined,
-    });
-  }
-  out.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  return out;
-}

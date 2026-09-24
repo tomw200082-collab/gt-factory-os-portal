@@ -45,47 +45,10 @@ export const GoodsReceiptRequestSchema = z.object({
   final_delivery: FinalDeliverySchema.optional(),
 });
 
-export type GoodsReceiptLine = z.infer<typeof GoodsReceiptLineSchema>;
-export type GoodsReceiptRequest = z.infer<typeof GoodsReceiptRequestSchema>;
-
 export type ItemType = "FG" | "RM" | "PKG";
-
-// quantity is STRING on response side (precision preserved). Never cast to Number.
-export interface GoodsReceiptCommittedResponse {
-  submission_id: string;
-  status: "posted";
-  event_at: string;
-  posted_at: string;
-  supplier_id: string;
-  po_id: string | null;
-  lines: Array<{
-    line_id: string;
-    item_type: ItemType;
-    item_id: string;
-    quantity: string;
-    unit: string;
-    stock_ledger_movement_id: string;
-  }>;
-  final_delivery_closed_short_count?: number;
-  idempotent_replay: boolean;
-}
 
 export type ConflictReason =
   | "SUPPLIER_INACTIVE"
   | "ITEM_INACTIVE"
   | "UNIT_NOT_FOUND"
   | "ITEM_TYPE_MISMATCH";
-
-export interface ConflictResponse {
-  reason_code: ConflictReason | string;
-  detail: string;
-  offending_line_index?: number;
-}
-
-export interface ValidationResponse {
-  validation_errors: Array<{
-    path: (string | number)[];
-    code: string;
-    message: string;
-  }>;
-}

@@ -13,38 +13,6 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Format a YYYY-MM-DD bucket key into a clear month + year label.
- * Examples: "2026-05-01" → "May 2026"; "2026-06-01" → "Jun 2026".
- *
- * Uses UTC to avoid local-tz drift (the bucket is a calendar-month anchor,
- * not a moment in local time).
- */
-export function formatMonth(bucketKey: string): {
-  label: string;
-  shortLabel: string;
-  year: number;
-  month: number;
-} {
-  const d = new Date(bucketKey + "T00:00:00.000Z");
-  return {
-    // "May 2026" — full month name, 4-digit year, English LTR.
-    label: d.toLocaleDateString("en-US", {
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    }),
-    // Same shape; alias for callers that semantically want a "short" label.
-    shortLabel: d.toLocaleDateString("en-US", {
-      month: "short",
-      year: "numeric",
-      timeZone: "UTC",
-    }),
-    year: d.getUTCFullYear(),
-    month: d.getUTCMonth() + 1,
-  };
-}
-
-/**
  * Split a YYYY-MM-DD monthly bucket key into the two-line header layout used
  * in the grid header: line 1 = "MAY" (uppercase, 9px tracking-wide); line 2
  * = "2026" (year, 13px medium). For weekly cadence, returns "MAY" / "04".
@@ -286,27 +254,4 @@ export function computeMonthBuckets(
     out.push({ key, label, cadence });
   }
   return out;
-}
-
-/**
- * Relative time formatter: "saved 3s ago" / "saved 2m ago" / "just saved".
- * Used by AutoSaveIndicator. Pure client-side helper.
- */
-export function formatRelativeTime(date: Date | null, now: Date = new Date()): string {
-  if (!date) return "";
-  const diffMs = now.getTime() - date.getTime();
-  if (diffMs < 2000) return "just saved";
-  if (diffMs < 60 * 1000) {
-    return `saved ${Math.floor(diffMs / 1000)}s ago`;
-  }
-  if (diffMs < 60 * 60 * 1000) {
-    return `saved ${Math.floor(diffMs / (60 * 1000))}m ago`;
-  }
-  if (diffMs < 24 * 60 * 60 * 1000) {
-    return `saved ${Math.floor(diffMs / (60 * 60 * 1000))}h ago`;
-  }
-  return `saved ${date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "2-digit",
-  })}`;
 }

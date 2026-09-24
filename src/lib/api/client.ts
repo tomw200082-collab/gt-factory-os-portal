@@ -157,18 +157,3 @@ export function post<T>(
 ): Promise<Result<T>> {
   return dispatch<T>("POST", url, body, options);
 }
-
-export function put<T>(
-  url: string,
-  body: unknown,
-  options: RequestOptions = {},
-): Promise<Result<T>> {
-  return dispatch<T>("PUT", url, body, options);
-}
-
-export function del<T>(
-  url: string,
-  options: RequestOptions = {},
-): Promise<Result<T>> {
-  return dispatch<T>("DELETE", url, undefined, options);
-}

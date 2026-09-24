@@ -86,16 +86,3 @@ export function reportError(
     // Never throw from the observer.
   }
 }
-
-export function reportWarning(
-  msg: string,
-  context?: Record<string, unknown>,
-): void {
-  try {
-    const report = envelope("warning", msg, context);
-    console.warn("[obs:warning]", report);
-    forwardToPlatform(report);
-  } catch {
-    // Never throw from the observer.
-  }
-}
