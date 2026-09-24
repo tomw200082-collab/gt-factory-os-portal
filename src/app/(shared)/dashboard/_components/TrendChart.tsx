@@ -3,7 +3,6 @@
 // dashboard trend band.
 //
 //   - <TrendAreaChart>  — single-series area+line (production activity / value).
-//   - <MovementBars>    — grouped inbound/outbound bars (stock movement flow).
 //   - <RangeSelector>   — 7 / 14 / 30-day segmented control shared by the band.
 //
 // Interaction (meaningful, accessible):

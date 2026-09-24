@@ -6,14 +6,14 @@ then *"תריץ הכל"*. The portal half of a system-wide simplification pass; 
 `gt-factory-os` on the same branch name.
 sizing: L
 scorecard_target_category: technical_substrate
-expected_delta: 34 files and 70 exports that nothing imports stop being type-checked, linted and read;
+expected_delta: 35 files and 70 exports that nothing uses stop being type-checked, linted and read;
 no screen, route or behaviour changes.
 
 ## What was found
 
 knip, configured for the app router with `tests/**` and `scripts/**` as entry points, reported:
 
-- **34 source files no module imports** (3,582 lines).
+- **34 source files no module imports** (3,548 lines).
 - **70 exports and types no module uses** — not even the file that declares them — in 29 files.
   Vendored shadcn primitives under `src/components/ui/` are excluded on purpose.
 - **3 dependencies nothing imports:** `@tanstack/react-table`, `pg`, `@types/pg`. The `"pg"` strings in
@@ -34,12 +34,22 @@ deleting it removes no protection.
 ## The change
 
 - **S1** — delete the 34 files.
-- **S2** — delete the 70 dead declarations in 29 files.
+- **S2** — delete the 70 dead declarations in 29 files, then the helpers, props types and imports only
+  they used. `users-repo.ts` held nothing but `usersRepo`; its one importer was the re-export in
+  `repositories/index.ts`, removed with it, so the file is deleted too — 35 files, 3,588 lines in all.
+  `StatusBadge.tsx` keeps only the `Badge` re-export shim its ~55 callers use.
 - **S3** — `npm uninstall @tanstack/react-table pg @types/pg`; npm regenerates the lockfile.
 
+**S4** — comments and portal-os docs that named removed code are corrected: `report.ts`, `TrendChart.tsx`,
+`format.ts`, `repositories/types.ts`, the purchase-calendar redirect (whose "KEEP the sibling _lib/"
+note was tranche 045 scope, not a consumer), `EntityPickerPlus.tsx`, `ui/Badge.tsx`, the meeting page,
+`scorecard.json` / `scorecard.md` (the tranche 011 env fail-fast evidence was never in effect: its
+helper was never called) and `design-readiness/primitives.md`. Scores are not changed here; that is
+`/portal-scorecard`'s job. The `HeroBar` mention in `globals.css` is left alone.
+
 Kept on purpose: `eslint-config-next` (loaded through `FlatCompat` in `eslint.config.mjs`, which knip
-cannot follow), `@vitest/expect` (the module jest-dom's matcher types augment), and everything under
-`src/components/ui/`.
+cannot follow), `@vitest/expect` (the module jest-dom's matcher types augment), and the code under
+`src/components/ui/` (only one stale comment in `ui/Badge.tsx` changes).
 
 ## Sizing
 
@@ -56,6 +66,8 @@ manifest:
   - src/app/(planning)/planning/blockers/_lib/types.ts
   - src/app/(planning)/planning/forecast/[version_id]/_lib/format.ts
   - src/app/(planning)/planning/inventory-flow/_components/HeroBar.tsx
+  - src/app/(planning)/planning/meeting/page.tsx
+  - src/app/(planning)/planning/purchase-calendar/page.tsx
   - src/app/(planning)/planning/production-plan/_lib/recipe-types.ts
   - src/app/(planning)/planning/purchase-calendar/_lib/api.ts
   - src/app/(production)/production/_lib/types.ts
@@ -69,6 +81,7 @@ manifest:
   - src/components/data/SearchFilterBar.tsx
   - src/components/feedback/states.tsx
   - src/components/fields/DateTimeInput.tsx
+  - src/components/fields/EntityPickerPlus.tsx
   - src/components/fields/EntitySearchSelect.tsx
   - src/components/fields/QuantityInput.tsx
   - src/components/fields/UomDisplay.tsx
@@ -78,6 +91,7 @@ manifest:
   - src/components/patterns/ListPage.tsx
   - src/components/system/QuarantinedPage.tsx
   - src/components/tables/InlineEditSelectCell.tsx
+  - src/components/ui/Badge.tsx
   - src/components/workflow/ApprovalBanner.tsx
   - src/components/workflow/DiffNotice.tsx
   - src/components/workflow/FieldGrid.tsx

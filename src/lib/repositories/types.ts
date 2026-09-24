@@ -52,10 +52,6 @@ export interface Repository<TDto> {
   setActive(id: string, active: boolean): Promise<TDto>;
 }
 
-// UsersRepo is defined inline in users-repo.ts — UserDto intentionally
-// does not carry an AuditMeta envelope, so it does not satisfy the
-// audited Repository<T> shape and is served by a custom ad-hoc object.
-
 // ---------------------------------------------------------------------------
 // Key-value repository — narrower contract for flat text K/V tables
 // (planning_policy). No audit envelope, no optimistic concurrency via

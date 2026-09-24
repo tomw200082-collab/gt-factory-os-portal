@@ -21,8 +21,8 @@
  * column anchor; the two-line split lets the eye land on the month-name
  * first and the year second without crowding either line.
  *
- * Pure UTC formatting — same rule as formatMonth so we never drift across
- * tz boundaries when the planner travels.
+ * Pure UTC formatting, so we never drift across tz boundaries when the
+ * planner travels.
  */
 export function formatMonthHeader2(
   bucketKey: string,

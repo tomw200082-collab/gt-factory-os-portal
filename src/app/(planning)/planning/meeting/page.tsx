@@ -238,7 +238,7 @@ function CadenceRail({
 }
 
 // ---------------------------------------------------------------------------
-// KPI tile (mirrors the dashboard KpiTiles look at a smaller scale)
+// KPI tile (the dashboard KPI tile look, at a smaller scale)
 // ---------------------------------------------------------------------------
 function StatTile({
   icon: Icon,
