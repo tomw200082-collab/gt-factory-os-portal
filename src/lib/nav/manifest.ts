@@ -52,6 +52,7 @@ import {
   ShoppingCart,
   Tags,
   TrendingUp,
+  UserCheck,
   Users,
 } from "lucide-react";
 
@@ -527,6 +528,16 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/users",
         label: "Users",
         icon: Users,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
+      {
+        // Tranche 179 — customer-portal access requests: approve a phone by
+        // linking it to its Shopify customer, and give approved customers a
+        // login link. Same admin:execute gate as the (admin) layout.
+        href: "/admin/portal-registrations",
+        label: "Portal registrations",
+        icon: UserCheck,
         min_role: "admin",
         required_capability: "admin:execute",
       },

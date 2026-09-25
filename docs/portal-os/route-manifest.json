@@ -11,7 +11,8 @@
     "Tranche 046 (2026-06-11): full manifest regeneration — every src/app/**/page.tsx now has a row (41 → 77). Roles derived from the ACTUAL route-group layout gates + the role×capability lattice (src/lib/auth/authorize.ts): (ops) stock:execute = operator+planner+admin; (planning) and (planner) planning:read = all four roles; (po) and (shared) and (inbox) viewer:read = all four roles; (economics) planning:execute = planner+admin; (admin) admin:execute = admin only. T6 resolution: /admin/users, /admin/jobs, /admin/integrations reclassified quarantined → live. Redirect stubs marked: /admin, /admin/items/[item_id], /dashboard/v2, /stock/submissions, /exceptions (plus the three Tranche 045 planning redirects).",
     "Tranche 086 (2026-06-20): added /purchase-orders/placement-queue (live, planning:execute) — office-manager place-order queue for the two-stage PO handoff (APPROVED_TO_ORDER → OPEN).",
     "Tranche 090 (2026-06-25): added three orphan rows surfaced by the /portal-audit route-auditor — /admin/decision-board (tranche 080, economics group planner+admin), /credit-tracking (CLAUDE.md-authorized bookkeeper surface, shared group all roles), /inbox/approvals/inventory-movement/[submission_id] (planner+admin approval). All three were live code + nav with no manifest row. No status changes; additive only.",
-    "Tranche 162 (2026-08-17): the sales workspace enters the manifest — /apps plus the (sales) route group. Roles are admin-only in v1, enforced by the RoleGate in (sales)/layout.tsx and by every sales API endpoint server-side; the middleware ROLE_GATES rows are dormant like the rest of that table until app_users.role reaches the JWT."
+    "Tranche 162 (2026-08-17): the sales workspace enters the manifest — /apps plus the (sales) route group. Roles are admin-only in v1, enforced by the RoleGate in (sales)/layout.tsx and by every sales API endpoint server-side; the middleware ROLE_GATES rows are dormant like the rest of that table until app_users.role reaches the JWT.",
+    "Tranche 179 (2026-09-24): added /admin/portal-registrations (admin only, (admin) layout admin:execute) — the staff screen of the customer-portal module: pending access requests approved by linking the phone to its Shopify customer, and login links and revoking access for approved customers. Ships in a draft PR awaiting Tom's written D1 approval of that module."
   ],
   "generated_at": "2026-06-11T00:00:00Z",
   "anchor_sha_at_seed": "55682bb",
@@ -875,6 +876,15 @@
       ],
       "group": "admin",
       "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Users surface (role select + status, backed by /api/admin/users proxy) has since landed. T6 resolution 2026-06-11 — accepted as live control surfaces"
+    },
+    {
+      "path": "/admin/portal-registrations",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Tranche 179 — customer-portal access requests (Pending: approve by picking the Shopify customer, or reject; then a WhatsApp link to tell the customer) and, for approved customers, login links and revoking access. Proxies under /api/portal/*."
     },
     {
       "path": "/apps",
