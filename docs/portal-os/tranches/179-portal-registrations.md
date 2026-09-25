@@ -56,7 +56,7 @@ routes answers 401 without a session and 403 to a non-admin. The page adds no ga
 
 The response shapes are the backend contract as dispatched with this tranche; they live in
 `_lib/portal-registrations.ts`, next to the pure helpers the page uses (error wording per action, the Shopify
-customer number, the order-count label, the date format), which are unit-tested.
+customer number, the date format), which are unit-tested.
 
 ## Manifest (files that may be touched)
 
