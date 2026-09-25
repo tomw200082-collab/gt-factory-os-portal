@@ -15,12 +15,8 @@
 //                 over by hand (copy it, or open WhatsApp with it typed), or
 //                 revoke a customer's access.
 //
-//   GET  /api/portal/registrations?status=pending
-//   GET  /api/portal/customer-search?q=&registration_id=
-//   POST /api/portal/registrations/[id]/decide
-//   GET  /api/portal/approved?q=
-//   POST /api/portal/login-link
-//   POST /api/portal/access/[id]/revoke
+// Every call goes through a /api/portal/* proxy; _lib/portal-registrations.ts
+// holds the shapes.
 //
 // Role gate: (admin)/layout.tsx already gates on admin:execute, and every
 // upstream route answers 403 to anyone who is not admin.
@@ -30,8 +26,15 @@
 // <bdi>.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -65,20 +68,15 @@ import { fetchJson } from "@/lib/http/fetchJson";
 import { cn } from "@/lib/cn";
 import {
   MIN_SEARCH_CHARS,
-  PortalRequestError,
-  byOldestFirst,
   formatWhen,
-  ordersLabel,
   postPortal,
   shopifyCustomerNumber,
   type ApprovedCustomer,
-  type ApprovedResponse,
-  type CustomerSearchResponse,
   type DecideResponse,
   type LoginLinkResponse,
+  type PortalRequestError,
   type Registration,
-  type RegistrationsResponse,
-  type RevokeResponse,
+  type Rows,
   type ShopifyCustomer,
 } from "./_lib/portal-registrations";
 
@@ -92,12 +90,12 @@ const TAB_LABEL: Record<TabKey, string> = {
   login: "Login link",
 };
 
-function useDebounced<T>(value: T, ms = 300): T {
+function useDebounced(value: string): string {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), ms);
+    const t = setTimeout(() => setDebounced(value), 300);
     return () => clearTimeout(t);
-  }, [value, ms]);
+  }, [value]);
   return debounced;
 }
 
@@ -113,12 +111,10 @@ export default function AdminPortalRegistrationsPage(): JSX.Element {
     onChange: setTab,
   });
 
-  const pendingQuery = useQuery<RegistrationsResponse>({
+  const pendingQuery = useQuery<Rows<Registration>>({
     queryKey: PENDING_KEY,
     queryFn: () =>
-      fetchJson<RegistrationsResponse>(
-        "/api/portal/registrations?status=pending",
-      ),
+      fetchJson<Rows<Registration>>("/api/portal/registrations?status=pending"),
   });
 
   return (
@@ -131,11 +127,7 @@ export default function AdminPortalRegistrationsPage(): JSX.Element {
           <QueryCountChip
             isLoading={pendingQuery.isLoading}
             isError={pendingQuery.isError}
-            count={
-              pendingQuery.data
-                ? (pendingQuery.data.rows ?? []).length
-                : undefined
-            }
+            count={pendingQuery.data?.rows.length}
             noun="pending"
             tone="warning"
           />
@@ -195,7 +187,7 @@ export default function AdminPortalRegistrationsPage(): JSX.Element {
         aria-labelledby="portal-tab-login"
         hidden={tab !== "login"}
       >
-        <LoginLinkPanel />
+        <LoginLinkPanel shown={tab === "login"} />
       </div>
     </>
   );
@@ -205,18 +197,119 @@ export default function AdminPortalRegistrationsPage(): JSX.Element {
 // Shared bits
 // ---------------------------------------------------------------------------
 
-function ListSkeleton({ testId }: { testId: string }): JSX.Element {
+/** A list's states, in order: loading, failed, stale (a refresh failed but the
+ *  rows on screen stay usable), empty, listed. */
+function QueryList<T>({
+  query,
+  rows,
+  testId,
+  errorTitle,
+  staleLabel,
+  empty,
+  children,
+}: {
+  query: UseQueryResult<unknown>;
+  rows: T[];
+  testId: string;
+  errorTitle: string;
+  staleLabel: string;
+  empty: ReactNode;
+  children: (row: T) => ReactNode;
+}): JSX.Element {
+  if (query.isLoading) {
+    return (
+      <div
+        className="space-y-2 p-5"
+        aria-busy="true"
+        aria-live="polite"
+        data-testid={`${testId}-loading`}
+      >
+        {Array.from({ length: 3 }).map((_, i) => (
+          <SkeletonRow key={i} />
+        ))}
+      </div>
+    );
+  }
+  if (!query.data && query.isError) {
+    return (
+      <div className="p-5">
+        <ErrorState
+          title={errorTitle}
+          description={query.error.message}
+          onRetry={() => void query.refetch()}
+        />
+      </div>
+    );
+  }
   return (
-    <div
-      className="space-y-2 p-5"
-      aria-busy="true"
-      aria-live="polite"
-      data-testid={testId}
-    >
-      {Array.from({ length: 3 }).map((_, i) => (
-        <SkeletonRow key={i} />
-      ))}
-    </div>
+    <>
+      {query.isError ? (
+        <div className="border-b border-border/60 p-4">
+          <ErrorAlert label={staleLabel} onRetry={() => void query.refetch()} />
+        </div>
+      ) : null}
+      {rows.length === 0 ? (
+        <div className="p-5" data-testid={`${testId}-empty`}>
+          {empty}
+        </div>
+      ) : (
+        <ul
+          className="divide-y divide-border/60"
+          data-testid={`${testId}-list`}
+        >
+          {rows.map(children)}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/** A search box that owns what is typed and reports only the trimmed query,
+ *  once typing pauses, so a keystroke re-renders nothing but the box.
+ *  `onSearch` must be stable (a state setter, or wrapped in useCallback). */
+function SearchField({
+  id,
+  label,
+  placeholder,
+  defaultValue = "",
+  onSearch,
+  disabled,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  defaultValue?: string;
+  onSearch: (q: string) => void;
+  disabled?: boolean;
+}): JSX.Element {
+  const [text, setText] = useState(defaultValue);
+  const q = useDebounced(text.trim());
+  useEffect(() => {
+    onSearch(q);
+  }, [q, onSearch]);
+  return (
+    <>
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <div className="relative max-w-md">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint"
+          aria-hidden
+        />
+        <input
+          id={id}
+          type="search"
+          className="input pl-9"
+          placeholder={placeholder}
+          autoComplete="off"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={disabled}
+          data-testid={id}
+        />
+      </div>
+    </>
   );
 }
 
@@ -229,9 +322,7 @@ function Field({
 }): JSX.Element {
   return (
     <div className="min-w-0">
-      <dt className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-      </dt>
+      <dt className="eyebrow">{label}</dt>
       <dd className="mt-0.5 break-words text-sm text-fg">{children}</dd>
     </div>
   );
@@ -264,7 +355,7 @@ function CustomerSummary({
       ) : null}
       <span className="text-fg-muted">
         {" · "}
-        {ordersLabel(customer.orders_count)}
+        {customer.orders_count} {customer.orders_count === 1 ? "order" : "orders"}
       </span>
     </span>
   );
@@ -273,13 +364,9 @@ function CustomerSummary({
 /** Whether the registering phone is on this Shopify customer's record. A
  *  mismatch is not an error (many records carry no phone), so it stays neutral. */
 function PhoneMatchBadge({ matches }: { matches: boolean }): JSX.Element {
-  return matches ? (
-    <Badge tone="success" dot>
-      Phone matches
-    </Badge>
-  ) : (
-    <Badge tone="neutral" dot>
-      Phone does not match
+  return (
+    <Badge tone={matches ? "success" : "neutral"} dot>
+      {matches ? "Phone matches" : "Phone does not match"}
     </Badge>
   );
 }
@@ -289,11 +376,10 @@ function RowError({
   onRefresh,
   testId,
 }: {
-  error: Error;
-  onRefresh?: () => void;
+  error: PortalRequestError;
+  onRefresh: () => void;
   testId: string;
 }): JSX.Element {
-  const detail = error instanceof PortalRequestError ? error.detail : undefined;
   return (
     <div
       role="alert"
@@ -302,13 +388,13 @@ function RowError({
     >
       <div className="min-w-0">
         <div>{error.message}</div>
-        {detail ? (
+        {error.detail ? (
           <div className="mt-0.5 text-xs text-fg-muted">
-            Details: <bdi>{detail}</bdi>
+            Details: <bdi>{error.detail}</bdi>
           </div>
         ) : null}
       </div>
-      {onRefresh ? (
+      {error.stale ? (
         <button type="button" className="btn btn-outline" onClick={onRefresh}>
           Refresh list
         </button>
@@ -321,99 +407,50 @@ function RowError({
 // Pending tab
 // ---------------------------------------------------------------------------
 
-interface Decided {
-  row: Registration;
-  decision: "approve" | "reject";
-  customer: ShopifyCustomer | null;
-  waLink: string | null;
-}
+type DecideVars =
+  | { decision: "approve"; customer: ShopifyCustomer }
+  | { decision: "reject" };
+
+/** A registration's badge [tone, label], by what was decided on this visit. */
+const REGISTRATION_BADGE = {
+  pending: ["warning", "Pending"],
+  approve: ["success", "Approved"],
+  reject: ["neutral", "Rejected"],
+} as const;
 
 function PendingPanel({
   query,
   onShowLoginTab,
 }: {
-  query: UseQueryResult<RegistrationsResponse>;
+  query: UseQueryResult<Rows<Registration>>;
   onShowLoginTab: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
   // A row decided on this visit keeps its place after the refetch drops it
   // from the pending list: an approved row's WhatsApp link is the next step.
-  const [decided, setDecided] = useState<Record<string, Decided>>({});
+  const [kept, setKept] = useState<Record<string, Registration>>({});
 
   const rows = useMemo(() => {
     const listed = query.data?.rows ?? [];
     const listedIds = new Set(listed.map((r) => r.id));
-    const kept = Object.values(decided)
-      .map((d) => d.row)
-      .filter((r) => !listedIds.has(r.id));
-    return [...listed, ...kept].sort(byOldestFirst);
-  }, [query.data, decided]);
+    const extra = Object.values(kept).filter((r) => !listedIds.has(r.id));
+    // The request that has waited longest comes first.
+    return [...listed, ...extra].sort(
+      (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+    );
+  }, [query.data, kept]);
 
   const refreshList = () =>
     void queryClient.invalidateQueries({ queryKey: PENDING_KEY });
 
-  const onDecided = (d: Decided) => {
-    setDecided((prev) => ({ ...prev, [d.row.id]: d }));
+  const onDecided = (row: Registration, decision: DecideVars["decision"]) => {
+    setKept((prev) => ({ ...prev, [row.id]: row }));
     refreshList();
-    if (d.decision === "approve") {
+    if (decision === "approve") {
       void queryClient.invalidateQueries({ queryKey: APPROVED_KEY });
     }
   };
-
-  let body: ReactNode;
-  if (query.isLoading) {
-    body = <ListSkeleton testId="portal-registrations-loading" />;
-  } else if (!query.data && query.isError) {
-    body = (
-      <div className="p-5">
-        <ErrorState
-          title="We couldn't load the registrations"
-          description={(query.error as Error).message}
-          onRetry={() => void query.refetch()}
-        />
-      </div>
-    );
-  } else if (rows.length === 0) {
-    body = (
-      <div className="p-5" data-testid="portal-registrations-empty">
-        <EmptyState
-          title="No pending registrations"
-          description="When a phone the portal doesn't know asks to log in, its request appears here for approval. You can give an approved customer a login link from the Login link tab."
-          icon={
-            <UserCheck className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />
-          }
-          action={
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={onShowLoginTab}
-            >
-              Go to login links
-            </button>
-          }
-        />
-      </div>
-    );
-  } else {
-    body = (
-      <ul
-        className="divide-y divide-border/60"
-        data-testid="portal-registrations-list"
-      >
-        {rows.map((row) => (
-          <RegistrationItem
-            key={row.id}
-            row={row}
-            decided={decided[row.id] ?? null}
-            confirm={confirm}
-            onDecided={onDecided}
-            onRefreshList={refreshList}
-          />
-        ))}
-      </ul>
-    );
-  }
 
   return (
     <SectionCard
@@ -423,41 +460,60 @@ function PendingPanel({
       contentClassName="p-0"
     >
       {dialog}
-      {query.data && query.isError ? (
-        // A background refresh failed; the rows already on screen stay usable.
-        <div className="border-b border-border/60 p-4">
-          <ErrorAlert
-            label="Could not refresh the list"
-            onRetry={() => void query.refetch()}
+      <QueryList
+        query={query}
+        rows={rows}
+        testId="portal-registrations"
+        errorTitle="We couldn't load the registrations"
+        staleLabel="Could not refresh the list"
+        empty={
+          <EmptyState
+            title="No pending registrations"
+            description="When a phone the portal doesn't know asks to log in, its request appears here for approval. You can give an approved customer a login link from the Login link tab."
+            icon={
+              <UserCheck className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />
+            }
+            action={
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={onShowLoginTab}
+              >
+                Go to login links
+              </button>
+            }
           />
-        </div>
-      ) : null}
-      {body}
+        }
+      >
+        {(row) => (
+          <RegistrationItem
+            key={row.id}
+            row={row}
+            confirm={confirm}
+            onDecided={onDecided}
+            onRefreshList={refreshList}
+          />
+        )}
+      </QueryList>
     </SectionCard>
   );
 }
 
-type DecideVars =
-  | { decision: "approve"; customer: ShopifyCustomer }
-  | { decision: "reject" };
-
 function RegistrationItem({
   row,
-  decided,
   confirm,
   onDecided,
   onRefreshList,
 }: {
   row: Registration;
-  decided: Decided | null;
   confirm: UseConfirmResult["confirm"];
-  onDecided: (d: Decided) => void;
+  onDecided: (row: Registration, decision: DecideVars["decision"]) => void;
   onRefreshList: () => void;
 }): JSX.Element {
   const id = row.id;
   const [picked, setPicked] = useState<ShopifyCustomer | null>(null);
 
-  const decide = useMutation<DecideResponse, Error, DecideVars>({
+  const decide = useMutation<DecideResponse, PortalRequestError, DecideVars>({
     mutationFn: (vars) =>
       postPortal<DecideResponse>(
         `/api/portal/registrations/${encodeURIComponent(id)}/decide`,
@@ -466,13 +522,7 @@ function RegistrationItem({
           : { decision: "reject" },
         vars.decision,
       ),
-    onSuccess: (res, vars) =>
-      onDecided({
-        row,
-        decision: vars.decision,
-        customer: vars.decision === "approve" ? vars.customer : null,
-        waLink: res?.wa_link ?? null,
-      }),
+    onSuccess: (_res, vars) => onDecided(row, vars.decision),
   });
 
   const approve = async () => {
@@ -519,8 +569,8 @@ function RegistrationItem({
   };
 
   const acting = decide.isPending ? decide.variables?.decision : undefined;
-  const errorStatus =
-    decide.error instanceof PortalRequestError ? decide.error.status : null;
+  const [tone, label] =
+    REGISTRATION_BADGE[decide.isSuccess ? decide.variables.decision : "pending"];
 
   return (
     <li className="px-5 py-4 sm:px-6" data-testid={`portal-registration-${id}`}>
@@ -533,21 +583,9 @@ function RegistrationItem({
             <bdi>{row.branch_city || "No branch or city given"}</bdi>
           </div>
         </div>
-        {decided ? (
-          decided.decision === "approve" ? (
-            <Badge tone="success" dot>
-              Approved
-            </Badge>
-          ) : (
-            <Badge tone="neutral" dot>
-              Rejected
-            </Badge>
-          )
-        ) : (
-          <Badge tone="warning" dot>
-            Pending
-          </Badge>
-        )}
+        <Badge tone={tone} dot>
+          {label}
+        </Badge>
       </div>
 
       <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -571,8 +609,12 @@ function RegistrationItem({
         </Field>
       </dl>
 
-      {decided ? (
-        <DecidedNote id={id} decided={decided} />
+      {decide.isSuccess ? (
+        <DecidedNote
+          id={id}
+          decided={decide.variables}
+          waLink={decide.data?.wa_link ?? null}
+        />
       ) : (
         <div className="mt-4">
           <CustomerPicker
@@ -612,11 +654,7 @@ function RegistrationItem({
           {decide.isError ? (
             <RowError
               error={decide.error}
-              onRefresh={
-                errorStatus === 404 || errorStatus === 409
-                  ? onRefreshList
-                  : undefined
-              }
+              onRefresh={onRefreshList}
               testId={`portal-decide-error-${id}`}
             />
           ) : null}
@@ -629,9 +667,11 @@ function RegistrationItem({
 function DecidedNote({
   id,
   decided,
+  waLink,
 }: {
   id: string;
-  decided: Decided;
+  decided: DecideVars;
+  waLink: string | null;
 }): JSX.Element {
   if (decided.decision === "reject") {
     return (
@@ -651,17 +691,12 @@ function DecidedNote({
       data-testid={`portal-approved-note-${id}`}
     >
       <div className="text-sm text-success-fg">
-        <span className="font-semibold">Approved.</span>{" "}
-        {decided.customer ? (
-          <>
-            Linked to <bdi>{decided.customer.name}</bdi>.{" "}
-          </>
-        ) : null}
-        Let the customer know on WhatsApp.
+        <span className="font-semibold">Approved.</span> Linked to{" "}
+        <bdi>{decided.customer.name}</bdi>. Let the customer know on WhatsApp.
       </div>
-      {decided.waLink ? (
+      {waLink ? (
         <a
-          href={decided.waLink}
+          href={waLink}
           target="_blank"
           rel="noopener noreferrer"
           className="btn btn-primary shrink-0"
@@ -693,18 +728,19 @@ function CustomerPicker({
   onPick: (customer: ShopifyCustomer | null) => void;
   disabled: boolean;
 }): JSX.Element {
-  const [text, setText] = useState("");
-  const q = useDebounced(text.trim());
+  const [q, setQ] = useState("");
   // Keyed by registration too: phone_matches is about this request's phone.
-  const search = useQuery<CustomerSearchResponse>({
+  const search = useQuery<Rows<ShopifyCustomer>>({
     queryKey: ["admin", "portal-customer-search", registrationId, q],
     queryFn: () =>
-      fetchJson<CustomerSearchResponse>(
+      fetchJson<Rows<ShopifyCustomer>>(
         `/api/portal/customer-search?q=${encodeURIComponent(q)}&registration_id=${encodeURIComponent(registrationId)}`,
       ),
     enabled: q.length >= MIN_SEARCH_CHARS && !picked,
+    placeholderData: keepPreviousData,
+    // The error below has its own Retry.
+    retry: false,
   });
-  const inputId = `portal-customer-search-${registrationId}`;
 
   if (picked) {
     return (
@@ -736,7 +772,7 @@ function CustomerPicker({
 
   const results = search.data?.rows ?? [];
   let status: ReactNode = null;
-  if (text.trim().length > 0 && text.trim().length < MIN_SEARCH_CHARS) {
+  if (q.length > 0 && q.length < MIN_SEARCH_CHARS) {
     status = (
       <p className="field-hint">
         Type at least {MIN_SEARCH_CHARS} characters to search.
@@ -744,8 +780,6 @@ function CustomerPicker({
     );
   } else if (q.length < MIN_SEARCH_CHARS) {
     status = null;
-  } else if (search.isLoading) {
-    status = <p className="field-hint">Searching Shopify customers…</p>;
   } else if (search.isError) {
     status = (
       <ErrorAlert
@@ -754,59 +788,58 @@ function CustomerPicker({
       />
     );
   } else if (results.length === 0) {
-    status = (
-      <p className="field-hint">
-        No Shopify customer matches “<bdi>{q}</bdi>”.
-      </p>
-    );
+    // Nothing yet, or the last search found nothing and this one is on its way.
+    status =
+      search.isLoading || search.isPlaceholderData ? (
+        <p className="field-hint">Searching Shopify customers…</p>
+      ) : (
+        <p className="field-hint">
+          No Shopify customer matches “<bdi>{q}</bdi>”.
+        </p>
+      );
   } else {
     status = (
-      <ul
-        className="divide-y divide-border/60 overflow-hidden rounded border border-border/70"
-        data-testid={`portal-customer-results-${registrationId}`}
-      >
-        {results.map((customer) => (
-          <li key={customer.id}>
-            <button
-              type="button"
-              className="flex min-h-[40px] w-full flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-left text-sm transition-colors hover:bg-bg-subtle focus-visible:bg-bg-subtle focus-visible:outline-none"
-              onClick={() => onPick(customer)}
-              data-testid={`portal-customer-option-${registrationId}-${shopifyCustomerNumber(customer.id)}`}
-            >
-              <CustomerSummary customer={customer} />
-              <PhoneMatchBadge matches={customer.phone_matches} />
-              {customer.id === suggestedId ? (
-                <Badge tone="accent">Suggested</Badge>
-              ) : null}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <>
+        {search.isPlaceholderData ? (
+          <p className="field-hint mb-2">Searching…</p>
+        ) : null}
+        <ul
+          className="divide-y divide-border/60 overflow-hidden rounded border border-border/70"
+          data-testid={`portal-customer-results-${registrationId}`}
+        >
+          {results.map((customer) => (
+            <li key={customer.id}>
+              <button
+                type="button"
+                className="flex min-h-[40px] w-full flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-left text-sm transition-colors hover:bg-bg-subtle focus-visible:bg-bg-subtle focus-visible:outline-none"
+                onClick={() => onPick(customer)}
+                data-testid={`portal-customer-option-${registrationId}-${shopifyCustomerNumber(customer.id)}`}
+              >
+                <CustomerSummary customer={customer} />
+                <PhoneMatchBadge matches={customer.phone_matches} />
+                {customer.id === suggestedId ? (
+                  <Badge tone="accent">Suggested</Badge>
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </>
     );
   }
 
   return (
     <div>
-      <label htmlFor={inputId} className="label">
-        Shopify customer
-      </label>
-      <div className="relative max-w-md">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint"
-          aria-hidden
-        />
-        <input
-          id={inputId}
-          type="search"
-          className="input pl-9"
-          placeholder="Search Shopify customers"
-          autoComplete="off"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={disabled}
-          data-testid={`portal-customer-search-${registrationId}`}
-        />
-      </div>
+      {/* Seeded with the last query, so "Change" after a pick comes back to
+          the same results. */}
+      <SearchField
+        id={`portal-customer-search-${registrationId}`}
+        label="Shopify customer"
+        placeholder="Search Shopify customers"
+        defaultValue={q}
+        onSearch={setQ}
+        disabled={disabled}
+      />
       <div className="mt-2" aria-live="polite">
         {status}
       </div>
@@ -818,86 +851,33 @@ function CustomerPicker({
 // Login link tab
 // ---------------------------------------------------------------------------
 
-function LoginLinkPanel(): JSX.Element {
+function LoginLinkPanel({ shown }: { shown: boolean }): JSX.Element {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
-  const [text, setText] = useState("");
-  const q = useDebounced(text.trim());
+  const [q, setQ] = useState("");
+  // A revoked row leaves the list on the refresh; this line says it worked,
+  // until the search changes.
+  const [revokedName, setRevokedName] = useState<string | null>(null);
+  const onSearch = useCallback((next: string) => {
+    setQ(next);
+    setRevokedName(null);
+  }, []);
   const searching = q.length >= MIN_SEARCH_CHARS;
-  const approved = useQuery<ApprovedResponse>({
+  const approved = useQuery<Rows<ApprovedCustomer>>({
     queryKey: [...APPROVED_KEY, q],
     queryFn: () =>
-      fetchJson<ApprovedResponse>(
+      fetchJson<Rows<ApprovedCustomer>>(
         `/api/portal/approved?q=${encodeURIComponent(q)}`,
       ),
-    enabled: searching,
+    // An approval invalidates this list; while the tab is hidden it waits.
+    enabled: searching && shown,
+    placeholderData: keepPreviousData,
   });
   // Links created on this visit, by access: a new search does not lose them.
   const [links, setLinks] = useState<Record<string, LoginLinkResponse>>({});
-  // A revoked row leaves the list on the refresh; this line says it worked.
-  const [revokedName, setRevokedName] = useState<string | null>(null);
-  const rows = approved.data?.rows ?? [];
 
   const refreshList = () =>
     void queryClient.invalidateQueries({ queryKey: APPROVED_KEY });
-
-  let body: ReactNode;
-  if (!searching) {
-    body = (
-      <div className="p-5">
-        <EmptyState
-          title="Search for an approved customer"
-          description={`Type at least ${MIN_SEARCH_CHARS} characters above. Only customers approved for the portal are listed.`}
-          icon={<Search className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
-        />
-      </div>
-    );
-  } else if (approved.isLoading) {
-    body = <ListSkeleton testId="portal-approved-loading" />;
-  } else if (!approved.data && approved.isError) {
-    body = (
-      <div className="p-5">
-        <ErrorState
-          title="We couldn't load approved customers"
-          description={(approved.error as Error).message}
-          onRetry={() => void approved.refetch()}
-        />
-      </div>
-    );
-  } else if (rows.length === 0) {
-    body = (
-      <div className="p-5" data-testid="portal-approved-empty">
-        <EmptyState
-          title="No approved customer matches"
-          description="Check the spelling. A customer who registered appears here once the registration is approved on the Pending tab. Revoked customers are not listed."
-        />
-      </div>
-    );
-  } else {
-    body = (
-      <ul
-        className="divide-y divide-border/60"
-        data-testid="portal-approved-list"
-      >
-        {rows.map((row) => (
-          <ApprovedItem
-            key={row.access_id}
-            row={row}
-            link={links[row.access_id] ?? null}
-            confirm={confirm}
-            onCreated={(link) =>
-              setLinks((prev) => ({ ...prev, [row.access_id]: link }))
-            }
-            onRevoked={() => {
-              setRevokedName(row.display_name || row.wa_phone);
-              refreshList();
-            }}
-            onRefreshList={refreshList}
-          />
-        ))}
-      </ul>
-    );
-  }
 
   return (
     <SectionCard
@@ -908,28 +888,15 @@ function LoginLinkPanel(): JSX.Element {
     >
       {dialog}
       <div className="border-b border-border/60 px-5 py-4 sm:px-6">
-        <label htmlFor="portal-approved-search" className="label">
-          Search approved customers
-        </label>
-        <div className="relative max-w-md">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint"
-            aria-hidden
-          />
-          <input
-            id="portal-approved-search"
-            type="search"
-            className="input pl-9"
-            placeholder="Search"
-            autoComplete="off"
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setRevokedName(null);
-            }}
-            data-testid="portal-approved-search"
-          />
-        </div>
+        <SearchField
+          id="portal-approved-search"
+          label="Search approved customers"
+          placeholder="Search"
+          onSearch={onSearch}
+        />
+        {approved.isFetching && approved.isPlaceholderData ? (
+          <p className="field-hint">Searching…</p>
+        ) : null}
       </div>
       {revokedName ? (
         <div
@@ -941,15 +908,46 @@ function LoginLinkPanel(): JSX.Element {
           <bdi className="font-medium text-fg">{revokedName}</bdi>.
         </div>
       ) : null}
-      {approved.data && approved.isError ? (
-        <div className="border-b border-border/60 p-4">
-          <ErrorAlert
-            label="Could not refresh the results"
-            onRetry={() => void approved.refetch()}
+      {searching ? (
+        <QueryList
+          query={approved}
+          rows={approved.data?.rows ?? []}
+          testId="portal-approved"
+          errorTitle="We couldn't load approved customers"
+          staleLabel="Could not refresh the results"
+          empty={
+            <EmptyState
+              title="No approved customer matches"
+              description="Check the spelling. A customer who registered appears here once the registration is approved on the Pending tab. Revoked customers are not listed."
+            />
+          }
+        >
+          {(row) => (
+            <ApprovedItem
+              key={row.access_id}
+              row={row}
+              link={links[row.access_id] ?? null}
+              confirm={confirm}
+              onCreated={(link) =>
+                setLinks((prev) => ({ ...prev, [row.access_id]: link }))
+              }
+              onRevoked={() => {
+                setRevokedName(row.display_name || row.wa_phone);
+                refreshList();
+              }}
+              onRefreshList={refreshList}
+            />
+          )}
+        </QueryList>
+      ) : (
+        <div className="p-5">
+          <EmptyState
+            title="Search for an approved customer"
+            description={`Type at least ${MIN_SEARCH_CHARS} characters above. Only customers approved for the portal are listed.`}
+            icon={<Search className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
           />
         </div>
-      ) : null}
-      {body}
+      )}
     </SectionCard>
   );
 }
@@ -969,47 +967,27 @@ function ApprovedItem({
   onRevoked: () => void;
   onRefreshList: () => void;
 }): JSX.Element {
-  const key = row.access_id;
-  const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
+  const id = row.access_id;
 
-  const create = useMutation<LoginLinkResponse, Error, void>({
+  const create = useMutation<LoginLinkResponse, PortalRequestError, void>({
     mutationFn: () =>
       postPortal<LoginLinkResponse>(
         "/api/portal/login-link",
-        { access_id: row.access_id },
+        { access_id: id },
         "login-link",
       ),
-    onSuccess: (created) => {
-      setCopy("idle");
-      onCreated(created);
-    },
+    onSuccess: (created) => onCreated(created),
   });
 
-  const revoke = useMutation<RevokeResponse, Error, void>({
+  const revoke = useMutation<unknown, PortalRequestError, void>({
     mutationFn: () =>
-      postPortal<RevokeResponse>(
-        `/api/portal/access/${encodeURIComponent(row.access_id)}/revoke`,
+      postPortal(
+        `/api/portal/access/${encodeURIComponent(id)}/revoke`,
         {},
         "revoke",
       ),
     onSuccess: () => onRevoked(),
   });
-
-  useEffect(() => {
-    if (copy !== "copied") return;
-    const t = setTimeout(() => setCopy("idle"), 2000);
-    return () => clearTimeout(t);
-  }, [copy]);
-
-  const copyLink = async () => {
-    if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link.url);
-      setCopy("copied");
-    } catch {
-      setCopy("failed");
-    }
-  };
 
   const revokeAccess = async () => {
     const ok = await confirm({
@@ -1029,16 +1007,9 @@ function ApprovedItem({
   };
 
   const busy = create.isPending || revoke.isPending;
-  const refreshOn404 = (error: Error) =>
-    error instanceof PortalRequestError && error.status === 404
-      ? onRefreshList
-      : undefined;
 
   return (
-    <li
-      className="px-5 py-4 sm:px-6"
-      data-testid={`portal-approved-row-${key}`}
-    >
+    <li className="px-5 py-4 sm:px-6" data-testid={`portal-approved-row-${id}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-semibold text-fg-strong">
@@ -1069,17 +1040,21 @@ function ApprovedItem({
               className="btn btn-primary"
               onClick={() => create.mutate()}
               disabled={busy}
-              data-testid={`portal-create-link-${key}`}
+              data-testid={`portal-create-link-${id}`}
             >
               <KeyRound className="h-4 w-4" strokeWidth={2} aria-hidden />
-              {create.isPending ? "Creating…" : "Create login link"}
+              {create.isPending
+                ? "Creating…"
+                : link
+                  ? "Create another link"
+                  : "Create login link"}
             </button>
             <button
               type="button"
               className="btn btn-ghost text-danger-fg"
               onClick={() => void revokeAccess()}
               disabled={busy}
-              data-testid={`portal-revoke-${key}`}
+              data-testid={`portal-revoke-${id}`}
             >
               <UserX className="h-4 w-4" strokeWidth={2} aria-hidden />
               {revoke.isPending ? "Revoking…" : "Revoke access"}
@@ -1091,67 +1066,101 @@ function ApprovedItem({
       {create.isError ? (
         <RowError
           error={create.error}
-          onRefresh={refreshOn404(create.error)}
-          testId={`portal-link-error-${key}`}
+          onRefresh={onRefreshList}
+          testId={`portal-link-error-${id}`}
         />
       ) : null}
       {revoke.isError ? (
         <RowError
           error={revoke.error}
-          onRefresh={refreshOn404(revoke.error)}
-          testId={`portal-revoke-error-${key}`}
+          onRefresh={onRefreshList}
+          testId={`portal-revoke-error-${id}`}
         />
       ) : null}
 
       {link && !revoke.isSuccess ? (
-        <div className="mt-3" data-testid={`portal-login-link-${key}`}>
-          <label htmlFor={`portal-login-url-${key}`} className="label">
-            Login link
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              id={`portal-login-url-${key}`}
-              readOnly
-              value={link.url}
-              dir="ltr"
-              className="input font-mono text-xs"
-              onFocus={(e) => e.currentTarget.select()}
-              data-testid={`portal-login-url-${key}`}
-            />
-            <div className="flex shrink-0 gap-2">
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => void copyLink()}
-                data-testid={`portal-copy-link-${key}`}
-              >
-                {copy === "copied" ? (
-                  <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                ) : (
-                  <Copy className="h-4 w-4" strokeWidth={2} aria-hidden />
-                )}
-                {copy === "copied" ? "Copied" : "Copy"}
-              </button>
-              <a
-                href={link.wa_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-outline"
-                title="Opens WhatsApp with the link typed. You press send."
-                data-testid={`portal-open-whatsapp-${key}`}
-              >
-                <MessageCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
-                Open WhatsApp
-              </a>
-            </div>
-          </div>
-          {copy === "failed" ? (
-            <p className="field-error" role="alert">
-              Could not copy. Select the link and copy it by hand.
-            </p>
-          ) : null}
-        </div>
+        <LoginLinkBox key={link.url} id={id} link={link} />
       ) : null}
     </li>
+  );
+}
+
+/** A created link, to copy or to open in WhatsApp. Keyed by its URL, so a new
+ *  link starts with a fresh Copy button. */
+function LoginLinkBox({
+  id,
+  link,
+}: {
+  id: string;
+  link: LoginLinkResponse;
+}): JSX.Element {
+  const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
+
+  useEffect(() => {
+    if (copy !== "copied") return;
+    const t = setTimeout(() => setCopy("idle"), 2000);
+    return () => clearTimeout(t);
+  }, [copy]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(link.url);
+      setCopy("copied");
+    } catch {
+      setCopy("failed");
+    }
+  };
+
+  return (
+    <div className="mt-3" data-testid={`portal-login-link-${id}`}>
+      <label htmlFor={`portal-login-url-${id}`} className="label">
+        Login link
+      </label>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          id={`portal-login-url-${id}`}
+          readOnly
+          value={link.url}
+          dir="ltr"
+          className="input font-mono text-xs"
+          onFocus={(e) => e.currentTarget.select()}
+          data-testid={`portal-login-url-${id}`}
+        />
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => void copyLink()}
+            data-testid={`portal-copy-link-${id}`}
+          >
+            {copy === "copied" ? (
+              <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            ) : (
+              <Copy className="h-4 w-4" strokeWidth={2} aria-hidden />
+            )}
+            {copy === "copied" ? "Copied" : "Copy"}
+          </button>
+          <a
+            href={link.wa_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-outline"
+            title="Opens WhatsApp with the link typed. You press send."
+            data-testid={`portal-open-whatsapp-${id}`}
+          >
+            <MessageCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
+            Open WhatsApp
+          </a>
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-fg-muted">
+        Each link works once and stays valid 24 hours.
+      </p>
+      {copy === "failed" ? (
+        <p className="field-error" role="alert">
+          Could not copy. Select the link and copy it by hand.
+        </p>
+      ) : null}
+    </div>
   );
 }

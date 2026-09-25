@@ -1,14 +1,6 @@
 import { proxyRequest } from "@/lib/api-proxy";
 
-// ---------------------------------------------------------------------------
-// /api/portal/access/[id]/revoke — withdraw an approved customer's portal
-// access (Tranche 179).
-//
-// POST → Fastify POST /api/v1/mutations/portal/access/:id/revoke
-// body: {} (the page sends an empty JSON object with a JSON content-type)
-// 200: { ok: true }
-// 404: no such access, or already revoked · 401: no session · 403: not admin
-// ---------------------------------------------------------------------------
+// POST /api/portal/access/[id]/revoke → POST /api/v1/mutations/portal/access/:id/revoke (idempotent; no body needed)
 
 export async function POST(
   req: Request,

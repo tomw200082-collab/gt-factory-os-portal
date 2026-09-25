@@ -80,24 +80,23 @@ const APPROVED_LIST = /\/api\/portal\/approved\?/;
 const LOGIN_LINK = /\/api\/portal\/login-link$/;
 const REVOKE = /\/api\/portal\/access\/[^/?]+\/revoke$/;
 
-async function openPending(page: Page, rows: unknown[]): Promise<void> {
+/** Opens the page on these pending rows. The returned params are those of the
+ *  latest customer search, kept up to date by the search stub. */
+async function openPending(
+  page: Page,
+  rows: unknown[],
+): Promise<URLSearchParams> {
+  const searched = new URLSearchParams();
   await setFakeRole(page, "admin");
   await page.route(LIST, (route) => route.fulfill({ json: { rows } }));
-  await page.route(SEARCH, (route) =>
-    route.fulfill({ json: { rows: CUSTOMERS } }),
-  );
+  await page.route(SEARCH, (route) => {
+    new URL(route.request().url()).searchParams.forEach((value, key) =>
+      searched.set(key, value),
+    );
+    return route.fulfill({ json: { rows: CUSTOMERS } });
+  });
   await page.goto("/admin/portal-registrations");
-}
-
-async function pickAndApprove(page: Page): Promise<void> {
-  await page
-    .getByTestId(`portal-customer-search-${REG_OLD_ID}`)
-    .fill("קפה השכונה");
-  await page.getByTestId(`portal-customer-option-${REG_OLD_ID}-1001`).click();
-  await page.getByTestId(`portal-approve-${REG_OLD_ID}`).click();
-  const dialog = page.getByRole("alertdialog");
-  await expect(dialog).toContainText("Approve this registration?");
-  await dialog.getByRole("button", { name: "Approve registration" }).click();
+  return searched;
 }
 
 async function openLoginTab(page: Page, query: string): Promise<void> {
@@ -141,8 +140,6 @@ test.describe("@mocked portal registrations", () => {
   test("search, pick and approve sends the picked id and offers the WhatsApp link", async ({
     page,
   }) => {
-    let searchedQ: string | null = null;
-    let searchedRegistration: string | null = null;
     let decideUrl = "";
     let decideBody: unknown = null;
     await page.route(DECIDE, (route) => {
@@ -150,14 +147,7 @@ test.describe("@mocked portal registrations", () => {
       decideBody = route.request().postDataJSON();
       return route.fulfill({ json: { ok: true, wa_link: WA_APPROVAL } });
     });
-    await openPending(page, [REG_OLD, REG_NEW]);
-    // Registered after openPending, so it wins over that stub.
-    await page.route(SEARCH, (route) => {
-      const params = new URL(route.request().url()).searchParams;
-      searchedQ = params.get("q");
-      searchedRegistration = params.get("registration_id");
-      return route.fulfill({ json: { rows: CUSTOMERS } });
-    });
+    const searched = await openPending(page, [REG_OLD, REG_NEW]);
 
     await page
       .getByTestId(`portal-customer-search-${REG_OLD_ID}`)
@@ -172,8 +162,8 @@ test.describe("@mocked portal registrations", () => {
     await expect(other).toContainText("1 order");
     await expect(other).toContainText("Phone does not match");
     // The search is scoped to this registration, so phone_matches is about its phone.
-    expect(searchedQ).toBe("קפה השכונה");
-    expect(searchedRegistration).toBe(REG_OLD_ID);
+    expect(searched.get("q")).toBe("קפה השכונה");
+    expect(searched.get("registration_id")).toBe(REG_OLD_ID);
 
     await option.click();
     const picked = page.getByTestId(`portal-picked-${REG_OLD_ID}`);
@@ -213,7 +203,14 @@ test.describe("@mocked portal registrations", () => {
       }),
     );
     await openPending(page, [REG_OLD]);
-    await pickAndApprove(page);
+    await page
+      .getByTestId(`portal-customer-search-${REG_OLD_ID}`)
+      .fill("קפה השכונה");
+    await page.getByTestId(`portal-customer-option-${REG_OLD_ID}-1001`).click();
+    await page.getByTestId(`portal-approve-${REG_OLD_ID}`).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("Approve this registration?");
+    await dialog.getByRole("button", { name: "Approve registration" }).click();
 
     const error = page.getByTestId(`portal-decide-error-${REG_OLD_ID}`);
     await expect(error).toContainText("already approved or rejected");
@@ -247,11 +244,18 @@ test.describe("@mocked portal registrations", () => {
     await expect(row).toContainText("Haifa");
     expect(approvedQuery).toBe("Bar");
 
-    await page.getByTestId(`portal-create-link-${ACCESS_ID}`).click();
+    const create = page.getByTestId(`portal-create-link-${ACCESS_ID}`);
+    await expect(create).toHaveText(/Create login link/);
+    await create.click();
     await expect(page.getByTestId(`portal-login-url-${ACCESS_ID}`)).toHaveValue(
       LOGIN_URL,
     );
     expect(linkBody).toEqual({ access_id: ACCESS_ID });
+    // A new link does not cancel the last one, so the page says how links live.
+    await expect(create).toHaveText(/Create another link/);
+    await expect(
+      page.getByTestId(`portal-login-link-${ACCESS_ID}`),
+    ).toContainText("Each link works once and stays valid 24 hours.");
 
     await expect(page.getByTestId(`portal-copy-link-${ACCESS_ID}`)).toHaveText(
       /Copy/,

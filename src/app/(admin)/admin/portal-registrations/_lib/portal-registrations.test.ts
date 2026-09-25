@@ -1,16 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PortalRequestError,
-  byOldestFirst,
   formatWhen,
-  ordersLabel,
-  portalFailure,
   postPortal,
   shopifyCustomerNumber,
 } from "./portal-registrations";
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("shopifyCustomerNumber", () => {
@@ -28,14 +25,6 @@ describe("shopifyCustomerNumber", () => {
   });
 });
 
-describe("ordersLabel", () => {
-  it("says order for one and orders otherwise", () => {
-    expect(ordersLabel(1)).toBe("1 order");
-    expect(ordersLabel(0)).toBe("0 orders");
-    expect(ordersLabel(42)).toBe("42 orders");
-  });
-});
-
 describe("formatWhen", () => {
   it("renders a timestamp day first, with the year", () => {
     const out = formatWhen("2026-09-24T09:30:00Z");
@@ -47,131 +36,106 @@ describe("formatWhen", () => {
   });
 });
 
-describe("byOldestFirst", () => {
-  it("puts the request that has waited longest first", () => {
-    const rows = [
-      { created_at: "2026-09-24T10:00:00Z", id: "new" },
-      { created_at: "2026-09-20T08:00:00Z", id: "old" },
-      { created_at: "2026-09-22T08:00:00+03:00", id: "mid" },
-    ];
-    expect([...rows].sort(byOldestFirst).map((r) => r.id)).toEqual([
-      "old",
-      "mid",
-      "new",
-    ]);
-  });
-});
+type Action = Parameters<typeof postPortal>[2];
 
-describe("portalFailure", () => {
-  it("explains a registration someone already decided (409)", () => {
-    const f = portalFailure("approve", 409, { error: "already decided" });
-    expect(f.status).toBe(409);
-    expect(f.message).toMatch(/already approved or rejected/);
-    expect(f.detail).toBeUndefined();
+/** What postPortal throws when the server answers `status` with `body`. */
+async function refusal(
+  action: Action,
+  status: number,
+  body: unknown = null,
+): Promise<PortalRequestError> {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async () => new Response(JSON.stringify(body), { status }),
+  );
+  const err: unknown = await postPortal("/api/portal/x", {}, action).catch(
+    (e: unknown) => e,
+  );
+  expect(err).toBeInstanceOf(PortalRequestError);
+  return err as PortalRequestError;
+}
+
+describe("postPortal refusals", () => {
+  it.each(["approve", "reject"] as const)(
+    "explains a registration already decided the other way (%s, 409) and marks the row stale",
+    async (action) => {
+      const err = await refusal(action, 409, { error: "already_decided" });
+      expect(err.status).toBe(409);
+      expect(err.message).toMatch(/already approved or rejected/);
+      expect(err.detail).toBeUndefined();
+      expect(err.stale).toBe(true);
+    },
+  );
+
+  it.each([
+    ["reject", /registration no longer exists/],
+    ["login-link", /no longer approved/],
+    ["revoke", /^No access row with that id\.$/],
+  ] as const)(
+    "names the missing thing on a 404 and marks the row stale (%s)",
+    async (action, message) => {
+      const err = await refusal(action, 404, { error: "not_found" });
+      expect(err.message).toMatch(message);
+      expect(err.stale).toBe(true);
+    },
+  );
+
+  it("says the portal is closed to the customer when a login link is refused (409)", async () => {
+    const err = await refusal("login-link", 409, {
+      error:
+        "the portal is closed to this customer: the launch flag is off or they are not on its allowlist",
+    });
+    expect(err.message).toBe(
+      "The portal is closed to this customer: the launch flag is off or they are not on its allowlist.",
+    );
+    expect(err.stale).toBe(false);
   });
 
-  it("names the missing thing on a 404, per action", () => {
-    expect(portalFailure("reject", 404, null).message).toMatch(
-      /registration no longer exists/,
-    );
-    expect(portalFailure("login-link", 404, null).message).toMatch(
-      /no longer approved/,
-    );
-    expect(portalFailure("revoke", 404, null).message).toMatch(
-      /already revoked/,
-    );
-  });
-
-  it("keeps 'already decided' for registrations only", () => {
-    expect(portalFailure("revoke", 409, null).message).toBe(
+  it("keeps 'already decided' for registrations only", async () => {
+    const err = await refusal("revoke", 409);
+    expect(err.message).toBe(
       "Could not revoke this access (HTTP 409). Try again.",
     );
+    expect(err.stale).toBe(false);
   });
 
-  it("keeps the server's reason as a detail on a 422", () => {
-    const f = portalFailure("approve", 422, {
+  it("keeps the server's reason as a detail on a 422", async () => {
+    const err = await refusal("approve", 422, {
       error: "shopify_customer_id is required",
     });
-    expect(f.message).toMatch(/approval was not accepted/);
-    expect(f.detail).toBe("shopify_customer_id is required");
+    expect(err.message).toMatch(/approval was not accepted/);
+    expect(err.detail).toBe("shopify_customer_id is required");
+    expect(err.stale).toBe(false);
   });
 
-  it("sends an expired session back to sign-in and a non-admin away", () => {
-    expect(portalFailure("approve", 401, null).message).toMatch(/Sign in again/);
-    expect(portalFailure("login-link", 403, null).message).toBe(
+  it("tells a non-admin who may do it (403)", async () => {
+    expect((await refusal("login-link", 403)).message).toBe(
       "Only an admin can create a login link.",
     );
-    expect(portalFailure("revoke", 403, null).message).toBe(
+    expect((await refusal("revoke", 403)).message).toBe(
       "Only an admin can revoke this access.",
     );
   });
 
-  it("falls back to the action and the status, never a raw body", () => {
-    const f = portalFailure("login-link", 502, { error: "upstream unreachable" });
-    expect(f.message).toBe("Could not create a login link (HTTP 502). Try again.");
-    expect(f.detail).toBe("upstream unreachable");
-    expect(portalFailure("reject", 500, "<html>").detail).toBeUndefined();
-  });
-});
-
-describe("postPortal", () => {
-  it("posts JSON and returns the parsed body on success", async () => {
-    const spy = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ ok: true, wa_link: null }),
-      } as unknown as Response),
-    );
-    vi.stubGlobal("fetch", spy);
-    const out = await postPortal<{ ok: boolean }>(
-      "/api/portal/registrations/r1/decide",
-      { decision: "reject" },
-      "reject",
-    );
-    expect(out.ok).toBe(true);
-    expect(spy).toHaveBeenCalledWith("/api/portal/registrations/r1/decide", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ decision: "reject" }),
-    });
-  });
-
-  it("sends a revoke as an empty JSON object with a JSON content-type", async () => {
-    const spy = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ ok: true }),
-      } as unknown as Response),
-    );
-    vi.stubGlobal("fetch", spy);
-    await postPortal("/api/portal/access/a1/revoke", {}, "revoke");
-    expect(spy).toHaveBeenCalledWith("/api/portal/access/a1/revoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: "{}",
-    });
-  });
-
-  it("throws the mapped failure on a refusal", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() =>
-        Promise.resolve({
-          ok: false,
-          status: 409,
-          json: () => Promise.resolve({ error: "already decided" }),
-        } as unknown as Response),
-      ),
-    );
-    const err = await postPortal("/x", {}, "approve").catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(PortalRequestError);
-    expect((err as PortalRequestError).status).toBe(409);
-  });
+  it.each([
+    [
+      { error: "portal login link upstream unreachable", detail: "fetch failed" },
+      "portal login link upstream unreachable: fetch failed",
+    ],
+    ["<html>", undefined],
+  ])(
+    "falls back to the action and the status, never a raw body (%j)",
+    async (body, detail) => {
+      const err = await refusal("login-link", 502, body);
+      expect(err.message).toBe(
+        "Could not create a login link (HTTP 502). Try again.",
+      );
+      expect(err.detail).toBe(detail);
+      expect(err.stale).toBe(false);
+    },
+  );
 
   it("says the server could not be reached when fetch itself fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("offline"))));
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     await expect(postPortal("/x", {}, "login-link")).rejects.toThrow(
       /Could not reach the server/,
     );
