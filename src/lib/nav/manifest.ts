@@ -50,6 +50,7 @@ import {
   Shapes,
   ShieldCheck,
   ShoppingCart,
+  Store,
   Tags,
   TrendingUp,
   UserCheck,
@@ -422,6 +423,18 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/decision-board",
         label: "Decision Board",
         icon: Scale,
+        min_role: "planner",
+        required_capability: "planning:execute",
+      },
+      {
+        // Tranche 182 — what customers can order in the customer portal: a
+        // planner marks a product not available now, when it is back, what to
+        // offer instead, and works the "tell me when it is back" list. The
+        // page itself admits planning:read (read-only for operator/viewer);
+        // the row shows to those who can change it.
+        href: "/planning/portal-catalog",
+        label: "Portal catalogue",
+        icon: Store,
         min_role: "planner",
         required_capability: "planning:execute",
       },
