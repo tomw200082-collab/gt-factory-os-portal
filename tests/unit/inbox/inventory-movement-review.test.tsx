@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // ---------------------------------------------------------------------------
@@ -64,17 +64,19 @@ const proposedDetail = {
 
 let detail: Record<string, unknown> = proposedDetail;
 let approveBody: { lines: Array<Record<string, unknown>> } | null = null;
+let creditTasks: Record<string, unknown> = { supplied: ["ct-1"], not_supplied: [] };
 
 beforeEach(() => {
   detail = proposedDetail;
   approveBody = null;
+  creditTasks = { supplied: ["ct-1"], not_supplied: [] };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/approve")) {
         approveBody = JSON.parse(String(init?.body));
         return new Response(
-          JSON.stringify({ status: "posted", posted_lines: [], credit_tasks: { supplied: ["ct-1"], not_supplied: [] } }),
+          JSON.stringify({ status: "posted", posted_lines: [], credit_tasks: creditTasks }),
           { status: 200 },
         );
       }
@@ -140,6 +142,7 @@ describe("inventory-movement review — proposal pre-fill (tranche 176)", () => 
     renderPage();
     const rows = await loadedRows();
     fireEvent.change(within(rows[0]).getByLabelText("Qty"), { target: { value: "30" } });
+    fireEvent.click(screen.getByTestId("im-review-open-questions-check"));
     fireEvent.click(screen.getByTestId("im-review-approve"));
     fireEvent.click(screen.getByTestId("im-review-approve-confirm"));
     await screen.findByText("Approved — stock posted");
@@ -164,5 +167,80 @@ describe("inventory-movement review — proposal pre-fill (tranche 176)", () => 
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByLabelText("Item code")).toHaveValue("");
     expect(within(rows[0]).queryByTestId("im-review-line-origin")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tranche 181 — approving closes the proposal, and a linked shortage it did
+// not close is said out loud.
+// ---------------------------------------------------------------------------
+
+describe("inventory-movement review — open questions and open shortages (tranche 181)", () => {
+  it("keeps Approve disabled until the open questions are ticked as checked", async () => {
+    renderPage();
+    await loadedRows();
+    const approve = screen.getByTestId("im-review-approve");
+    expect(approve).toBeDisabled();
+    expect(screen.getByTestId("im-review-open-questions-hint")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("I've checked the open questions"));
+    expect(approve).toBeEnabled();
+    expect(screen.queryByTestId("im-review-open-questions-hint")).toBeNull();
+
+    // Unticking while confirming blocks the post too.
+    fireEvent.click(approve);
+    fireEvent.click(screen.getByTestId("im-review-open-questions-check"));
+    expect(screen.getByTestId("im-review-approve-confirm")).toBeDisabled();
+  });
+
+  it("asks for no tick when there are no open questions", async () => {
+    detail = { ...proposedDetail, open_questions: [] };
+    renderPage();
+    await screen.findByTestId("im-review-rationale");
+    await waitFor(() => expect(screen.getAllByTestId("im-review-line")).toHaveLength(2));
+    expect(screen.queryByTestId("im-review-open-questions-check")).toBeNull();
+    expect(screen.getByTestId("im-review-approve")).toBeEnabled();
+  });
+
+  it("lists the linked shortages approval did not mark supplied, with plain reasons", async () => {
+    creditTasks = {
+      supplied: ["ct-1"],
+      not_supplied: [
+        { credit_task_id: "ct-2", reason: "QTY_NOT_COVERED" },
+        { credit_task_id: "ct-3", reason: "ITEM_NOT_SUPPLIED" },
+        { credit_task_id: "ct-4", reason: "STATUS_CREDITED" },
+        { credit_task_id: "ct-5", reason: "STATUS_WAIVED" },
+        { credit_task_id: "ct-6", reason: "NOT_FOUND" },
+      ],
+    };
+    renderPage();
+    await loadedRows();
+    fireEvent.click(screen.getByTestId("im-review-open-questions-check"));
+    fireEvent.click(screen.getByTestId("im-review-approve"));
+    fireEvent.click(screen.getByTestId("im-review-approve-confirm"));
+    await screen.findByText("Approved — stock posted");
+
+    const open = screen.getByTestId("im-review-approved-not-supplied");
+    expect(open).toHaveTextContent("5 linked picking shortages not marked supplied");
+    const reasons = within(open).getAllByRole("listitem").map((li) => li.textContent);
+    expect(reasons).toEqual([
+      "Still open — the Out quantity is less than what was missing.",
+      "Still open — no Out line for its item.",
+      "Already credited.",
+      "Already resolved.",
+      "Not found — it may have been removed.",
+    ]);
+    // No raw reason codes and no task ids on screen.
+    expect(open).not.toHaveTextContent(/QTY_NOT_COVERED|STATUS_|ct-\d/);
+  });
+
+  it("shows no open-shortage list when every linked shortage was supplied", async () => {
+    renderPage();
+    await loadedRows();
+    fireEvent.click(screen.getByTestId("im-review-open-questions-check"));
+    fireEvent.click(screen.getByTestId("im-review-approve"));
+    fireEvent.click(screen.getByTestId("im-review-approve-confirm"));
+    await screen.findByText("Approved — stock posted");
+    expect(screen.queryByTestId("im-review-approved-not-supplied")).toBeNull();
   });
 });

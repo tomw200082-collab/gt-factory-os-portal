@@ -143,8 +143,38 @@ function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
 }
 
+// A linked picking shortage that approving did not mark supplied, and why
+// (credit_tasks.not_supplied in the gt-factory-os approve response). The
+// reasons are shown in plain words; ids and codes never reach the screen.
+interface NotSuppliedShortage {
+  credit_task_id: string;
+  reason: string;
+}
+
+function notSuppliedReason(reason: string): string {
+  switch (reason) {
+    case "ITEM_NOT_SUPPLIED":
+      return "Still open — no Out line for its item.";
+    case "QTY_NOT_COVERED":
+      return "Still open — the Out quantity is less than what was missing.";
+    case "NOT_FOUND":
+      return "Not found — it may have been removed.";
+    case "STATUS_CREDITED":
+      return "Already credited.";
+    case "STATUS_SUPPLIED":
+      return "Already marked supplied.";
+    default:
+      return reason.startsWith("STATUS_") ? "Already resolved." : "Left as it was.";
+  }
+}
+
 type Outcome =
-  | { kind: "approved"; postedLines: PostedLine[]; suppliedShortages: number }
+  | {
+      kind: "approved";
+      postedLines: PostedLine[];
+      suppliedShortages: number;
+      notSupplied: NotSuppliedShortage[];
+    }
   | { kind: "rejected" }
   | { kind: "conflict"; detail: string }
   | { kind: "network"; message: string };
@@ -201,6 +231,8 @@ export default function InventoryMovementReviewPage() {
   // FLOW-IM-001 — gate the irreversible post behind an explicit confirm step,
   // mirroring the physical-count page's confirmingApprove pattern.
   const [confirmingApprove, setConfirmingApprove] = useState(false);
+  // Approving closes the proposal, so open questions must be looked at first.
+  const [questionsChecked, setQuestionsChecked] = useState(false);
 
   const detailQuery = useQuery<InventoryMovementDetail>({
     queryKey: ["inventory-movement-detail", submissionId],
@@ -266,7 +298,12 @@ export default function InventoryMovementReviewPage() {
   // FLOW-IM-009 — disable approve / reject when the proposal is no longer
   // pending (e.g. another reviewer already actioned it).
   const isPending = !d || d.status === "pending";
-  const canApprove = allLinesValid && !approveBusy && !rejectBusy && !isOwnUnprivileged && isPending;
+  // The questions are headed "answer before approving"; approving posts the
+  // known lines and closes the proposal, so the reviewer ticks that they
+  // checked them.
+  const questionsCleared = openQuestions.length === 0 || questionsChecked;
+  const canApprove =
+    allLinesValid && questionsCleared && !approveBusy && !rejectBusy && !isOwnUnprivileged && isPending;
   // FLOW-IM-010 — Reject requires a non-empty reason (mirror waste / PC).
   const canReject = !rejectBusy && !approveBusy && !isOwnUnprivileged && isPending && rejectionReason.trim().length > 0;
 
@@ -276,7 +313,7 @@ export default function InventoryMovementReviewPage() {
   const exchangeSingleLineWarning = isExchange && lines.length === 1;
 
   const handleApprove = async () => {
-    if (!allLinesValid) return;
+    if (!allLinesValid || !questionsCleared) return;
     setApproveBusy(true);
     try {
       const res = await fetch(`/api/inventory-movements/${encodeURIComponent(submissionId)}/approve`, {
@@ -303,7 +340,12 @@ export default function InventoryMovementReviewPage() {
         const postedLines: PostedLine[] =
           body && Array.isArray(body.posted_lines) ? (body.posted_lines as PostedLine[]) : [];
         const suppliedShortages: number = body?.credit_tasks?.supplied?.length ?? 0;
-        setOutcome({ kind: "approved", postedLines, suppliedShortages });
+        // Say which linked shortages approving did not close, or the
+        // reviewer takes them for done.
+        const notSupplied: NotSuppliedShortage[] = Array.isArray(body?.credit_tasks?.not_supplied)
+          ? (body.credit_tasks.not_supplied as NotSuppliedShortage[])
+          : [];
+        setOutcome({ kind: "approved", postedLines, suppliedShortages, notSupplied });
       } else if (res.status === 409 && body && "reason_code" in body) {
         setOutcome({ kind: "conflict", detail: friendlyConflict(body.reason_code, body.detail) });
       } else {
@@ -402,6 +444,21 @@ export default function InventoryMovementReviewPage() {
                   <span className="text-fg-muted">·</span>
                   <span className="font-mono text-fg">{p.item_id}</span>
                 </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {outcome.notSupplied.length > 0 ? (
+          <div
+            className="mt-3 rounded-md border border-warning/40 bg-warning-softer/60 p-3 text-sm text-warning-fg"
+            data-testid="im-review-approved-not-supplied"
+          >
+            <div className="font-semibold">
+              {plural(outcome.notSupplied.length, "linked picking shortage")} not marked supplied
+            </div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg">
+              {outcome.notSupplied.map((s, i) => (
+                <li key={`${s.credit_task_id}-${i}`}>{notSuppliedReason(s.reason)}</li>
               ))}
             </ul>
           </div>
@@ -559,6 +616,16 @@ export default function InventoryMovementReviewPage() {
               <li key={i}>{q}</li>
             ))}
           </ul>
+          <label className="mt-3 inline-flex min-h-[44px] cursor-pointer items-center gap-2 font-medium text-fg">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={questionsChecked}
+              onChange={(e) => setQuestionsChecked(e.target.checked)}
+              data-testid="im-review-open-questions-check"
+            />
+            I&apos;ve checked the open questions
+          </label>
         </div>
       ) : null}
 
@@ -799,7 +866,7 @@ export default function InventoryMovementReviewPage() {
                   type="button"
                   data-testid="im-review-approve-confirm"
                   className="btn btn-sm btn-primary"
-                  disabled={approveBusy}
+                  disabled={approveBusy || !questionsCleared}
                   onClick={handleApprove}
                 >
                   {approveBusy ? "Posting…" : "Yes, approve"}
@@ -828,6 +895,11 @@ export default function InventoryMovementReviewPage() {
           {!allLinesValid ? (
             <p className="mt-2 text-xs text-fg-muted">
               Complete every line (item code, quantity, unit) before approving, or remove the incomplete ones — all lines are posted.
+            </p>
+          ) : null}
+          {!questionsCleared ? (
+            <p className="mt-2 text-xs text-fg-muted" data-testid="im-review-open-questions-hint">
+              Check the open questions above and tick the box before approving.
             </p>
           ) : null}
           {/* FLOW-IM-014 — non-blocking single-line-exchange warning. */}

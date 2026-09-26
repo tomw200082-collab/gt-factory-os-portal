@@ -1,6 +1,6 @@
 # Tranche 179 — portal registrations: the staff screen
 
-**Status:** built, not merged. **Awaiting Tom's written D1 approval of the customer-portal module. Do not merge.**
+**Status:** merged in `0fc9f6b` (#230), with D1 approved in writing by Tom, 2026-09-25 (gt-factory-os spec §4.5; brain #219).
 **Origin:** the customer-portal overnight masterprompt, W5 (`gt-factory-os/docs/superpowers/plans/2026-09-24-customer-portal-overnight-masterprompt.md`),
 built to its r2 staff-route contract. The staff half of the customer ordering portal; the API it calls is being built
 in parallel in `gt-factory-os`.
@@ -101,7 +101,7 @@ production build and fails every `act()`-based vitest suite on `main` too).
   by `access_id` and shows the URL; revoke asks first (cancel sends nothing), posts `{}` as JSON, refreshes the list
 - `next build`: succeeds; `/admin/portal-registrations` and the six `/api/portal/*` handlers are in the route table
 - Rendered at 1280px and 390px with the same mocks: no horizontal scroll
-- Merge only after Tom's written D1 approval and after the backend routes are live.
+- Merged after Tom's written D1 approval (2026-09-25), against the live backend staff routes (gt-factory-os #288).
 
 ## Rollback
 

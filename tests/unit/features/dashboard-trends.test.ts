@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   bucketTotal,
   dailyCounts,
-  dailyFlow,
   lastNDays,
   localDayKey,
   trendDelta,
@@ -58,23 +57,6 @@ describe("dailyCounts", () => {
     const buckets = dailyCounts(ts, 14, TODAY);
     expect(bucketTotal(buckets)).toBe(1);
     expect(buckets.find((b) => b.key === "2026-06-10")?.value).toBe(1);
-  });
-});
-
-describe("dailyFlow", () => {
-  it("splits postings into inbound and outbound per day", () => {
-    const rows = [
-      { when: "2026-06-14T08:00:00", direction: "in" as const },
-      { when: "2026-06-14T09:00:00", direction: "in" as const },
-      { when: "2026-06-14T10:00:00", direction: "out" as const },
-      { when: "2026-06-12T10:00:00", direction: "out" as const },
-    ];
-    const buckets = dailyFlow(rows, 14, TODAY);
-    const d14 = buckets.find((b) => b.key === "2026-06-14");
-    const d12 = buckets.find((b) => b.key === "2026-06-12");
-    expect(d14).toMatchObject({ inbound: 2, outbound: 1 });
-    expect(d12).toMatchObject({ inbound: 0, outbound: 1 });
-    expect(bucketTotal(buckets)).toBe(4);
   });
 });
 

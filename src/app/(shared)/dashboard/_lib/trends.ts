@@ -38,15 +38,6 @@ export interface DayBucket {
   value: number;
 }
 
-export interface FlowDayBucket {
-  key: string;
-  label: string;
-  /** Inbound postings on this day. */
-  inbound: number;
-  /** Outbound postings on this day. */
-  outbound: number;
-}
-
 /** Local `yyyy-mm-dd` key for a Date (uses the host's local calendar day). */
 export function localDayKey(d: Date): string {
   const y = d.getFullYear();
@@ -106,38 +97,6 @@ export function dailyCounts(
   return days.map((d, i) => ({ key: d.key, label: d.label, value: counts[i] }));
 }
 
-/**
- * Bucket directional postings into per-day inbound/outbound counts over the
- * last `n` days. Days with no postings are kept as zero.
- */
-export function dailyFlow(
-  rows: { when: string | null | undefined; direction: "in" | "out" }[],
-  n: number,
-  today: Date,
-): FlowDayBucket[] {
-  const days = lastNDays(n, today);
-  const index = new Map<string, number>();
-  days.forEach((d, i) => index.set(d.key, i));
-  const inbound = new Array<number>(days.length).fill(0);
-  const outbound = new Array<number>(days.length).fill(0);
-
-  for (const row of rows) {
-    const d = parseTs(row.when);
-    if (!d) continue;
-    const i = index.get(localDayKey(d));
-    if (i === undefined) continue;
-    if (row.direction === "in") inbound[i] += 1;
-    else outbound[i] += 1;
-  }
-
-  return days.map((d, i) => ({
-    key: d.key,
-    label: d.label,
-    inbound: inbound[i],
-    outbound: outbound[i],
-  }));
-}
-
 export interface TrendDelta {
   /** Sum over the most recent half of the window. */
   current: number;
@@ -164,11 +123,6 @@ export function trendDelta(buckets: DayBucket[]): TrendDelta {
 }
 
 /** Total postings across all buckets — used to decide empty-state rendering. */
-export function bucketTotal(
-  buckets: { value?: number; inbound?: number; outbound?: number }[],
-): number {
-  return buckets.reduce(
-    (s, b) => s + (b.value ?? 0) + (b.inbound ?? 0) + (b.outbound ?? 0),
-    0,
-  );
+export function bucketTotal(buckets: DayBucket[]): number {
+  return buckets.reduce((s, b) => s + b.value, 0);
 }
