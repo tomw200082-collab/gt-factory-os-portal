@@ -50,8 +50,8 @@ const catalogue = (): Row[] => [
 ];
 
 const REQUESTS = [
-  { id: "7b1e4a2c-0d3f-4e5a-9b6c-1d2e3f4a5b01", display_name: "קפה לדוגמה", branch: "תל אביב", wa_phone: "972500000001", requested_at: "2026-09-25T09:00:00Z" },
-  { id: "7b1e4a2c-0d3f-4e5a-9b6c-1d2e3f4a5b02", display_name: "Bar Lev", branch: "Haifa", wa_phone: "972500000002", requested_at: "2026-09-25T10:00:00Z" },
+  { id: "7b1e4a2c-0d3f-4e5a-9b6c-1d2e3f4a5b01", display_name: "קפה לדוגמה", branch: "תל אביב", wa_phone: "972500000001" },
+  { id: "7b1e4a2c-0d3f-4e5a-9b6c-1d2e3f4a5b02", display_name: "Bar Lev", branch: "Haifa", wa_phone: "972500000002" },
 ];
 
 const LIST = /\/api\/portal\/catalog$/;
@@ -60,7 +60,7 @@ const WAITING = /\/api\/portal\/catalog\/[^/?]+\/requests$/;
 const NOTIFIED = /\/api\/portal\/catalog\/[^/?]+\/requests\/[^/?]+\/notified$/;
 
 /** The catalogue as the API would hold it; every POST changes it as the API would. */
-async function open(page: Page, role: "planner" | "operator" | "admin" | "viewer") {
+async function open(page: Page, role: "planner" | "operator") {
   const rows = catalogue();
   const requests = [...REQUESTS];
   const posts: Array<{ sku: string; body: Record<string, unknown> }> = [];
@@ -85,7 +85,7 @@ async function open(page: Page, role: "planner" | "operator" | "admin" | "viewer
   });
   await page.goto("/planning/portal-catalog");
   await expect(page.getByTestId("catalog-row-GT-LUI-LOW-1L")).toBeVisible();
-  return { rows, posts, notified };
+  return { posts, notified };
 }
 
 test.describe("@mocked portal catalogue", () => {

@@ -140,7 +140,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
       }
     },
     onSettled: async () => {
-      await qc.invalidateQueries({ queryKey: KEY });
+      await qc.invalidateQueries({ queryKey: KEY, exact: true });
       document.getElementById(`avail-${row.sku}`)?.focus();
     },
   });
@@ -377,7 +377,8 @@ function Waiting({ row, name }: { row: CatalogRow; name: string }): JSX.Element 
   });
   const done = useMutation({
     mutationFn: (id: string) => postCatalog(`${skuPath(row.sku)}/requests/${encodeURIComponent(id)}/notified`, {}),
-    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: KEY, exact: true }), qc.invalidateQueries({ queryKey: requestsKey })]),
+    // the count on the row and every open waiting list
+    onSettled: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 
   return (
@@ -394,43 +395,48 @@ function Waiting({ row, name }: { row: CatalogRow; name: string }): JSX.Element 
           </p>
         ) : (
           <ul className="divide-y divide-border/60">
-            {(q.data?.rows ?? []).map((w) => (
-              <li key={w.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm" data-testid={`catalog-request-${w.id}`}>
-                <span className="min-w-0">
-                  <bdi className="font-medium text-fg-strong">{w.display_name ?? "—"}</bdi>
-                  {w.branch && (
-                    <>
-                      {" · "}
-                      <bdi>{w.branch}</bdi>
-                    </>
-                  )}
-                  {" · "}
-                  <span className="font-mono" dir="ltr">
-                    {w.wa_phone}
+            {(q.data?.rows ?? []).map((w) => {
+              const wa = restockWaLink(w.wa_phone, name);
+              return (
+                <li key={w.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm" data-testid={`catalog-request-${w.id}`}>
+                  <span className="min-w-0">
+                    <bdi className="font-medium text-fg-strong">{w.display_name ?? "—"}</bdi>
+                    {w.branch && (
+                      <>
+                        {" · "}
+                        <bdi>{w.branch}</bdi>
+                      </>
+                    )}
+                    {" · "}
+                    <span className="font-mono" dir="ltr">
+                      {w.wa_phone}
+                    </span>
                   </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <a
-                    className="btn btn-outline btn-sm"
-                    href={restockWaLink(w.wa_phone, name)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid={`catalog-wa-${w.id}`}
-                  >
-                    WhatsApp
-                  </a>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    disabled={done.isPending}
-                    onClick={() => done.mutate(w.id)}
-                    data-testid={`catalog-notified-${w.id}`}
-                  >
-                    Mark notified
-                  </button>
-                </span>
-              </li>
-            ))}
+                  <span className="flex items-center gap-2">
+                    {wa && (
+                      <a
+                        className="btn btn-outline btn-sm"
+                        href={wa}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={`catalog-wa-${w.id}`}
+                      >
+                        WhatsApp
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={done.isPending}
+                      onClick={() => done.mutate(w.id)}
+                      data-testid={`catalog-notified-${w.id}`}
+                    >
+                      Mark notified
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
         {done.error && (

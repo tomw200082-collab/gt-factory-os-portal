@@ -77,10 +77,12 @@ describe("portal catalogue helpers", () => {
   });
 
   it("builds the WhatsApp link with the approved text, the product named, to the phone's digits", () => {
-    const url = restockWaLink("+972-50-000-0001", "DETOX 1000ml");
+    const url = restockWaLink("+972-50-000-0001", "DETOX 1000ml")!;
     expect(url.startsWith("https://wa.me/972500000001?text=")).toBe(true);
     expect(decodeURIComponent(url.split("?text=")[1])).toBe("היי 🙂 DETOX 1000ml חזר למלאי ואפשר להזמין שוב בפורטל.");
     expect(RESTOCK_TEXT).toContain("{product}");
+    // no digits, no link: never WhatsApp's contact picker
+    expect(restockWaLink("", "DETOX 1000ml")).toBeNull();
   });
 
   it("a change is always the whole row, nothing more", () => {
@@ -97,9 +99,11 @@ describe("portal catalogue helpers", () => {
     expect(failureMessage({ status: 0 })).toMatch(/Could not reach the server/);
     expect(failureMessage({ status: 403 })).toBe("Only a planner or an admin can change the portal catalogue.");
     expect(failureMessage({ status: 404 })).toMatch(/no longer there/);
-    expect(failureMessage({ status: 422, detail: "return_note up to 25 characters" })).toBe(
+    // the API's { error } as the shared client hands it over
+    expect(failureMessage({ status: 422, reason_code: "return_note up to 25 characters" })).toBe(
       "The change was not accepted: return_note up to 25 characters",
     );
+    expect(failureMessage({ status: 422 })).toBe("The change was not accepted.");
     expect(failureMessage({ status: 502 })).toBe("Could not save (HTTP 502). Try again.");
   });
 });

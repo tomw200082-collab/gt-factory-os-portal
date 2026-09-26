@@ -8,22 +8,9 @@
 // ---------------------------------------------------------------------------
 
 import { post } from "@/lib/api/client";
+import { waHref } from "@/app/(sales)/_lib/wa";
 
 export type Category = "tea" | "matcha" | "odk" | "acc";
-
-/** One planner change, as stored (every change is its own row). */
-export interface Change {
-  available: boolean;
-  /** YYYY-MM-DD, as typed */
-  back_on: string | null;
-  /** Customer-visible, one line, at most {@link NOTE_MAX} characters. */
-  return_note: string | null;
-  alternative_sku: string | null;
-  /** Internal. */
-  note: string | null;
-  changed_by: string;
-  changed_at: string;
-}
 
 export interface CatalogRow {
   key: string;
@@ -56,11 +43,14 @@ export interface RestockRequest {
   display_name: string | null;
   branch: string | null;
   wa_phone: string;
-  requested_at: string;
 }
 
-/** A change is always the whole row. */
+/** A change is always the whole row: `back_on` YYYY-MM-DD as typed, `return_note` customer-visible (one line,
+ *  at most {@link NOTE_MAX} characters), `note` internal. */
 export type Availability = Pick<CatalogRow, "available" | "back_on" | "return_note" | "alternative_sku" | "note">;
+
+/** One planner change, as stored (every change is its own row). */
+export type Change = Availability & { changed_by: string; changed_at: string };
 
 export const NOTE_MAX = 25;
 
@@ -128,17 +118,17 @@ export function formatDay(ymd: string): string {
   return Number.isNaN(d.getTime()) ? ymd : DAY.format(d);
 }
 
-/** wa.me with the approved text typed; a person presses send. */
-export function restockWaLink(phone: string, product: string): string {
-  return `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(RESTOCK_TEXT.replace("{product}", product))}`;
+/** wa.me with the approved text typed (null without a phone); a person presses send. */
+export function restockWaLink(phone: string, product: string): string | null {
+  return waHref(phone, RESTOCK_TEXT.replace("{product}", product));
 }
 
-/** What a row says when the server refuses a change or a Mark notified. */
-export function failureMessage({ status, detail }: { status: number; detail?: string }): string {
+/** What a row says when the server refuses a change or a Mark notified. The API's `{ error }` arrives as `reason_code`. */
+export function failureMessage({ status, reason_code }: { status: number; reason_code?: string }): string {
   if (status === 0) return "Could not reach the server. Check your connection and try again.";
   if (status === 403) return "Only a planner or an admin can change the portal catalogue.";
   if (status === 404) return "This is no longer there. Refresh the page.";
-  if (status === 422) return `The change was not accepted${detail ? `: ${detail}` : "."}`;
+  if (status === 422) return `The change was not accepted${reason_code ? `: ${reason_code}` : "."}`;
   return `Could not save (HTTP ${status}). Try again.`;
 }
 
