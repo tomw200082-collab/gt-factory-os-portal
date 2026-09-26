@@ -59,8 +59,18 @@ export type Change = Availability & { changed_by: string; changed_at: string };
 export const NOTE_MAX = 25;
 export const HEADLINE_MAX = 20;
 
-/** The three one-tap messages (Tom, 2026-09-26; gt-factory-os gate record §5.4 U-06). */
-export const PRESETS = ["חוזר בשבוע הבא", "בייצור, חוזר בקרוב", "בדרך מהספק, חוזר בקרוב"] as const;
+/** The three one-tap messages, in the look's words: a product on its way is not "back" (gt-factory-os gate record §5.4 U-06). */
+export const PRESETS: Record<"out" | "soon", readonly string[]> = {
+  out: ["חוזר בשבוע הבא", "בייצור, חוזר בקרוב", "בדרך מהספק, חוזר בקרוב"],
+  soon: ["מגיע בשבוע הבא", "בייצור, מגיע בקרוב", "בדרך מהספק, מגיע בקרוב"],
+};
+export const presetsFor = (upcoming: boolean) => PRESETS[upcoming ? "soon" : "out"];
+
+/** A change of look carries a one-tap message into the new look's words; the planner's own words stay as written. */
+export function withLook(d: Availability, upcoming: boolean): Availability {
+  const i = presetsFor(!upcoming).indexOf(d.return_note ?? "");
+  return { ...d, upcoming, return_note: i < 0 ? d.return_note : presetsFor(upcoming)[i] };
+}
 
 /** The text a person sends when the product is back (gate record §5.4 U-11). */
 export const RESTOCK_TEXT = "היי 🙂 {product} כבר כאן, ואפשר להזמין בפורטל.";

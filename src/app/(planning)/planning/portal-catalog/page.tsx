@@ -38,7 +38,8 @@ import {
   GROUPS,
   HEADLINE_MAX,
   NOTE_MAX,
-  PRESETS,
+  presetsFor,
+  withLook,
   bodyOf,
   formatDay,
   groupRows,
@@ -228,7 +229,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
                     name={`look-${row.sku}`}
                     checked={draft.upcoming === v}
                     disabled={!canEdit}
-                    onChange={() => set({ upcoming: v })}
+                    onChange={() => setDraft((d) => withLook(d, v))}
                     data-testid={`catalog-look-${row.sku}-${v ? "soon" : "out"}`}
                   />
                   {l}
@@ -294,7 +295,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
               data-testid={`catalog-note-${row.sku}`}
             />
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {PRESETS.map((p, i) => (
+              {presetsFor(draft.upcoming).map((p, i) => (
                 <button
                   key={p}
                   type="button"

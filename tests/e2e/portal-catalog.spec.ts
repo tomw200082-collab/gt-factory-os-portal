@@ -157,7 +157,7 @@ test.describe("@mocked portal catalogue", () => {
     await page.getByTestId("catalog-alt-GT-LUI-LOW-1L").selectOption("GT-LUI-LOW-0.5L");
     await page.getByTestId("catalog-both-GT-LUI-LOW-1L").click();
     await expect.poll(() => posts.length).toBe(3);
-    const form = { available: false, headline: "בקרוב", upcoming: true, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: null };
+    const form = { available: false, headline: "בקרוב", upcoming: true, back_on: "2026-10-02", return_note: "בייצור, מגיע בקרוב", note: null };
     expect(posts[1]).toEqual({ sku: "GT-LUI-LOW-1L", body: { ...form, alternative_sku: "GT-LUI-LOW-0.5L" } });
     expect(posts[2]).toEqual({ sku: "GT-LUI-LOW-0.5L", body: { ...form, alternative_sku: null } });
     await expect(page.getByTestId("catalog-save-GT-LUI-LOW-1L")).toBeDisabled();
