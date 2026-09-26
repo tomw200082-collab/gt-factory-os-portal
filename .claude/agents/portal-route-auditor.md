@@ -1,6 +1,6 @@
 ---
 name: portal-route-auditor
-description: Read-only auditor of the portal's route + navigation surface. Compares discovered pages/routes/components/middleware against docs/portal-os/route-manifest.json + quarantine.json. Emits dead routes, quarantine re-entries, fake-session vestiges, orphaned components, role-gate mismatches. Never edits code.
+description: Read-only auditor of the portal's route and navigation surface. Compares pages, routes, components and middleware against docs/portal-os/route-manifest.json and quarantine.json. Reports dead routes, quarantine re-entries, fake-session vestiges, orphaned components, role-gate mismatches.
 tools: Glob, Grep, Read
 ---
 
