@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  NOTE_MAX,
   RESTOCK_TEXT,
   bodyOf,
   failureMessage,
   formatDay,
   groupRows,
+  presetsFor,
   productName,
   restockWaLink,
   sibling,
   unavailableFor,
+  withLook,
   type CatalogRow,
 } from "./portal-catalog";
 
@@ -81,10 +84,19 @@ describe("portal catalogue helpers", () => {
   it("builds the WhatsApp link with the approved text, the product named, to the phone's digits", () => {
     const url = restockWaLink("+972-50-000-0001", "DETOX 1000ml")!;
     expect(url.startsWith("https://wa.me/972500000001?text=")).toBe(true);
-    expect(decodeURIComponent(url.split("?text=")[1])).toBe("היי 🙂 DETOX 1000ml חזר למלאי ואפשר להזמין שוב בפורטל.");
+    expect(decodeURIComponent(url.split("?text=")[1])).toBe("היי 🙂 DETOX 1000ml כבר כאן, ואפשר להזמין בפורטל.");
     expect(RESTOCK_TEXT).toContain("{product}");
     // no digits, no link: never WhatsApp's contact picker
     expect(restockWaLink("", "DETOX 1000ml")).toBeNull();
+  });
+
+  it("a change of look carries a one-tap message into the new look's words, and never the planner's own", () => {
+    const d = bodyOf(row({ available: false, return_note: "בייצור, חוזר בקרוב" }));
+    expect(withLook(d, true)).toMatchObject({ upcoming: true, return_note: "בייצור, מגיע בקרוב" });
+    expect(withLook(withLook(d, true), false)).toMatchObject({ upcoming: false, return_note: "בייצור, חוזר בקרוב" });
+    expect(withLook({ ...d, return_note: "אחרי החגים" }, true).return_note).toBe("אחרי החגים");
+    expect(withLook({ ...d, return_note: null }, true).return_note).toBeNull();
+    expect(presetsFor(true).every((p) => !p.includes("חוזר") && p.length <= NOTE_MAX)).toBe(true);
   });
 
   it("a change is always the whole row, nothing more", () => {

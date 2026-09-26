@@ -157,7 +157,7 @@ test.describe("@mocked portal catalogue", () => {
     await page.getByTestId("catalog-alt-GT-LUI-LOW-1L").selectOption("GT-LUI-LOW-0.5L");
     await page.getByTestId("catalog-both-GT-LUI-LOW-1L").click();
     await expect.poll(() => posts.length).toBe(3);
-    const form = { available: false, headline: "בקרוב", upcoming: true, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: null };
+    const form = { available: false, headline: "בקרוב", upcoming: true, back_on: "2026-10-02", return_note: "בייצור, מגיע בקרוב", note: null };
     expect(posts[1]).toEqual({ sku: "GT-LUI-LOW-1L", body: { ...form, alternative_sku: "GT-LUI-LOW-0.5L" } });
     expect(posts[2]).toEqual({ sku: "GT-LUI-LOW-0.5L", body: { ...form, alternative_sku: null } });
     await expect(page.getByTestId("catalog-save-GT-LUI-LOW-1L")).toBeDisabled();
@@ -194,7 +194,7 @@ test.describe("@mocked portal catalogue", () => {
     await expect(first).toContainText("972500000001");
     const href = await page.getByTestId(`catalog-wa-${REQUESTS[0].id}`).getAttribute("href");
     expect(href?.startsWith("https://wa.me/972500000001?text=")).toBe(true);
-    expect(decodeURIComponent(href!.split("?text=")[1])).toBe("היי 🙂 CALM 1000ml חזר למלאי ואפשר להזמין שוב בפורטל.");
+    expect(decodeURIComponent(href!.split("?text=")[1])).toBe("היי 🙂 CALM 1000ml כבר כאן, ואפשר להזמין בפורטל.");
     await expect(page.getByTestId(`catalog-wa-${REQUESTS[0].id}`)).toHaveAttribute("target", "_blank");
     // each customer's controls say whose they are
     await expect(page.getByRole("link", { name: "WhatsApp to Bar Lev" })).toBeVisible();
