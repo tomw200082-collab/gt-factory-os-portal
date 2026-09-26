@@ -1,15 +1,15 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
-// Tranche 180 — "Needs attention" says when it cannot see.
+// Tranche 180 — the headline cards say when they cannot see.
 //
-// A stock list that failed to load is undefined, not empty. The card used to
-// count it as empty and show a green "Nothing is out…" while the stock read
-// was down. It must say the stock did not load instead.
+// A stock list that failed to load is undefined, not empty. "Needs attention"
+// used to count it as empty and show a green "Nothing is out…" while the stock
+// read was down; while loading it showed that line under the skeleton too.
 // ---------------------------------------------------------------------------
 
 vi.mock("next/navigation", () => ({
@@ -20,6 +20,9 @@ vi.mock("next/navigation", () => ({
 
 import InventoryPage from "@/app/(shared)/inventory/page";
 
+const ALL_CLEAR = "Nothing is out, critical or below floor.";
+const UNAVAILABLE = "We couldn't load this. Try Refresh.";
+
 const fetchMock = vi.fn();
 beforeEach(() => {
   fetchMock.mockReset();
@@ -27,9 +30,10 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-function mockApi(rmFails: boolean) {
+function mockApi(stock: "ok" | "rm-fails" | "pending") {
   fetchMock.mockImplementation((url: string) => {
-    if (rmFails && url.includes("item_type=RM_PKG")) {
+    if (stock === "pending") return new Promise(() => {});
+    if (stock === "rm-fails" && url.includes("item_type=RM_PKG")) {
       return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
     }
     const body = url.startsWith("/api/stock/value")
@@ -48,19 +52,29 @@ function renderPage() {
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     ),
   });
+  return () => screen.getByText("Needs attention").closest<HTMLElement>('[role="status"]')!;
 }
 
 describe("inventory — Needs attention card", () => {
-  it("says the stock did not load when one list fails, never 'Nothing is out'", async () => {
-    mockApi(true);
-    renderPage();
-    expect(await screen.findByText(/Stock didn't load, so this can't be checked/)).toBeInTheDocument();
-    expect(screen.queryByText("Nothing is out, critical or below floor.")).not.toBeInTheDocument();
+  it("shows — and says it could not load when one stock list fails", async () => {
+    mockApi("rm-fails");
+    const card = renderPage();
+    expect(await within(card()).findByText(UNAVAILABLE)).toBeInTheDocument();
+    expect(within(card()).getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText(ALL_CLEAR)).not.toBeInTheDocument();
   });
 
-  it("still gives the all-clear when both lists load and nothing needs attention", async () => {
-    mockApi(false);
-    renderPage();
-    expect(await screen.findByText("Nothing is out, critical or below floor.")).toBeInTheDocument();
+  it("states nothing while the stock is still loading", async () => {
+    mockApi("pending");
+    const card = renderPage();
+    await new Promise((r) => setTimeout(r, 50));
+    // Label and skeleton only: no count, no tone line, no error.
+    expect(card().textContent).toBe("Needs attention");
+  });
+
+  it("gives the all-clear when both lists load and nothing needs attention", async () => {
+    mockApi("ok");
+    const card = renderPage();
+    expect(await within(card()).findByText(ALL_CLEAR)).toBeInTheDocument();
   });
 });

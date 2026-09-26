@@ -19,10 +19,14 @@ undercounted, and the error banner only covers the open tab.
 
 ## Scope
 
-- When either stock list has no data after loading, the card shows `—`, danger tone, and says the
-  stock did not load. It never shows a count it could not make.
-- Everything else unchanged. A refetch that fails over cached data keeps the cached count, as the
-  table does.
+- `KpiCard` gets an `unavailable` state: `—`, danger tone, "We couldn't load this. Try Refresh."
+  (`portal_ux_standard.md` §3: an error state shows no counts). While loading it shows the skeleton
+  alone, with no tone and no line under it. Before this, "Needs attention" showed a green "Nothing is
+  out…" under the skeleton on every page load, and "Cost coverage" showed "Every item has a cost."
+- All four headline cards use it. Items, Needs attention and Cost coverage are unavailable when
+  either stock list has no data. Stock value and Cost coverage are unavailable when
+  `/api/stock/value` fails, where they used to show a skeleton forever.
+- A refetch that fails over cached data keeps the cached numbers, as the table does.
 
 ## Manifest (files that may be touched)
 manifest:
@@ -34,16 +38,15 @@ revive: []
 
 ## Out-of-scope
 
-- The "Items" and "Cost coverage" cards also sum over lists that may have failed. They show a
-  lower number, not an all-clear, so they are left alone here.
 - Other review findings on this page (`na` shown as "No cost", mixed sources in cost coverage, no
   `as_of`). Separate tranches if Tom wants them.
 
 ## Tests / verification
 
 - typecheck clean
-- vitest: full run, plus `tests/unit/stock/inventory-needs-attention.test.tsx` (RM/PKG read fails:
-  the card shows `—` and the load message, never "Nothing is out")
+- vitest: full run, plus `tests/unit/stock/inventory-needs-attention.test.tsx`: RM/PKG read fails
+  (card shows `—` and the load message, never "Nothing is out"); still loading (label and skeleton
+  only); both lists load empty (the real all-clear). The first two fail on the tranche 177 page.
 - playwright: selectors untouched
 
 ## Rollback
