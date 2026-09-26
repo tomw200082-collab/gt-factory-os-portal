@@ -81,7 +81,7 @@ describe("portal catalogue helpers", () => {
   it("builds the WhatsApp link with the approved text, the product named, to the phone's digits", () => {
     const url = restockWaLink("+972-50-000-0001", "DETOX 1000ml")!;
     expect(url.startsWith("https://wa.me/972500000001?text=")).toBe(true);
-    expect(decodeURIComponent(url.split("?text=")[1])).toBe("היי 🙂 DETOX 1000ml חזר למלאי ואפשר להזמין שוב בפורטל.");
+    expect(decodeURIComponent(url.split("?text=")[1])).toBe("היי 🙂 DETOX 1000ml כבר כאן, ואפשר להזמין בפורטל.");
     expect(RESTOCK_TEXT).toContain("{product}");
     // no digits, no link: never WhatsApp's contact picker
     expect(restockWaLink("", "DETOX 1000ml")).toBeNull();

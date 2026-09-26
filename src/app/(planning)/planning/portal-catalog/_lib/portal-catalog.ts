@@ -63,7 +63,7 @@ export const HEADLINE_MAX = 20;
 export const PRESETS = ["חוזר בשבוע הבא", "בייצור, חוזר בקרוב", "בדרך מהספק, חוזר בקרוב"] as const;
 
 /** The text a person sends when the product is back (gate record §5.4 U-11). */
-export const RESTOCK_TEXT = "היי 🙂 {product} חזר למלאי ואפשר להזמין שוב בפורטל.";
+export const RESTOCK_TEXT = "היי 🙂 {product} כבר כאן, ואפשר להזמין בפורטל.";
 
 export const bodyOf = (r: Availability): Availability => ({
   available: r.available,

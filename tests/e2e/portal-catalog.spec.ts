@@ -194,7 +194,7 @@ test.describe("@mocked portal catalogue", () => {
     await expect(first).toContainText("972500000001");
     const href = await page.getByTestId(`catalog-wa-${REQUESTS[0].id}`).getAttribute("href");
     expect(href?.startsWith("https://wa.me/972500000001?text=")).toBe(true);
-    expect(decodeURIComponent(href!.split("?text=")[1])).toBe("היי 🙂 CALM 1000ml חזר למלאי ואפשר להזמין שוב בפורטל.");
+    expect(decodeURIComponent(href!.split("?text=")[1])).toBe("היי 🙂 CALM 1000ml כבר כאן, ואפשר להזמין בפורטל.");
     await expect(page.getByTestId(`catalog-wa-${REQUESTS[0].id}`)).toHaveAttribute("target", "_blank");
     // each customer's controls say whose they are
     await expect(page.getByRole("link", { name: "WhatsApp to Bar Lev" })).toBeVisible();
