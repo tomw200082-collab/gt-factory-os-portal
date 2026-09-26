@@ -239,27 +239,34 @@ function KpiCard({
   secondary,
   tone = "default",
   loading,
+  unavailable,
 }: {
   label: string;
   primary: string;
   secondary?: string;
   tone?: "default" | "success" | "warning" | "danger" | "info";
   loading?: boolean;
+  /** The data behind the card failed to load: show "—", never a count. */
+  unavailable?: boolean;
 }) {
+  // Loading shows the skeleton alone. A tone or a line under it would state a
+  // conclusion ("Nothing is out…") about data that has not arrived.
+  const shown = loading ? "default" : unavailable ? "danger" : tone;
+  const note = loading ? null : unavailable ? "We couldn't load this. Try Refresh." : secondary;
   const toneRing = {
     default: "ring-border",
     success: "ring-success/30",
     warning: "ring-warning/40",
     danger: "ring-danger/40",
     info: "ring-info/30",
-  }[tone];
+  }[shown];
   const toneText = {
     default: "text-fg-strong",
     success: "text-success-fg",
     warning: "text-warning-fg",
     danger: "text-danger-fg",
     info: "text-info-fg",
-  }[tone];
+  }[shown];
   return (
     <div
       className={cn(
@@ -278,11 +285,11 @@ function KpiCard({
             toneText,
           )}
         >
-          {primary}
+          {unavailable ? "—" : primary}
         </span>
       )}
-      {secondary ? (
-        <span className="text-sm text-fg-muted">{secondary}</span>
+      {note ? (
+        <span className="text-sm text-fg-muted">{note}</span>
       ) : null}
     </div>
   );
@@ -701,7 +708,7 @@ export default function InventoryPage() {
       refetchInterval: 60_000,
     });
 
-  const { data: valueData, isFetching: valueFetching, refetch: refetchValue } = useQuery({
+  const { data: valueData, isLoading: valueLoading, isFetching: valueFetching, refetch: refetchValue } = useQuery({
     queryKey: ["stock", "value"],
     queryFn: fetchStockValue,
     staleTime: 60_000,
@@ -728,6 +735,9 @@ export default function InventoryPage() {
   // Tab-spanning loading for the top KPI strip: the "Items tracked" total
   // covers both tabs, so we must wait for both before showing a real number.
   const allStockLoading = fgLoading || rmLoading;
+  // A list that failed to load is undefined, not empty. Summed as empty it
+  // gave "Needs attention" a green "Nothing is out…" while the read was down.
+  const stockUnavailable = !fgRows || !rmRows;
 
   // Groups v1 — shared curated vocabulary (product + material groups).
   const { data: groupsData } = useGroups();
@@ -1106,7 +1116,8 @@ export default function InventoryPage() {
           label="Stock value"
           primary={fmtIls(totalValue)}
           secondary="Items without a cost are not included."
-          loading={!valueData}
+          loading={valueLoading}
+          unavailable={!valueData}
         />
         <KpiCard
           label="Items"
@@ -1117,6 +1128,7 @@ export default function InventoryPage() {
               : `${fgCount} finished goods · ${rmCount} materials & packaging`
           }
           loading={allStockLoading}
+          unavailable={stockUnavailable}
         />
         <KpiCard
           label="Needs attention"
@@ -1134,6 +1146,7 @@ export default function InventoryPage() {
           }
           tone={attention.total > 0 ? "warning" : "success"}
           loading={allStockLoading}
+          unavailable={stockUnavailable}
         />
         <KpiCard
           label="Cost coverage"
@@ -1144,7 +1157,8 @@ export default function InventoryPage() {
               : "Every item has a cost."
           }
           tone={itemsMissing > 0 ? "default" : "success"}
-          loading={!valueData || allStockLoading}
+          loading={valueLoading || allStockLoading}
+          unavailable={!valueData || stockUnavailable}
         />
       </div>
 
