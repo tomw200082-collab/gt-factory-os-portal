@@ -73,7 +73,7 @@ to colors, UI defers grouping to layout.
 ## 2026-09-26 — workspace ledger, Layer 1
 
 - **Removed:** `canvas-design` (nothing referenced it, and it was 83 files and 5.4 MB of fonts) and `vercel-react-best-practices` (nothing used it).
-- **Shortened descriptions:** nine descriptions were cut to 300 characters or less so the whole skill listing fits the per-session budget: `ui-ux-pro-max`, `impeccable`, `apple-design`, `better-typography`, `better-accessibility`, `better-colors`, `better-layout`, `better-ui`, `better-writing`. The skill bodies are unchanged.
+- **Shortened descriptions:** ten descriptions were cut to 300 characters or less so the whole skill listing fits the per-session budget: `ui-ux-pro-max`, `impeccable`, `apple-design`, `better-typography`, `better-accessibility`, `better-colors`, `better-layout`, `better-ui`, `better-writing`, `better-interface`. The skill bodies are unchanged.
 - **Only copies now:** the portal's `apple-design` and `frontend-design` are the only copies in the workspace; the brain's identical copies were removed. Their provenance:
   - `apple-design` was cloned from `dickwu/apple-design-skill` at `d0bac1e`. Upstream ships no `LICENSE`, and the content is Apple's Human Interface Guidelines rewritten, so it is for internal design review only; do not redistribute it.
   - `frontend-design` was supplied by Tom on 2026-08-05. Its frontmatter points at a `LICENSE.txt` that never came with it.
