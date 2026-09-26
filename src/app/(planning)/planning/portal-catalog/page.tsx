@@ -219,7 +219,6 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
               className="input"
               dir="auto"
               maxLength={HEADLINE_MAX}
-              placeholder="אזל מהמלאי"
               value={draft.headline ?? ""}
               disabled={!canEdit}
               onChange={(e) => set({ headline: text(e.target.value) })}
