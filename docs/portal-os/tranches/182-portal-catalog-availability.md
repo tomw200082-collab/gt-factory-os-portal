@@ -100,12 +100,12 @@ revive: []
 ## Tests / verification
 
 Run locally with `NODE_ENV=test`, as in CI (this container sets `NODE_ENV=production`, which loads React's
-production build and fails every `act()`-based vitest suite on `main` too), on the code of `95090ae` (`139c5df` only
-removes a placeholder attribute), 2026-09-26 17:01–17:10Z:
+production build and fails every `act()`-based vitest suite on `main` too), on `48a5aa2` (this tranche merged with
+`main` at `cce6e46`), 2026-09-26 17:24–17:33Z:
 
 - `tsc --noEmit`: 0
 - `eslint .`: 0 errors, 560 warnings (560 on `main`)
-- `vitest run`: 1470/1470 in 159 files (1462 on `main` at `07bbbe5`; the 8 new cover `_lib/portal-catalog.ts`)
+- `vitest run`: 1480/1480 in 160 files (`main` at `cce6e46` plus the 8 that cover `_lib/portal-catalog.ts`)
 - `playwright test --grep @mocked`: 114/114, 7 of them new in `tests/e2e/portal-catalog.spec.ts`:
   - one row per catalogue SKU, grouped, with the on-hand hint;
   - a flip posts the whole row, and Save posts the date, a preset message and the alternative;
@@ -129,10 +129,9 @@ marked not available stays so for customers until an available row is written th
 ## Actual evidence
 
 - PR: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/231
-- `portal-pr-guard` `ci` on `139c5df`: success, run 36257932100 (17:08:09–17:15:30Z): eslint 0 errors (560
-  warnings), `tsc` 0, vitest 1470/1470, Playwright `@mocked` 114/114, and the registry-presence check. Earlier heads:
-  `86a94d2` run 36255345522, `734b7c5` run 36255873185, both success.
-- The local runs above: `tsc` 0 · eslint 0 errors · vitest 1470/1470 · `@mocked` 114/114.
+- `portal-pr-guard` `ci` on `48a5aa2`: success, run 36258899924 (17:24:17–17:32:38Z). Earlier heads: `139c5df` run
+  36257932100, `86a94d2` run 36255345522, `734b7c5` run 36255873185, all success.
+- The local runs above: `tsc` 0 · eslint 0 errors · vitest 1480/1480 · `@mocked` 114/114.
 - `portal-tranche-verifier`: CERTIFIED on `734b7c5` (round 2). Round 3 on `139c5df` passed every code check; it asked for
   this evidence to name the head it certifies.
 - `main` merged in `b9ac571` (#232 took 180) and again after #233 took 181: this tranche is 182.
