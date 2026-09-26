@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Planning · Portal catalogue — /planning/portal-catalog (Tranche 180).
+// Planning · Portal catalogue — /planning/portal-catalog (Tranche 181).
 //
 // What customers can order in the customer portal. A planner or admin marks a
 // product "not available now" (the switch posts at once), says when it is

@@ -1,7 +1,8 @@
-# Tranche 180 — portal catalogue: what customers can order, set by a planner
+# Tranche 181 — portal catalogue: what customers can order, set by a planner
 
 **Status:** built, draft PR. Merges after `gt-factory-os` migration `0357` is applied and its API PR is live (the
-masterprompt's W6 order: migration → API → this screen).
+masterprompt's W6 order: migration → API → this screen). Planned as 180 (the masterprompt's D9 and D12 name it so);
+renumbered 181 on 2026-09-26 when #232 took 180 on `main`.
 **Origin:** `gt-factory-os/docs/superpowers/plans/2026-09-26-customer-portal-availability-masterprompt.md`, W4,
 with Tom's brainstorm answers of 2026-09-26 in its §1.1. The staff half of the availability switch; the API, the
 table and the customer's card are in `gt-factory-os`.
@@ -63,7 +64,7 @@ answer planner and admin only (403 otherwise).
 ## Manifest (files that may be touched)
 
 manifest:
-  - docs/portal-os/tranches/180-portal-catalog-availability.md
+  - docs/portal-os/tranches/181-portal-catalog-availability.md
   - docs/portal-os/tranches/179-portal-registrations.md
   - docs/portal-os/tranches/_active.txt
   - docs/portal-os/registry.md

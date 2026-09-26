@@ -427,7 +427,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:execute",
       },
       {
-        // Tranche 180 — what customers can order in the customer portal: a
+        // Tranche 181 — what customers can order in the customer portal: a
         // planner marks a product not available now, when it is back, what to
         // offer instead, and works the "tell me when it is back" list. The
         // page itself admits planning:read (read-only for operator/viewer);
