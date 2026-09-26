@@ -202,6 +202,14 @@ function smartRelativeDate(iso: string | null): { label: string; aria: string; d
   return { label, aria: fullDate, daysAgo: days };
 }
 
+// When cached data was fetched: the time if it was today, else date and time.
+function fmtFetchedAt(iso: string): string {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${time}`;
+}
+
 function deriveTier(onHandRaw: string, neverCounted?: boolean): Tier {
   // "Uncounted" wins over "Out" so the operator can tell at a glance that the
   // zero is "we haven't measured this yet" rather than "we measured 0".
@@ -220,6 +228,18 @@ function deriveCostStatus(itemType: string, value: ValueMeta | null): CostStatus
   if (value.unit_cost !== null) return "has_cost";
   if (itemType === "FG" && value.supply_method === "MANUFACTURED") return "pending_rollup";
   return "missing_cost";
+}
+
+// The cost cell for a row without a cost. "No cost" only when the value data
+// says so: the rows the Missing cost filter keeps. "na" means there is no
+// value row at all (never counted, or the value data has not loaded), so the
+// cost is unknown here, not missing.
+function NoCost({ status }: { status: CostStatus }) {
+  return (
+    <span className="text-sm text-fg-subtle">
+      {status === "na" ? "—" : "No cost"}
+    </span>
+  );
 }
 
 // === Category classification ==============================================
@@ -466,7 +486,7 @@ function InventoryCardMobile({
             {totalVal.display}
           </span>
         ) : (
-          <span className="text-sm text-fg-subtle">No cost</span>
+          <NoCost status={cost} />
         )}
         <span className="ml-auto text-sm text-fg-muted" title={date.aria}>
           {date.label}
@@ -708,7 +728,7 @@ export default function InventoryPage() {
       refetchInterval: 60_000,
     });
 
-  const { data: valueData, isLoading: valueLoading, isFetching: valueFetching, refetch: refetchValue } = useQuery({
+  const { data: valueData, isLoading: valueLoading, error: valueError, isFetching: valueFetching, refetch: refetchValue } = useQuery({
     queryKey: ["stock", "value"],
     queryFn: fetchStockValue,
     staleTime: 60_000,
@@ -976,8 +996,16 @@ export default function InventoryPage() {
 
   // KPI metrics
   const totalValue = valueData?.total_value_ils ?? "0";
+  // A refetch that failed over cached data: TanStack keeps the old value, so
+  // the Stock value card says how old it is.
+  const valueStale = valueError != null && valueData != null;
+  // Cost coverage reads all three numbers from the value rollup, which covers
+  // counted items only (gt-factory-os api/src/stock/value-handler.ts reads
+  // current_balances). The stock lists also hold never-counted items, whose
+  // cost this page cannot see, so they are not a denominator for it.
   const itemsWithCost = valueData?.items_with_cost ?? 0;
   const itemsMissing = valueData?.items_without_cost ?? 0;
+  const countedItems = itemsWithCost + itemsMissing;
   // Use the live list count (includes never-counted items) over value-handler's
   // row_count (which currently mirrors current_balances and excludes uncounted).
   const totalItems = fgCount + rmCount;
@@ -1115,7 +1143,12 @@ export default function InventoryPage() {
         <KpiCard
           label="Stock value"
           primary={fmtIls(totalValue)}
-          secondary="Items without a cost are not included."
+          secondary={
+            valueStale
+              ? `Couldn't refresh — showing ${fmtFetchedAt(valueData.as_of)}`
+              : "Items without a cost are not included."
+          }
+          tone={valueStale ? "warning" : "default"}
           loading={valueLoading}
           unavailable={!valueData}
         />
@@ -1150,15 +1183,15 @@ export default function InventoryPage() {
         />
         <KpiCard
           label="Cost coverage"
-          primary={`${itemsWithCost} / ${totalItems}`}
+          primary={`${itemsWithCost} / ${countedItems}`}
           secondary={
             itemsMissing > 0
-              ? `${itemsMissing} items have no cost yet — see the Missing cost filter.`
-              : "Every item has a cost."
+              ? `${itemsMissing} counted ${itemsMissing === 1 ? "item has" : "items have"} no cost yet — see the Missing cost filter.`
+              : "Every counted item has a cost."
           }
           tone={itemsMissing > 0 ? "default" : "success"}
-          loading={valueLoading || allStockLoading}
-          unavailable={!valueData || stockUnavailable}
+          loading={valueLoading}
+          unavailable={!valueData}
         />
       </div>
 
@@ -1776,9 +1809,7 @@ export default function InventoryPage() {
                                             {unitCost.display}
                                           </span>
                                         ) : (
-                                          <span className="text-sm text-fg-subtle">
-                                            No cost
-                                          </span>
+                                          <NoCost status={cost} />
                                         )}
                                       </td>
                                       <td className="py-2 pr-4 text-right tabular-nums">

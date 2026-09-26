@@ -15,11 +15,6 @@
 //    bom_lines         → line_id           (uuid)
 //    planning_policy   → key               (text, no audit envelope)
 //
-// PlanningPolicyDto is a key-value store with no audit envelope, so it
-// gets its own narrower KeyValueRepository<T> contract (see below). This
-// is the structural decision approved in Gate 1: narrower repo, not
-// weaker WithIdAudit generic, not softened DTO.
-//
 // BomsRepo is also rewritten here. The previous draft embedded
 // `versions: BomVersionDto[]` inside BomHeadDto; the locked three-table
 // schema (0003_bom_three_table.sql) keeps heads, versions, and lines as
@@ -50,22 +45,6 @@ export interface Repository<TDto> {
   create(draft: Omit<TDto, "audit">): Promise<TDto>;
   update(id: string, patch: Partial<TDto>, expectedVersion: number): Promise<TDto>;
   setActive(id: string, active: boolean): Promise<TDto>;
-}
-
-// ---------------------------------------------------------------------------
-// Key-value repository — narrower contract for flat text K/V tables
-// (planning_policy). No audit envelope, no optimistic concurrency via
-// version bump, no soft-delete. Upsert semantics.
-//
-// Phase A structural decision (Gate 1): PlanningPolicyDto is genuinely
-// heterogeneous with the audited masters; the right fix is a narrower
-// repo, not a weakened generic.
-// ---------------------------------------------------------------------------
-export interface KeyValueRepository<TDto> {
-  list(params?: { query?: string }): Promise<TDto[]>;
-  get(key: string): Promise<TDto | null>;
-  put(row: TDto): Promise<TDto>;
-  remove(key: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

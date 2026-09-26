@@ -10,17 +10,12 @@ import { IdbBomsRepo } from "./boms-repo";
 import { STORES, getDb } from "./idb";
 import { SEED_ITEMS } from "@/lib/fixtures/items";
 import { SEED_COMPONENTS } from "@/lib/fixtures/components";
-import {
-  SEED_SUPPLIERS,
-  SEED_SUPPLIER_ITEMS,
-} from "@/lib/fixtures/suppliers";
+import { SEED_SUPPLIER_ITEMS } from "@/lib/fixtures/suppliers";
 import {
   SEED_BOM_HEADS,
   SEED_BOM_VERSIONS,
   SEED_BOM_LINES,
 } from "@/lib/fixtures/boms";
-import { SEED_POLICIES } from "@/lib/fixtures/planning-policy";
-import { SEED_USERS } from "@/lib/fixtures/users";
 
 // ---------------------------------------------------------------------------
 // Seed wiring — reconciled for Phase A.
@@ -29,6 +24,11 @@ import { SEED_USERS } from "@/lib/fixtures/users";
 // transaction. Fixtures must export three separate arrays now
 // (SEED_BOM_HEADS, SEED_BOM_VERSIONS, SEED_BOM_LINES) matching the
 // three-table schema.
+//
+// Only the stores a repo below reads are seeded. The suppliers,
+// planning_policy and users stores stay declared in idb.ts (dropping a store
+// needs a DB_VERSION bump) but nothing reads them since tranche 178, so
+// tranche 181 stopped writing them.
 // ---------------------------------------------------------------------------
 
 let seeded = false;
@@ -47,29 +47,22 @@ export async function ensureSeeded(): Promise<void> {
     [
       STORES.items,
       STORES.components,
-      STORES.suppliers,
       STORES.supplierItems,
       STORES.boms,
       STORES.bomVersions,
       STORES.bomLines,
-      STORES.planningPolicy,
-      STORES.users,
       STORES.meta,
     ],
     "readwrite",
   );
   for (const row of SEED_ITEMS) tx.objectStore(STORES.items).put(row);
   for (const row of SEED_COMPONENTS) tx.objectStore(STORES.components).put(row);
-  for (const row of SEED_SUPPLIERS) tx.objectStore(STORES.suppliers).put(row);
   for (const row of SEED_SUPPLIER_ITEMS)
     tx.objectStore(STORES.supplierItems).put(row);
   for (const row of SEED_BOM_HEADS) tx.objectStore(STORES.boms).put(row);
   for (const row of SEED_BOM_VERSIONS)
     tx.objectStore(STORES.bomVersions).put(row);
   for (const row of SEED_BOM_LINES) tx.objectStore(STORES.bomLines).put(row);
-  for (const row of SEED_POLICIES)
-    tx.objectStore(STORES.planningPolicy).put(row);
-  for (const row of SEED_USERS) tx.objectStore(STORES.users).put({ ...row });
   tx.objectStore(STORES.meta).put({ id: "seed_flag", seeded: true });
   await tx.done;
   seeded = true;
