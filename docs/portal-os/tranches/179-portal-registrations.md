@@ -1,6 +1,6 @@
 # Tranche 179 — portal registrations: the staff screen
 
-**Status:** built, not merged. **Awaiting Tom's written D1 approval of the customer-portal module. Do not merge.**
+**Status:** merged (#230, `0fc9f6b`).
 **Origin:** the customer-portal overnight masterprompt, W5 (`gt-factory-os/docs/superpowers/plans/2026-09-24-customer-portal-overnight-masterprompt.md`),
 built to its r2 staff-route contract. The staff half of the customer ordering portal; the API it calls is being built
 in parallel in `gt-factory-os`.

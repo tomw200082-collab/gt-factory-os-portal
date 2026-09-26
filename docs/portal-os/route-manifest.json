@@ -12,7 +12,8 @@
     "Tranche 086 (2026-06-20): added /purchase-orders/placement-queue (live, planning:execute) — office-manager place-order queue for the two-stage PO handoff (APPROVED_TO_ORDER → OPEN).",
     "Tranche 090 (2026-06-25): added three orphan rows surfaced by the /portal-audit route-auditor — /admin/decision-board (tranche 080, economics group planner+admin), /credit-tracking (CLAUDE.md-authorized bookkeeper surface, shared group all roles), /inbox/approvals/inventory-movement/[submission_id] (planner+admin approval). All three were live code + nav with no manifest row. No status changes; additive only.",
     "Tranche 162 (2026-08-17): the sales workspace enters the manifest — /apps plus the (sales) route group. Roles are admin-only in v1, enforced by the RoleGate in (sales)/layout.tsx and by every sales API endpoint server-side; the middleware ROLE_GATES rows are dormant like the rest of that table until app_users.role reaches the JWT.",
-    "Tranche 179 (2026-09-24): added /admin/portal-registrations (admin only, (admin) layout admin:execute) — the staff screen of the customer-portal module: pending access requests approved by linking the phone to its Shopify customer, and login links and revoking access for approved customers. Ships in a draft PR awaiting Tom's written D1 approval of that module."
+    "Tranche 179 (2026-09-24): added /admin/portal-registrations (admin only, (admin) layout admin:execute) — the staff screen of the customer-portal module: pending access requests approved by linking the phone to its Shopify customer, and login links and revoking access for approved customers. Ships in a draft PR awaiting Tom's written D1 approval of that module.",
+    "Tranche 180 (2026-09-26): added /planning/portal-catalog ((planning) layout planning:read; changes planner+admin via planning:execute and the API) — which customer-portal products are not available now, when they are back, what to offer instead, and the customers waiting to be told."
   ],
   "generated_at": "2026-06-11T00:00:00Z",
   "anchor_sha_at_seed": "55682bb",
@@ -363,6 +364,18 @@
       ],
       "group": "planning",
       "notes": "Tranche 028: merged procurement front door; default view = action list grouped by decision (must-today/can-wait/handled) built from the open purchase session; entry point for focus mode (029); tranche 046: roles refreshed to match (planning) layout planning:read (all roles; nav entry stays planner-min)"
+    },
+    {
+      "path": "/planning/portal-catalog",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Tranche 180 — the customer portal's catalogue: mark a product not available now (with the expected date, a one-line message to customers and the product to offer instead), and the customers waiting to be told when it is back. Operator/viewer read-only; changes planner+admin (planning:execute, and 403 upstream). Proxies under /api/portal/catalog/*."
     },
     {
       "path": "/planning/procurement/[session_po_id]/sheet",
