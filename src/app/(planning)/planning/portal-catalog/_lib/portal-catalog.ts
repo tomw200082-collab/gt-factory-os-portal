@@ -24,6 +24,8 @@ export interface CatalogRow {
   available: boolean;
   /** What the card says in place of «אזל מהמלאי» (e.g. «בקרוב»); null says «אזל מהמלאי». */
   headline: string | null;
+  /** The look on the customer's card: false sold out (greyed), true on its way (full colour, "coming soon"). */
+  upcoming: boolean;
   back_on: string | null;
   /** The date is before today in Israel: customers no longer see it. */
   back_on_passed: boolean;
@@ -49,7 +51,7 @@ export interface RestockRequest {
 
 /** A change is always the whole row: `headline` and `return_note` customer-visible (one line, at most
  *  {@link HEADLINE_MAX} and {@link NOTE_MAX} characters), `back_on` YYYY-MM-DD as typed, `note` internal. */
-export type Availability = Pick<CatalogRow, "available" | "headline" | "back_on" | "return_note" | "alternative_sku" | "note">;
+export type Availability = Pick<CatalogRow, "available" | "headline" | "upcoming" | "back_on" | "return_note" | "alternative_sku" | "note">;
 
 /** One planner change, as stored (every change is its own row). */
 export type Change = Availability & { changed_by: string; changed_at: string };
@@ -66,6 +68,7 @@ export const RESTOCK_TEXT = "היי 🙂 {product} חזר למלאי ואפשר 
 export const bodyOf = (r: Availability): Availability => ({
   available: r.available,
   headline: r.headline,
+  upcoming: r.upcoming,
   back_on: r.back_on,
   return_note: r.return_note,
   alternative_sku: r.alternative_sku,
