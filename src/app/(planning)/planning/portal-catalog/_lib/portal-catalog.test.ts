@@ -95,15 +95,11 @@ describe("portal catalogue helpers", () => {
     });
   });
 
-  it("explains each refusal in words a planner acts on", () => {
+  it("explains each refusal in words a planner acts on, never a status code or the API's field names", () => {
     expect(failureMessage({ status: 0 })).toMatch(/Could not reach the server/);
     expect(failureMessage({ status: 403 })).toBe("Only a planner or an admin can change the portal catalogue.");
     expect(failureMessage({ status: 404 })).toMatch(/no longer there/);
-    // the API's { error } as the shared client hands it over
-    expect(failureMessage({ status: 422, reason_code: "return_note up to 25 characters" })).toBe(
-      "The change was not accepted: return_note up to 25 characters",
-    );
-    expect(failureMessage({ status: 422 })).toBe("The change was not accepted.");
-    expect(failureMessage({ status: 502 })).toBe("Could not save (HTTP 502). Try again.");
+    expect(failureMessage({ status: 422 })).toBe("The change was not accepted. Refresh the page and try again.");
+    expect(failureMessage({ status: 502 })).toBe("Could not save. Try again. If the problem continues, contact the system administrator.");
   });
 });

@@ -129,14 +129,16 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
     return r ? productName(r) : sku;
   };
 
-  // one post per [sku, whole row]; the list is refetched either way, so the screen never shows what the server lacks
+  // one post per [sku, whole row], in order; the list is refetched either way, so the screen never shows what the server lacks
   const save = useMutation({
-    mutationFn: async ([sku, body]: [string, Availability]) => {
-      try {
-        await postCatalog(skuPath(sku), body);
-      } catch (e) {
-        // "Same for …" writes the other size: its failure is named, on this row
-        throw sku === row.sku ? e : new Error(`${nameOf(sku)}: ${(e as Error).message}`);
+    mutationFn: async (posts: Array<[string, Availability]>) => {
+      for (const [sku, body] of posts) {
+        try {
+          await postCatalog(skuPath(sku), body);
+        } catch (e) {
+          // "Same for …" writes the other size: its failure is named, on this row
+          throw sku === row.sku ? e : new Error(`${nameOf(sku)}: ${(e as Error).message}`);
+        }
       }
     },
     onSettled: async () => {
@@ -172,7 +174,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
             id={`avail-${row.sku}`}
             aria-checked={row.available}
             disabled={!canEdit || save.isPending}
-            onClick={() => save.mutate([row.sku, { ...bodyOf(row), available: !row.available }])}
+            onClick={() => save.mutate([[row.sku, { ...bodyOf(row), available: !row.available }]])}
             className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60"
             data-testid={`catalog-switch-${row.sku}`}
           >
@@ -190,8 +192,12 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
               type="button"
               className="btn btn-outline btn-sm"
               disabled={!canEdit || save.isPending}
+              // the form as it stands, saved here first when changed, then on the other size (never pointing it at itself)
               onClick={() =>
-                save.mutate([sib.sku, { ...bodyOf(row), alternative_sku: row.alternative_sku === sib.sku ? null : row.alternative_sku }])
+                save.mutate([
+                  ...(dirty ? [[row.sku, draft] as [string, Availability]] : []),
+                  [sib.sku, { ...draft, alternative_sku: draft.alternative_sku === sib.sku ? null : draft.alternative_sku }],
+                ])
               }
               data-testid={`catalog-both-${row.sku}`}
             >
@@ -303,7 +309,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
               type="button"
               className="btn btn-primary"
               disabled={!canEdit || !dirty || save.isPending}
-              onClick={() => save.mutate([row.sku, draft])}
+              onClick={() => save.mutate([[row.sku, draft]])}
               data-testid={`catalog-save-${row.sku}`}
             >
               Save
@@ -421,7 +427,7 @@ function Waiting({ row, name }: { row: CatalogRow; name: string }): JSX.Element 
                         rel="noopener noreferrer"
                         data-testid={`catalog-wa-${w.id}`}
                       >
-                        WhatsApp
+                        WhatsApp<span className="sr-only"> to {w.display_name ?? w.wa_phone}</span>
                       </a>
                     )}
                     <button
@@ -431,7 +437,7 @@ function Waiting({ row, name }: { row: CatalogRow; name: string }): JSX.Element 
                       onClick={() => done.mutate(w.id)}
                       data-testid={`catalog-notified-${w.id}`}
                     >
-                      Mark notified
+                      Mark notified<span className="sr-only">: {w.display_name ?? w.wa_phone}</span>
                     </button>
                   </span>
                 </li>

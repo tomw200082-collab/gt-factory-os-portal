@@ -6,9 +6,10 @@
 // (page.route) over a small stateful catalogue, so the screen runs with no
 // backend. Covered: one row per catalogue SKU; a planner's flip posts the whole
 // row; Save posts the date, a preset message and the chosen alternative; "Same
-// for 500 ml" writes the other size; a passed date is marked; an operator sees
-// every control disabled and the waiting count only; a planner opens the
-// waiting customers, the WhatsApp link carries the approved text, and Mark
+// for 500 ml" writes the other size, and before Save saves the form here first;
+// a passed date is marked; an operator sees every control disabled and the
+// waiting count only; a planner opens the waiting customers, each control named
+// for its customer, the WhatsApp link carries the approved text, and Mark
 // notified posts and the count drops.
 // ---------------------------------------------------------------------------
 
@@ -139,6 +140,21 @@ test.describe("@mocked portal catalogue", () => {
     await expect(page.getByTestId("catalog-switch-GT-LUI-LOW-0.5L")).toHaveAttribute("aria-checked", "false");
   });
 
+  test("Same for 500 ml before Save: the form as it stands is saved here, then on the other size", async ({ page }) => {
+    const { posts } = await open(page, "planner");
+    await page.getByTestId("catalog-switch-GT-LUI-LOW-1L").click();
+    await expect(page.getByTestId("catalog-switch-GT-LUI-LOW-1L")).toHaveAttribute("aria-checked", "false");
+    await page.getByTestId("catalog-back-on-GT-LUI-LOW-1L").fill("2026-10-02");
+    await page.getByTestId("catalog-preset-GT-LUI-LOW-1L-1").click();
+    await page.getByTestId("catalog-alt-GT-LUI-LOW-1L").selectOption("GT-LUI-LOW-0.5L");
+    await page.getByTestId("catalog-both-GT-LUI-LOW-1L").click();
+    await expect.poll(() => posts.length).toBe(3);
+    const form = { available: false, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: null };
+    expect(posts[1]).toEqual({ sku: "GT-LUI-LOW-1L", body: { ...form, alternative_sku: "GT-LUI-LOW-0.5L" } });
+    expect(posts[2]).toEqual({ sku: "GT-LUI-LOW-0.5L", body: { ...form, alternative_sku: null } });
+    await expect(page.getByTestId("catalog-save-GT-LUI-LOW-1L")).toBeDisabled();
+  });
+
   test("a date that has passed is marked, and customers no longer see it", async ({ page }) => {
     await open(page, "planner");
     await expect(page.getByTestId("catalog-passed-GT-CHA-LOW-1L")).toContainText("Expected date passed");
@@ -170,6 +186,9 @@ test.describe("@mocked portal catalogue", () => {
     expect(href?.startsWith("https://wa.me/972500000001?text=")).toBe(true);
     expect(decodeURIComponent(href!.split("?text=")[1])).toBe("היי 🙂 CALM 1000ml חזר למלאי ואפשר להזמין שוב בפורטל.");
     await expect(page.getByTestId(`catalog-wa-${REQUESTS[0].id}`)).toHaveAttribute("target", "_blank");
+    // each customer's controls say whose they are
+    await expect(page.getByRole("link", { name: "WhatsApp to Bar Lev" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Mark notified\W+קפה לדוגמה$/ })).toBeVisible();
 
     await page.getByTestId(`catalog-notified-${REQUESTS[0].id}`).click();
     await expect.poll(() => notified).toEqual([REQUESTS[0].id]);

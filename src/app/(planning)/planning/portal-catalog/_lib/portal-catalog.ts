@@ -123,13 +123,13 @@ export function restockWaLink(phone: string, product: string): string | null {
   return waHref(phone, RESTOCK_TEXT.replace("{product}", product));
 }
 
-/** What a row says when the server refuses a change or a Mark notified. The API's `{ error }` arrives as `reason_code`. */
-export function failureMessage({ status, reason_code }: { status: number; reason_code?: string }): string {
+/** What a row says when the server refuses a change or a Mark notified: never a status code or the API's own wording. */
+export function failureMessage({ status }: { status: number }): string {
   if (status === 0) return "Could not reach the server. Check your connection and try again.";
   if (status === 403) return "Only a planner or an admin can change the portal catalogue.";
   if (status === 404) return "This is no longer there. Refresh the page.";
-  if (status === 422) return `The change was not accepted${reason_code ? `: ${reason_code}` : "."}`;
-  return `Could not save (HTTP ${status}). Try again.`;
+  if (status === 422) return "The change was not accepted. Refresh the page and try again.";
+  return "Could not save. Try again. If the problem continues, contact the system administrator.";
 }
 
 /** POST through the shared client; a refusal or a network failure throws with {@link failureMessage}. */

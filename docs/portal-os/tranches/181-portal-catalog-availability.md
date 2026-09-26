@@ -28,18 +28,22 @@ accessories. Each row:
 
 - the product, its SKU, and **On hand** from stock truth: a read-only hint, shown as returned (negative included) or
   "—" when the SKU is not mapped. It never changes anything.
-- **Available / Not available now**, a switch that posts at once. Customers see it on their next page load.
+- **Available / Not available now**, a switch that posts at once. Customers see it on their next page load. Marked
+  available, the outage's date, message, alternative and note end with it (the API stores none), so the next outage
+  starts clean and never re-publishes an old line.
 - while not available: **Expected back** (a date), **Message to customers** (one line, at most 25 characters, with three
   preset chips that fill it: `חוזר בשבוע הבא` · `בייצור, חוזר בקרוב` · `בדרך מהספק, חוזר בקרוב`), **Suggest instead**
   (any other catalogue product, none by default; nothing is suggested automatically) and an **Internal note**, saved
   together with **Save**. A date that has passed is marked "Expected date passed"; customers no longer see it.
-- on tea rows, **Same for 500 ml** / **Same for 1 L**: the row's whole state applied to the other size (one post).
+- on tea rows, **Same for 500 ml** / **Same for 1 L**: the form as it stands applied to the other size, saved on
+  this row first when it has unsaved changes (one or two posts; never pointing the other size at itself).
 - "Changed by … · when", and "Not available for N days".
 - **Waiting: N**, the customers who tapped "tell me when it is back". Planners and admins expand it: each customer's
   name, branch and phone, a WhatsApp link with the approved text typed
   (`היי 🙂 {product} חזר למלאי ואפשר להזמין שוב בפורטל.`, gate record §5.4 U-11) that a person sends, and **Mark
   notified**. Nothing on this page messages anyone. Operators and viewers see the count only.
 - **History**, every change for the SKU, newest first (a native `<details>`).
+- A refused change is said on its row in plain words: never a status code or the API's own field names.
 
 A product that is available again while customers are still waiting moves to a **Back in stock — customers waiting**
 section at the top until every request is marked notified.
