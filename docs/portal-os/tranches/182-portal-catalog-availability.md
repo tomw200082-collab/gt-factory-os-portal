@@ -1,8 +1,8 @@
-# Tranche 181 — portal catalogue: what customers can order, set by a planner
+# Tranche 182 — portal catalogue: what customers can order, set by a planner
 
 **Status:** built, draft PR. Merges after `gt-factory-os` migration `0357` is applied and its API PR is live (the
 masterprompt's W6 order: migration → API → this screen). Planned as 180 (the masterprompt's D9 and D12 name it so);
-renumbered 181 on 2026-09-26 when #232 took 180 on `main`.
+renumbered 181 on 2026-09-26 when #232 took 180 on `main`, then 182 when #233 took 181.
 **Origin:** `gt-factory-os/docs/superpowers/plans/2026-09-26-customer-portal-availability-masterprompt.md`, W4,
 with Tom's brainstorm answers of 2026-09-26 in its §1.1. The staff half of the availability switch; the API, the
 table and the customer's card are in `gt-factory-os`.
@@ -70,7 +70,7 @@ answer planner and admin only (403 otherwise).
 ## Manifest (files that may be touched)
 
 manifest:
-  - docs/portal-os/tranches/181-portal-catalog-availability.md
+  - docs/portal-os/tranches/182-portal-catalog-availability.md
   - docs/portal-os/tranches/179-portal-registrations.md
   - docs/portal-os/tranches/_active.txt
   - docs/portal-os/registry.md
@@ -135,4 +135,4 @@ marked not available stays so for customers until an available row is written th
 - The local runs above: `tsc` 0 · eslint 0 errors · vitest 1470/1470 · `@mocked` 114/114.
 - `portal-tranche-verifier`: CERTIFIED on `734b7c5` (round 2). Round 3 on `139c5df` passed every code check; it asked for
   this evidence to name the head it certifies.
-- `main` merged in `b9ac571`: #232 took 180, so this tranche is 181.
+- `main` merged in `b9ac571` (#232 took 180) and again after #233 took 181: this tranche is 182.

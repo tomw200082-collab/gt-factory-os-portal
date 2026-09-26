@@ -24,7 +24,6 @@ import type {
   ComponentRefType,
   ComponentStatus,
   ItemStatus,
-  Role,
   SupplierStatus,
   SupplyMethod,
   Uom,
@@ -373,22 +372,13 @@ export interface BomLineDto {
 // Operational / UI DTOs — unchanged by Phase A
 // ===========================================================================
 // These are portal-side concerns (operator drafts, submissions,
-// forecasts, recommendations, exceptions, approvals, dashboards, jobs,
-// users) that are not defined by the current Tranche 1 migrations. They
+// forecasts, recommendations, exceptions, approvals, dashboards, jobs)
+// that are not defined by the current Tranche 1 migrations. They
 // will be touched in later tranches when their respective backend
 // contracts land. Phase A deliberately does not reshape them to avoid
 // conflating "align master data with the locked schema" with "design
 // future operational DTOs".
 // ===========================================================================
-
-export interface UserDto {
-  id: string;
-  email: string;
-  display_name: string;
-  role: Role;
-  active: boolean;
-  last_login_at?: string;
-}
 
 export interface GoodsReceiptLineDto {
   id: string;

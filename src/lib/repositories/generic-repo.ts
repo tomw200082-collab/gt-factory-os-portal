@@ -3,11 +3,7 @@
 import { getDb, type StoreName } from "./idb";
 import { bumpAudit, seedAudit } from "@/lib/fixtures/audit";
 import type { AuditMeta } from "@/lib/contracts/dto";
-import type {
-  KeyValueRepository,
-  QueryListParams,
-  Repository,
-} from "./types";
+import type { QueryListParams, Repository } from "./types";
 
 // ---------------------------------------------------------------------------
 // GenericIdbRepo — master repository with audit envelope.
@@ -148,63 +144,6 @@ export class GenericIdbRepo<T extends HasAudit> implements Repository<T> {
     } as T;
     await db.put(this.store, next);
     return next;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// KeyValueIdbRepo — narrower repo for flat K/V tables (planning_policy).
-//
-// No audit envelope, no optimistic concurrency, no soft delete. Upsert
-// semantics. This is the Gate 1 structural decision in practice:
-// narrower contract for a genuinely narrower DTO, no softening of the
-// audited generic.
-// ---------------------------------------------------------------------------
-export interface KeyValueIdbRepoOptions<T> {
-  store: StoreName;
-  keyOf: (row: T) => string;
-  searchFields?: (keyof T)[];
-}
-
-export class KeyValueIdbRepo<T> implements KeyValueRepository<T> {
-  private readonly store: StoreName;
-  private readonly keyOf: (row: T) => string;
-  private readonly searchFields: (keyof T)[];
-
-  constructor(options: KeyValueIdbRepoOptions<T>) {
-    this.store = options.store;
-    this.keyOf = options.keyOf;
-    this.searchFields = options.searchFields ?? [];
-  }
-
-  async list(params?: { query?: string }): Promise<T[]> {
-    const db = await getDb();
-    const all = (await db.getAll(this.store)) as T[];
-    const q = params?.query?.trim().toLowerCase();
-    const filtered = q
-      ? all.filter((row) =>
-          this.searchFields.some((f) => {
-            const v = row[f];
-            return typeof v === "string" && v.toLowerCase().includes(q);
-          }),
-        )
-      : all;
-    return filtered.sort((a, b) => this.keyOf(a).localeCompare(this.keyOf(b)));
-  }
-
-  async get(key: string): Promise<T | null> {
-    const db = await getDb();
-    return ((await db.get(this.store, key)) as T | undefined) ?? null;
-  }
-
-  async put(row: T): Promise<T> {
-    const db = await getDb();
-    await db.put(this.store, row);
-    return row;
-  }
-
-  async remove(key: string): Promise<void> {
-    const db = await getDb();
-    await db.delete(this.store, key);
   }
 }
 

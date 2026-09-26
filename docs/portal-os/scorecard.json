@@ -140,7 +140,7 @@
         "Tranche 012: defensive upstream-shape tolerance pattern demonstrated on PO detail page",
         "TanStack cache keys prefix-compatible; shadcn primitives consistent"
       ],
-      "gap": "Maintained at 10. Follow-up: env fail-fast is not implemented (the tranche 011 helper was never wired; removed in 176); graduate CSP from report-only; install @sentry/nextjs."
+      "gap": "Maintained at 10. Follow-up: env fail-fast is not implemented (the tranche 011 helper was never wired; removed in tranche 178); graduate CSP from report-only; install @sentry/nextjs."
     },
     "regression_resistance": {
       "score": 10,

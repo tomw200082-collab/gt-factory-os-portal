@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Portal catalogue — the response shapes and the small pure helpers the page
-// uses (Tranche 181).
+// uses (Tranche 182).
 //
 // The shapes are the staff-route contract of the customer-portal API
 // (gt-factory-os, migration 0357); the page reads them through the proxies

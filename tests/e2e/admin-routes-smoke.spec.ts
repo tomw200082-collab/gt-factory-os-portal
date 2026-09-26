@@ -154,7 +154,7 @@ test.describe("Wave 5b — admin routes render (G6)", () => {
       page.getByRole("heading", { level: 1, name: "Planning policy" }),
     ).toBeVisible();
 
-    // A fixture key — proves the narrow KeyValueIdbRepo path is wired.
+    // A policy key — proves the page's policy list renders.
     await expect(
       page.getByText("adjustment.auto_post.small_threshold"),
     ).toBeVisible();
