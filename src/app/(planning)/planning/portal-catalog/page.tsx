@@ -36,6 +36,7 @@ import { cn } from "@/lib/cn";
 import { formatWhen } from "@/app/(admin)/admin/portal-registrations/_lib/portal-registrations";
 import {
   GROUPS,
+  HEADLINE_MAX,
   NOTE_MAX,
   PRESETS,
   bodyOf,
@@ -209,6 +210,27 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
 
       {!row.available && (
         <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor={`head-${row.sku}`}>
+              Status on the card
+            </label>
+            <input
+              id={`head-${row.sku}`}
+              className="input"
+              dir="auto"
+              maxLength={HEADLINE_MAX}
+              placeholder="אזל מהמלאי"
+              value={draft.headline ?? ""}
+              disabled={!canEdit}
+              onChange={(e) => set({ headline: text(e.target.value) })}
+              aria-describedby={`head-hint-${row.sku}`}
+              data-testid={`catalog-headline-${row.sku}`}
+            />
+            <span id={`head-hint-${row.sku}`} className="mt-1 block text-xs text-fg-muted">
+              Empty shows <bdi>אזל מהמלאי</bdi>. Any words, e.g. <bdi>בקרוב</bdi>, up to {HEADLINE_MAX} characters (
+              {(draft.headline ?? "").length}/{HEADLINE_MAX})
+            </span>
+          </div>
           <div>
             <label className="label" htmlFor={`back-${row.sku}`}>
               Expected back
@@ -343,6 +365,12 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
             {row.history.map((h) => (
               <li key={h.changed_at}>
                 {formatWhen(h.changed_at)} · {h.changed_by} · {h.available ? "Available" : "Not available now"}
+                {h.headline && (
+                  <>
+                    {" · "}
+                    <bdi>{h.headline}</bdi>
+                  </>
+                )}
                 {h.back_on && ` · back ${formatDay(h.back_on)}`}
                 {h.return_note && (
                   <>

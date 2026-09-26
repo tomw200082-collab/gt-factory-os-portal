@@ -31,7 +31,9 @@ accessories. Each row:
 - **Available / Not available now**, a switch that posts at once. Customers see it on their next page load. Marked
   available, the outage's date, message, alternative and note end with it (the API stores none), so the next outage
   starts clean and never re-publishes an old line.
-- while not available: **Expected back** (a date), **Message to customers** (one line, at most 25 characters, with three
+- while not available: **Status on the card**, the words the customer reads in place of `אזל מהמלאי` (free text, at
+  most 20 characters, empty for `אזל מהמלאי`; e.g. `בקרוב`, Tom 2026-09-26: any wording without code per kind),
+  **Expected back** (a date), **Message to customers** (one line, at most 25 characters, with three
   preset chips that fill it: `חוזר בשבוע הבא` · `בייצור, חוזר בקרוב` · `בדרך מהספק, חוזר בקרוב`), **Suggest instead**
   (any other catalogue product, none by default; nothing is suggested automatically) and an **Internal note**, saved
   together with **Save**. A date that has passed is marked "Expected date passed"; customers no longer see it.

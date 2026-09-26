@@ -6,7 +6,8 @@
 // (page.route) over a small stateful catalogue, so the screen runs with no
 // backend. Covered: one row per catalogue SKU; a planner's flip posts the whole
 // row; Save posts the date, a preset message and the chosen alternative; "Same
-// for 500 ml" writes the other size, and before Save saves the form here first;
+// for 500 ml" writes the other size, and before Save saves the form, the status
+// words included, here first;
 // a passed date is marked; an operator sees every control disabled and the
 // waiting count only; a planner opens the waiting customers, each control named
 // for its customer, the WhatsApp link carries the approved text, and Mark
@@ -24,6 +25,7 @@ const base = (over: Partial<Row> & { sku: string; key: string }): Row => ({
   variant_title: null,
   on_hand: null,
   available: true,
+  headline: null,
   back_on: null,
   back_on_passed: false,
   return_note: null,
@@ -106,7 +108,7 @@ test.describe("@mocked portal catalogue", () => {
     await expect.poll(() => posts.length).toBe(1);
     expect(posts[0]).toEqual({
       sku: "GT-LUI-LOW-1L",
-      body: { available: false, back_on: null, return_note: null, alternative_sku: null, note: null },
+      body: { available: false, headline: null, back_on: null, return_note: null, alternative_sku: null, note: null },
     });
     await expect(page.getByTestId("catalog-switch-GT-LUI-LOW-1L")).toHaveAttribute("aria-checked", "false");
     await expect(page.getByTestId("catalog-row-GT-LUI-LOW-1L")).toContainText("Not available now");
@@ -118,7 +120,7 @@ test.describe("@mocked portal catalogue", () => {
     await page.getByTestId("catalog-save-GT-LUI-LOW-1L").click();
     await expect.poll(() => posts.length).toBe(2);
     expect(posts[1].body).toEqual({
-      available: false, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", alternative_sku: "GT-LUI-LOW-0.5L", note: null,
+      available: false, headline: null, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", alternative_sku: "GT-LUI-LOW-0.5L", note: null,
     });
     // saved: the form starts from what the server holds, so Save is idle again
     await expect(page.getByTestId("catalog-save-GT-LUI-LOW-1L")).toBeDisabled();
@@ -135,7 +137,7 @@ test.describe("@mocked portal catalogue", () => {
     await expect.poll(() => posts.length).toBe(3);
     expect(posts[2]).toEqual({
       sku: "GT-LUI-LOW-0.5L",
-      body: { available: false, back_on: null, return_note: null, alternative_sku: null, note: null },
+      body: { available: false, headline: null, back_on: null, return_note: null, alternative_sku: null, note: null },
     });
     await expect(page.getByTestId("catalog-switch-GT-LUI-LOW-0.5L")).toHaveAttribute("aria-checked", "false");
   });
@@ -144,12 +146,14 @@ test.describe("@mocked portal catalogue", () => {
     const { posts } = await open(page, "planner");
     await page.getByTestId("catalog-switch-GT-LUI-LOW-1L").click();
     await expect(page.getByTestId("catalog-switch-GT-LUI-LOW-1L")).toHaveAttribute("aria-checked", "false");
+    // the planner's own words in place of «אזל מהמלאי» travel with the rest of the form
+    await page.getByTestId("catalog-headline-GT-LUI-LOW-1L").fill("בקרוב");
     await page.getByTestId("catalog-back-on-GT-LUI-LOW-1L").fill("2026-10-02");
     await page.getByTestId("catalog-preset-GT-LUI-LOW-1L-1").click();
     await page.getByTestId("catalog-alt-GT-LUI-LOW-1L").selectOption("GT-LUI-LOW-0.5L");
     await page.getByTestId("catalog-both-GT-LUI-LOW-1L").click();
     await expect.poll(() => posts.length).toBe(3);
-    const form = { available: false, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: null };
+    const form = { available: false, headline: "בקרוב", back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: null };
     expect(posts[1]).toEqual({ sku: "GT-LUI-LOW-1L", body: { ...form, alternative_sku: "GT-LUI-LOW-0.5L" } });
     expect(posts[2]).toEqual({ sku: "GT-LUI-LOW-0.5L", body: { ...form, alternative_sku: null } });
     await expect(page.getByTestId("catalog-save-GT-LUI-LOW-1L")).toBeDisabled();

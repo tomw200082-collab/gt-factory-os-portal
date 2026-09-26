@@ -20,6 +20,7 @@ const row = (over: Partial<CatalogRow>): CatalogRow => ({
   variant_title: "1000ml",
   on_hand: 67,
   available: true,
+  headline: null,
   back_on: null,
   back_on_passed: false,
   return_note: null,
@@ -86,8 +87,9 @@ describe("portal catalogue helpers", () => {
   });
 
   it("a change is always the whole row, nothing more", () => {
-    expect(bodyOf(row({ available: false, back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: "x" }))).toEqual({
+    expect(bodyOf(row({ available: false, headline: "בקרוב", back_on: "2026-10-02", return_note: "בייצור, חוזר בקרוב", note: "x" }))).toEqual({
       available: false,
+      headline: "בקרוב",
       back_on: "2026-10-02",
       return_note: "בייצור, חוזר בקרוב",
       alternative_sku: null,
