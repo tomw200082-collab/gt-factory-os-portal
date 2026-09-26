@@ -187,7 +187,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
             </span>
             Available<span className="sr-only">: {name}</span>
           </button>
-          {!row.available && <Badge tone="warning">Not available now</Badge>}
+          {!row.available && <Badge tone={row.upcoming ? "info" : "warning"}>{row.upcoming ? "Coming soon" : "Not available now"}</Badge>}
           {sib && (
             <button
               type="button"
@@ -210,6 +210,35 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
 
       {!row.available && (
         <div className="grid gap-3 sm:grid-cols-2">
+          <fieldset className="sm:col-span-2" aria-describedby={`look-hint-${row.sku}`}>
+            <legend className="label">Looks like</legend>
+            <div className="flex flex-wrap gap-2">
+              {([[false, "Sold out"], [true, "Coming soon"]] as const).map(([v, l]) => (
+                <label
+                  key={l}
+                  className={cn(
+                    "btn btn-sm focus-within:ring-2 focus-within:ring-accent/40",
+                    draft.upcoming === v ? "btn-primary" : "btn-outline",
+                    !canEdit && "opacity-60",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name={`look-${row.sku}`}
+                    checked={draft.upcoming === v}
+                    disabled={!canEdit}
+                    onChange={() => set({ upcoming: v })}
+                    data-testid={`catalog-look-${row.sku}-${v ? "soon" : "out"}`}
+                  />
+                  {l}
+                </label>
+              ))}
+            </div>
+            <span id={`look-hint-${row.sku}`} className="mt-1 block text-xs text-fg-muted">
+              Sold out: the bottle greyed, a quiet stamp. Coming soon: in full colour, a launch sticker.
+            </span>
+          </fieldset>
           <div className="sm:col-span-2">
             <label className="label" htmlFor={`head-${row.sku}`}>
               Status on the card
@@ -226,7 +255,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
               data-testid={`catalog-headline-${row.sku}`}
             />
             <span id={`head-hint-${row.sku}`} className="mt-1 block text-xs text-fg-muted">
-              Empty shows <bdi>אזל מהמלאי</bdi>. Any words, e.g. <bdi>בקרוב</bdi>, up to {HEADLINE_MAX} characters (
+              Empty shows <bdi>{draft.upcoming ? "בקרוב" : "אזל מהמלאי"}</bdi>. Any words, up to {HEADLINE_MAX} characters (
               {(draft.headline ?? "").length}/{HEADLINE_MAX})
             </span>
           </div>
@@ -363,7 +392,7 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
           <ol className="mt-2 space-y-1">
             {row.history.map((h) => (
               <li key={h.changed_at}>
-                {formatWhen(h.changed_at)} · {h.changed_by} · {h.available ? "Available" : "Not available now"}
+                {formatWhen(h.changed_at)} · {h.changed_by} · {h.available ? "Available" : h.upcoming ? "Coming soon" : "Not available now"}
                 {h.headline && (
                   <>
                     {" · "}
