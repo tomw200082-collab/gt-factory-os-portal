@@ -100,7 +100,8 @@ revive: []
 ## Tests / verification
 
 Run locally with `NODE_ENV=test`, as in CI (this container sets `NODE_ENV=production`, which loads React's
-production build and fails every `act()`-based vitest suite on `main` too), on `86a94d2`, 2026-09-26 16:22–16:31Z:
+production build and fails every `act()`-based vitest suite on `main` too), on the code of `95090ae` (`139c5df` only
+removes a placeholder attribute), 2026-09-26 17:01–17:10Z:
 
 - `tsc --noEmit`: 0
 - `eslint .`: 0 errors, 560 warnings (560 on `main`)
@@ -109,15 +110,15 @@ production build and fails every `act()`-based vitest suite on `main` too), on `
   - one row per catalogue SKU, grouped, with the on-hand hint;
   - a flip posts the whole row, and Save posts the date, a preset message and the alternative;
   - "Same for 500 ml" writes the other size and never points it at itself;
-  - before Save, "Same for 500 ml" saves the form here first;
+  - before Save, "Same for 500 ml" saves the form here first, the status words («בקרוב») included;
   - a passed date is marked;
   - an operator sees every control disabled and the waiting count only;
   - the waiting list carries the approved WhatsApp text and names each control for its customer, and Mark notified drops
     the count.
 - Rendered at 1280 px and 390 px with the same mocks (the release gate's `staff/` shots): no horizontal scroll.
 - The availability release gate, `gt-factory-os/docs/superpowers/plans/2026-09-26-customer-portal-availability-gate.md`:
-  six dimensions GREEN after round 2. This screen's round-1 P1s (FLOW-A01, INTER-A-04, COPY-A01, COPY-A02, A11Y-A-02)
-  are fixed in `86a94d2`.
+  six dimensions GREEN after round 2, and again after round 3 (the status field). This screen's round-1 P1s (FLOW-A01,
+  INTER-A-04, COPY-A01, COPY-A02, A11Y-A-02) are fixed in `86a94d2`, and round 3's (a Hebrew placeholder) in `139c5df`.
 - Merge only after `gt-factory-os` migration `0357` is applied and its API PR (#302) is live.
 
 ## Rollback
@@ -128,7 +129,10 @@ marked not available stays so for customers until an available row is written th
 ## Actual evidence
 
 - PR: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/231
-- `portal-pr-guard` `ci` on `86a94d2`: success, run 36255345522 (16:24:36–16:32:26Z). It runs eslint, `tsc`, vitest,
-  Playwright `@mocked` and the registry-presence check.
+- `portal-pr-guard` `ci` on `139c5df`: success, run 36257932100 (17:08:09–17:15:30Z): eslint 0 errors (560
+  warnings), `tsc` 0, vitest 1470/1470, Playwright `@mocked` 114/114, and the registry-presence check. Earlier heads:
+  `86a94d2` run 36255345522, `734b7c5` run 36255873185, both success.
 - The local runs above: `tsc` 0 · eslint 0 errors · vitest 1470/1470 · `@mocked` 114/114.
+- `portal-tranche-verifier`: CERTIFIED on `734b7c5` (round 2). Round 3 on `139c5df` passed every code check; it asked for
+  this evidence to name the head it certifies.
 - `main` merged in `b9ac571`: #232 took 180, so this tranche is 181.
