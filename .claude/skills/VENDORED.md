@@ -16,11 +16,11 @@ the portal copies and the routing question they create.
 | Upstream | Commit | License | Skills |
 |---|---|---|---|
 | [jakubkrehel/skills](https://github.com/jakubkrehel/skills), via [boraoztunc/skills](https://github.com/boraoztunc/skills) | `645553c` (2026-08-15) | MIT — `LICENSE-jakubkrehel`, `NOTICE-jakubkrehel.md` | `better-ui`, `better-typography`, `better-colors`, `better-accessibility`, `better-layout`, `better-writing`, `better-interface`, `interface-review` |
-| [boraoztunc/skills](https://github.com/boraoztunc/skills) | `645553c` (2026-08-15) | MIT (README only — no root `LICENSE`) | `web-design-guidelines`, `vercel-react-best-practices` |
+| [boraoztunc/skills](https://github.com/boraoztunc/skills) | `645553c` (2026-08-15) | MIT (README only — no root `LICENSE`) | `web-design-guidelines` |
 
 ## Which one to reach for
 
-Fifteen skills in this directory can now answer "review this UI". They are not
+Thirteen skills in this directory can answer "review this UI". They are not
 interchangeable. Pick by the question you are actually asking:
 
 | Question | Skill |
@@ -29,7 +29,6 @@ interchangeable. Pick by the question you are actually asking:
 | Review the **whole screen**, every domain at once | `better-interface` — the orchestrator, routes to all six domains and returns one ranked verdict |
 | Review a **change**, not a screen — uncommitted work, a branch, a PR | `interface-review` — reads the `-` side of hunks for regressions. User-invoked only |
 | Does this **feel** right? Taste, polish, aesthetic direction | `apple-design`, `impeccable`, `frontend-design` |
-| Is this **React/Next** shaped well for performance? | `vercel-react-best-practices` |
 | Generic best-practice sweep of UI code | `web-design-guidelines` |
 
 The rule of thumb from the brain ledger holds: the `better-*` set is for **rules
@@ -59,9 +58,6 @@ to colors, UI defers grouping to layout.
   Translate before applying, and do not let a finding push a v4 migration in
   through a review. The upstream `tailwind-v4` skill was **deliberately not
   vendored** for this reason.
-- **`vercel-react-best-practices` assumes current React.** The portal is React
-  `^18.3.1` on Next `^15.5.15`, so its React 19 / `use()` / Server Action
-  guidance does not all apply. Check the version gate on each recommendation.
 - **`web-design-guidelines` declares no licence of its own** and names no
   upstream author. It is covered only by the re-publisher's README `MIT`, and
   that repo ships no root `LICENSE`. Weakest provenance in this table. Internal
@@ -73,6 +69,14 @@ to colors, UI defers grouping to layout.
 - **Anything user-visible still needs a UX handoff packet**, and Hebrew copy
   still needs a Tom-approved register entry. A `better-writing` suggestion does
   not substitute for either.
+
+## 2026-09-26 — workspace ledger, Layer 1
+
+- **Removed:** `canvas-design` (nothing referenced it, and it was 83 files and 5.4 MB of fonts) and `vercel-react-best-practices` (nothing used it).
+- **Shortened descriptions:** nine descriptions were cut to 300 characters or less so the whole skill listing fits the per-session budget: `ui-ux-pro-max`, `impeccable`, `apple-design`, `better-typography`, `better-accessibility`, `better-colors`, `better-layout`, `better-ui`, `better-writing`. The skill bodies are unchanged.
+- **Only copies now:** the portal's `apple-design` and `frontend-design` are the only copies in the workspace; the brain's identical copies were removed. Their provenance:
+  - `apple-design` was cloned from `dickwu/apple-design-skill` at `d0bac1e`. Upstream ships no `LICENSE`, and the content is Apple's Human Interface Guidelines rewritten, so it is for internal design review only; do not redistribute it.
+  - `frontend-design` was supplied by Tom on 2026-08-05. Its frontmatter points at a `LICENSE.txt` that never came with it.
 
 ## Updating
 

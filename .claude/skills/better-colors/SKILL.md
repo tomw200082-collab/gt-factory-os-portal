@@ -1,6 +1,6 @@
 ---
 name: better-colors
-description: Color systems for digital products, from building and naming a palette to applying it with meaning and verifying contrast. Use when creating or extending a color palette, naming color tokens, theming light and dark appearances, auditing the colors in a codebase, or reviewing frontend code for color. Triggers on color palette, palette generation, color scale, color ramp, brand color, accent color, neutral palette, gray palette, status colors, design tokens, semantic color tokens, token naming, theming, dark mode colors, contrast ratio, APCA, gamut, display p3, oklch, color conversion, gradients, color meaning, increased contrast.
+description: "Color systems: building and naming a palette, semantic tokens, light and dark theming, contrast (APCA, WCAG), OKLCH and gamut. Use when creating or extending a palette or reviewing colors in UI code."
 ---
 
 # Colors

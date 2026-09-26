@@ -1,15 +1,6 @@
 ---
 name: apple-design
-description: >
-  Cross-platform UI/UX design reviewer grounded in Apple Human Interface Guidelines principles.
-  Use this skill to audit, review, critique, or improve any UI/UX design for mobile apps (iOS,
-  Flutter, React Native) or desktop apps (macOS, Tauri, Electron). Triggers when the user mentions:
-  design review, UI audit, HIG compliance, improving app design, design feedback, accessibility
-  audit, or any request to check or improve a design against professional standards. Also use when
-  the user uploads screenshots, mockups, wireframes, or design specs of a mobile or desktop app
-  and wants feedback. Even if they just say "review my design" or "is this good UI", use this skill.
-  Works for native and cross-platform frameworks including Flutter, Tauri, Electron, React Native,
-  SwiftUI, and AppKit/UIKit.
+description: "UI review grounded in Apple's Human Interface Guidelines, citing a rule per finding. Use for design reviews, UI audits, HIG checks, accessibility audits, or feedback on screenshots and mockups, when a review must be defensible."
 ---
 
 # Design Review Skill
