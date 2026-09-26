@@ -94,3 +94,39 @@ revive: []
   alternative (the sibling size included): a person chooses and sends.
 - Shopify: availability here never touches Shopify or stock truth.
 - `baseline.json` and `quarantine.json`: no entry is touched.
+
+## Tests / verification
+
+Run locally with `NODE_ENV=test`, as in CI (this container sets `NODE_ENV=production`, which loads React's
+production build and fails every `act()`-based vitest suite on `main` too), on `86a94d2`, 2026-09-26 16:22–16:31Z:
+
+- `tsc --noEmit`: 0
+- `eslint .`: 0 errors, 560 warnings (560 on `main`)
+- `vitest run`: 1470/1470 in 159 files (1462 on `main` at `07bbbe5`; the 8 new cover `_lib/portal-catalog.ts`)
+- `playwright test --grep @mocked`: 114/114, 7 of them new in `tests/e2e/portal-catalog.spec.ts`:
+  - one row per catalogue SKU, grouped, with the on-hand hint;
+  - a flip posts the whole row, and Save posts the date, a preset message and the alternative;
+  - "Same for 500 ml" writes the other size and never points it at itself;
+  - before Save, "Same for 500 ml" saves the form here first;
+  - a passed date is marked;
+  - an operator sees every control disabled and the waiting count only;
+  - the waiting list carries the approved WhatsApp text and names each control for its customer, and Mark notified drops
+    the count.
+- Rendered at 1280 px and 390 px with the same mocks (the release gate's `staff/` shots): no horizontal scroll.
+- The availability release gate, `gt-factory-os/docs/superpowers/plans/2026-09-26-customer-portal-availability-gate.md`:
+  six dimensions GREEN after round 2. This screen's round-1 P1s (FLOW-A01, INTER-A-04, COPY-A01, COPY-A02, A11Y-A-02)
+  are fixed in `86a94d2`.
+- Merge only after `gt-factory-os` migration `0357` is applied and its API PR (#302) is live.
+
+## Rollback
+
+Revert the PR. It only adds a page, four proxies, one nav row and docs. A revert leaves every product as last set: one
+marked not available stays so for customers until an available row is written through the API (planner or admin).
+
+## Actual evidence
+
+- PR: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/231
+- `portal-pr-guard` `ci` on `86a94d2`: success, run 36255345522 (16:24:36–16:32:26Z). It runs eslint, `tsc`, vitest,
+  Playwright `@mocked` and the registry-presence check.
+- The local runs above: `tsc` 0 · eslint 0 errors · vitest 1470/1470 · `@mocked` 114/114.
+- `main` merged in `b9ac571`: #232 took 180, so this tranche is 181.
