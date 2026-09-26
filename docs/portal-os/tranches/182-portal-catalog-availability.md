@@ -71,7 +71,6 @@ answer planner and admin only (403 otherwise).
 
 manifest:
   - docs/portal-os/tranches/182-portal-catalog-availability.md
-  - docs/portal-os/tranches/179-portal-registrations.md
   - docs/portal-os/tranches/_active.txt
   - docs/portal-os/registry.md
   - docs/portal-os/route-manifest.json
