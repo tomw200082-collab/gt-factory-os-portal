@@ -984,10 +984,13 @@ export default function InventoryPage() {
 
   // "Needs attention" headline card — across both tabs, so the number is the
   // same whichever tab is open. Uncounted rows are not counted here: they are
-  // "not measured yet", not a stock problem.
+  // "not measured yet", not a stock problem. A list that failed to load is
+  // undefined, not empty: counting it as empty showed a green "Nothing is
+  // out…" exactly when the stock read was down, so no count is made (null).
   const attention = useMemo(() => {
+    if (!fgRows || !rmRows) return null;
     const counts = { reconcile: 0, out: 0, critical: 0, total: 0 };
-    for (const r of [...(fgRows ?? []), ...(rmRows ?? [])]) {
+    for (const r of [...fgRows, ...rmRows]) {
       const t = deriveTier(r.calculated_on_hand, r.never_counted);
       if (t === "reconcile") counts.reconcile += 1;
       else if (t === "out") counts.out += 1;
@@ -1120,9 +1123,11 @@ export default function InventoryPage() {
         />
         <KpiCard
           label="Needs attention"
-          primary={attention.total.toLocaleString()}
+          primary={attention ? attention.total.toLocaleString() : "—"}
           secondary={
-            attention.total > 0
+            !attention
+              ? "Stock didn't load, so this can't be checked. Try Refresh."
+              : attention.total > 0
               ? [
                   attention.reconcile > 0 ? `${attention.reconcile} below floor` : null,
                   attention.out > 0 ? `${attention.out} out of stock` : null,
@@ -1132,7 +1137,7 @@ export default function InventoryPage() {
                   .join(" · ")
               : "Nothing is out, critical or below floor."
           }
-          tone={attention.total > 0 ? "warning" : "success"}
+          tone={!attention ? "danger" : attention.total > 0 ? "warning" : "success"}
           loading={allStockLoading}
         />
         <KpiCard
