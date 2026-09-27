@@ -415,6 +415,17 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:execute",
       },
       {
+        // Tranche 179 — customer-portal access requests: approve a phone by
+        // linking it to its Shopify customer, and give approved customers a
+        // login link. Since 2026-09-27 in the (economics) group, planning:execute
+        // (planner + admin), so Doreen approves too. URL unchanged.
+        href: "/admin/portal-registrations",
+        label: "Portal registrations",
+        icon: UserCheck,
+        min_role: "planner",
+        required_capability: "planning:execute",
+      },
+      {
         // Tranche 080 — Product Decision Board. Joins /economics (margin,
         // cost, confidence) with /orders/by-item-and-period (units sold) in the
         // browser to rank products for protect / promote / reprice / drop. A
@@ -541,16 +552,6 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/users",
         label: "Users",
         icon: Users,
-        min_role: "admin",
-        required_capability: "admin:execute",
-      },
-      {
-        // Tranche 179 — customer-portal access requests: approve a phone by
-        // linking it to its Shopify customer, and give approved customers a
-        // login link. Same admin:execute gate as the (admin) layout.
-        href: "/admin/portal-registrations",
-        label: "Portal registrations",
-        icon: UserCheck,
         min_role: "admin",
         required_capability: "admin:execute",
       },
