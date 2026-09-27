@@ -1,6 +1,6 @@
 # Tranche 179 — portal registrations: the staff screen
 
-**Status:** merged in `0fc9f6b` (#230), with D1 approved in writing by Tom, 2026-09-25 (gt-factory-os spec §4.5; brain #219).
+**Status:** merged in `0fc9f6b` (#230), with D1 approved in writing by Tom, 2026-09-25 (gt-factory-os spec §4.5; brain #219). **Amended 2026-09-27:** opened to planners (Doreen), see the amendment at the end.
 **Origin:** the customer-portal overnight masterprompt, W5 (`gt-factory-os/docs/superpowers/plans/2026-09-24-customer-portal-overnight-masterprompt.md`),
 built to its r2 staff-route contract. The staff half of the customer ordering portal; the API it calls is being built
 in parallel in `gt-factory-os`.
@@ -65,9 +65,9 @@ manifest:
   - docs/portal-os/tranches/_active.txt
   - docs/portal-os/registry.md
   - docs/portal-os/route-manifest.json
-  - src/app/(admin)/admin/portal-registrations/page.tsx
-  - src/app/(admin)/admin/portal-registrations/_lib/portal-registrations.ts
-  - src/app/(admin)/admin/portal-registrations/_lib/portal-registrations.test.ts
+  - src/app/(economics)/admin/portal-registrations/page.tsx
+  - src/app/(economics)/admin/portal-registrations/_lib/portal-registrations.ts
+  - src/app/(economics)/admin/portal-registrations/_lib/portal-registrations.test.ts
   - src/app/api/portal/registrations/route.ts
   - src/app/api/portal/registrations/[id]/decide/route.ts
   - src/app/api/portal/customer-search/route.ts
@@ -75,6 +75,8 @@ manifest:
   - src/app/api/portal/login-link/route.ts
   - src/app/api/portal/access/[id]/revoke/route.ts
   - src/lib/nav/manifest.ts
+  - src/middleware.ts
+  - src/app/(planning)/planning/portal-catalog/page.tsx
   - tests/e2e/portal-registrations.spec.ts
 
 ## Revive directives
@@ -106,3 +108,14 @@ production build and fails every `act()`-based vitest suite on `main` too).
 ## Rollback
 
 Revert the PR. It only adds a page, six proxies, one nav row and docs.
+
+## Amendment — 2026-09-27: planners approve too
+
+Tom, 2026-09-27: Doreen (planner, `accounting@greentea-everyday.com`) approves portal access requests as
+well, and the new-request email goes to her alone. The page moved from `(admin)/admin/portal-registrations`
+to `(economics)/admin/portal-registrations`, the group whose layout gates on `planning:execute`
+(planner + admin), exactly as `/admin/economics` was lifted on 2026-05-17. The URL is unchanged. The nav row
+moved from the Admin group to the Planning group with `min_role: planner`, `planning:execute`; the middleware
+table gained `/admin/portal-registrations → planner, admin` before the `/admin` row; the route manifest row
+reads planner + admin. Upstream, the six staff routes in `gt-factory-os` accept planner and admin and answer
+403 to every other role (`api/src/portal/routes.ts`).

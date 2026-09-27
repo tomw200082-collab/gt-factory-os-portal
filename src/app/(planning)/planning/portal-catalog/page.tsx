@@ -33,7 +33,7 @@ import { ErrorState, SkeletonRow } from "@/components/feedback/states";
 import { useCapability } from "@/lib/auth/role-gate";
 import { fetchJson } from "@/lib/http/fetchJson";
 import { cn } from "@/lib/cn";
-import { formatWhen } from "@/app/(admin)/admin/portal-registrations/_lib/portal-registrations";
+import { formatWhen } from "@/app/(economics)/admin/portal-registrations/_lib/portal-registrations";
 import {
   GROUPS,
   HEADLINE_MAX,

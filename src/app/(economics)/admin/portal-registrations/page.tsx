@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Portal registrations — /admin/portal-registrations (Tranche 179).
+// Staff · Portal registrations — /admin/portal-registrations (Tranche 179).
 //
 // The staff side of the customer ordering portal. Two tabs:
 //
@@ -18,8 +18,10 @@
 // Every call goes through a /api/portal/* proxy; _lib/portal-registrations.ts
 // holds the shapes.
 //
-// Role gate: (admin)/layout.tsx already gates on admin:execute, and every
-// upstream route answers 403 to anyone who is not admin.
+// Role gate: (economics)/layout.tsx gates on planning:execute, planner + admin
+// (Tom, 2026-09-27: Doreen approves access requests too). Lifted out of the
+// (admin) group like /admin/economics; the URL is unchanged. Every upstream
+// route answers 403 to any other role.
 //
 // docs/portal_ux_standard.md applies: English UI, LTR. Business, contact,
 // customer and branch names are data and may be Hebrew, so they render in
