@@ -14,6 +14,7 @@ import type { AssigneeEntry, LeadEventRow, SalesLeadRow, WhatsappTemplates } fro
 import { AssigneePicker } from "./AssigneePicker";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
+import { LeadJourneyRail } from "./LeadJourneyRail";
 import { SlaBadge } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 import { useReturnFocus } from "../_lib/useReturnFocus";
@@ -54,7 +55,7 @@ export interface LeadDrawerProps {
    * outcome sheet — the loop the product is built on would close on one surface
    * and silently not on the other.
    */
-  onArm?: (leadId: string, channel: "call" | "whatsapp") => void;
+  onArm?: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
 }
 
 /**
@@ -275,7 +276,7 @@ export function LeadDrawer({
             </a>
           ) : null}
           {mail ? (
-            <a href={mail} className="s-btn s-btn-ghost">
+            <a href={mail} className="s-btn s-btn-ghost" onClick={() => onArm?.(lead.id, "email")}>
               {UI.email}
             </a>
           ) : null}
@@ -539,6 +540,8 @@ export function LeadDrawer({
             </div>
           </section>
         )}
+
+        {!eventsLoading ? <LeadJourneyRail events={events} /> : null}
 
         <section className="mt-5">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>

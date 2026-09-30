@@ -204,6 +204,25 @@ export interface TodayPayload {
   queue: QueueSettings;
 }
 
+export type SalesTaskScope = "mine" | "unassigned" | "all";
+
+export interface SalesTaskRow {
+  id: string;
+  lead_id: string | null;
+  org_id: string | null;
+  kind: string;
+  title: string;
+  due_at: string;
+  status: "open" | "done" | "cancelled";
+  owner_email: string | null;
+  source_kind: string;
+  source_id: string;
+  source_event_id: string | null;
+  reason: string;
+  needs_assignment: boolean;
+  lead_context: { org_name: string | null; contact_name: string | null; status: string | null } | null;
+}
+
 /**
  * The lead a just-recorded "אבוד" can be taken back from, and the date it was
  * carrying before. Owned by the toast that offers the reversal — never by the

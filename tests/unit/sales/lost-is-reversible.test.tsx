@@ -56,6 +56,10 @@ vi.mock("@/app/(sales)/_lib/api", () => {
   return {
     useSetStatus: recorder(sink.status),
     useOutcome: recorder(sink.outcome),
+    useRecordActivity: recorder([]),
+    useTasks: () => settled([]),
+    useCompleteTask: idle,
+    useResolveContactGap: idle,
     // S5 added a close on all three sheets; unmocked, the pages throw here.
     useConvert: (leadId: string) => ({
       mutate: (

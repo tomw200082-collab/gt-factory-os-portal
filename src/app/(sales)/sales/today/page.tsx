@@ -5,8 +5,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useLeads,
+  useTasks,
+  useCompleteTask,
+  useResolveContactGap,
   useConvert,
   useOutcome,
+  useRecordActivity,
   useOutreach,
   useSetNextTouch,
   useSetStatus,
@@ -15,6 +19,7 @@ import {
   useWeekStats,
 } from "../../_lib/api";
 import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
+import { clearActivityDraft } from "../../_lib/activityDraft";
 import { useQueueScope } from "../../_lib/useQueueScope";
 import { useSession } from "@/lib/auth/session-provider";
 import { UI } from "../../_lib/labels";
@@ -22,6 +27,7 @@ import type { TodayRow, UndoTarget } from "../../_lib/types";
 import { QueueDone, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { StatsStrip } from "../../_components/StatsStrip";
 import { TodayQueue } from "../../_components/TodayQueue";
+import { TaskCard } from "../../_components/TaskCard";
 import {
   OutcomeSheet,
   nextBusinessTouchPreview,
@@ -31,10 +37,13 @@ import { Toast } from "../../_components/Toast";
 
 export default function TodayPage() {
   const { session } = useSession();
-  const [scope, setScope] = useQueueScope();
-  // "mine" scopes to the signed-in person's leads plus everything unclaimed —
-  // the server decides that, this only says whose queue is being asked for.
-  const today = useToday(scope === "mine" ? session?.email : undefined);
+  const isRep = session?.role === "sales_rep";
+  const [scope, setScope] = useQueueScope(isRep);
+  const taskScope = isRep ? "mine" : scope;
+  const tasks = useTasks(taskScope);
+  const completeTask = useCompleteTask();
+  const resolveContact = useResolveContactGap();
+  const today = useToday(scope === "mine" || isRep ? session?.email : scope === "unassigned" ? "unassigned" : undefined);
   // Only for resolving an intent armed elsewhere; the queue itself is unchanged.
   const leads = useLeads();
   const stats = useWeekStats();
@@ -50,6 +59,18 @@ export default function TodayPage() {
   const [undo, setUndo] = useState<UndoTarget | null>(null);
 
   const rows = useMemo(() => today.data?.rows ?? [], [today.data]);
+  const allTaskRows = useMemo(() => tasks.data ?? [], [tasks.data]);
+  const [taskClock, setTaskClock] = useState(() => Date.now());
+  useEffect(() => {
+    const nextDue = allTaskRows.map((task) => new Date(task.due_at).getTime())
+      .filter((due) => due > taskClock).sort((a, b) => a - b)[0];
+    if (nextDue === undefined) return;
+    const timer = setTimeout(() => setTaskClock(Date.now()), Math.min(nextDue - Date.now() + 50, 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [allTaskRows, taskClock]);
+  const taskRows = useMemo(() => allTaskRows.filter((task) => new Date(task.due_at).getTime() <= taskClock), [allTaskRows, taskClock]);
+  const taskLeadIds = useMemo(() => new Set(allTaskRows.map((task) => task.lead_id).filter((id): id is string => Boolean(id))), [allTaskRows]);
+  const legacyRows = useMemo(() => rows.filter((row) => row.item_type === "conversion" || !taskLeadIds.has(row.lead_id)), [rows, taskLeadIds]);
   // The cap and the SLA are both admin-owned settings; the screen reads them
   // rather than deciding them. Defaults match 0326's seeds so a settings row
   // that has not loaded yet degrades to the shipped behaviour, not to zero.
@@ -65,6 +86,7 @@ export default function TodayPage() {
 
   const outreach = useOutreach();
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const activity = useRecordActivity(capture.pending?.leadId ?? "");
   const convert = useConvert(capture.pending?.leadId ?? "");
   // convert_lead answers 200 {converted:false} when the lead is no longer open.
   // That is not an HTTP error and carries no error.message, so it needs its own
@@ -73,15 +95,6 @@ export default function TodayPage() {
   const nextTouch = useSetNextTouch(postponing?.lead_id ?? "");
   const lostOutcome = useOutcome(losing?.lead_id ?? "");
   const undoStatus = useSetStatus(undo?.leadId ?? "");
-
-  // Answering for a lead takes its card out of the queue optimistically, which
-  // makes the lead look absent while the write is still in flight. That is not
-  // the lead leaving the queue — it is us answering for it — so the intent has
-  // to survive until the write settles, or a failed POST would clear the sheet
-  // and the stored intent while onError quietly puts the card back: the user
-  // taps an outcome, the sheet closes as though it saved, and nothing was ever
-  // logged. Both outcome writes remove a row this way.
-  const answering = outcome.isPending || lostOutcome.isPending;
 
   // An intent can outlive its card — the call may have been placed from the
   // leads table on a lead this queue never contained, or the row may have
@@ -105,13 +118,8 @@ export default function TodayPage() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  // The card leaves the queue the instant an outcome is submitted, so
-  // pendingRow goes null while the write is still in flight. Holding the last
-  // name lets the sheet stay on screen through the round-trip — otherwise it
-  // vanishes, exposes the queue behind it, and only comes back if the write
-  // fails. On a factory phone that gap is seconds of looking at the wrong
-  // thing. The effect runs after the render that nulled pendingRow, so the ref
-  // still holds the previous value when it is needed.
+  // A refetch or a lost outcome can remove the row while the sheet is open.
+  // Keep the name until the server confirms the result.
   const lastLeadName = useRef<string | null>(null);
   useEffect(() => {
     if (pendingRow) lastLeadName.current = pendingRow.contact_name ?? pendingRow.org_name;
@@ -119,11 +127,11 @@ export default function TodayPage() {
   }, [pendingRow, fallbackRow]);
 
   const answerSheetOpen = Boolean(
-    capture.pending && (pendingRow || fallbackRow || outcome.isPending),
+    capture.pending && (pendingRow || fallbackRow || activity.isPending || outcome.isPending),
   );
   const anySheetOpen = Boolean(answerSheetOpen || postponing || losing);
 
-  function arm(leadId: string, channel: "call" | "whatsapp") {
+  function arm(leadId: string, channel: "call" | "whatsapp" | "email") {
     capture.arm(leadId, channel);
     // Intent, not a touch: only an outcome, a note or a status change stops the
     // SLA clock (§5.3), and record_outreach is written that way server-side.
@@ -167,36 +175,35 @@ export default function TodayPage() {
               return;
             }
             capture.clear();
+            clearActivityDraft(session?.email ?? "", capture.pending?.leadId ?? "");
             showToast(UI.wonSaved);
           },
         },
       );
       return;
     }
-    // Read before the write: answering optimistically drops the card, so by
-    // the time onSuccess runs both pendingRow and fallbackRow may be gone and
-    // there is nothing left to say what date the lead was carrying.
+    // Read before the write; a refetch may remove the row before confirmation.
     const leadId = capture.pending?.leadId ?? null;
     const previousNextTouch =
       pendingRow?.next_touch_at ?? fallbackRow?.next_touch_at ?? null;
 
-    outcome.mutate(
-      { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
-      {
-        onSuccess: () => {
-          capture.clear();
-          // The same reversal the card's אבוד button has carried since audit
-          // P1-9. It was wired to one of the two doors that record 'lost' and
-          // not the other, so answering אבוד inside the sheet — the door the
-          // whole call-and-return loop leads to — was still the four-tap
-          // mistake the undo was written to end.
-          showToast(
-            UI.outcomeSaved,
-            vars.result === "lost" && leadId ? { leadId, previousNextTouch } : null,
-          );
-        },
+    if (vars.result === "lost") {
+      outcome.mutate({ result: "lost", reason: vars.reason }, { onSuccess: () => {
+        clearActivityDraft(session?.email ?? "", leadId ?? "");
+        capture.clear();
+        showToast(UI.outcomeSaved, leadId ? { leadId, previousNextTouch } : null);
+      } });
+      return;
+    }
+    if (!vars.request_id || !capture.pending) return;
+    activity.mutate({ request_id: vars.request_id, channel: capture.pending.channel,
+      result: vars.result, note: vars.note, primary_action: vars.primary_action }, {
+      onSuccess: () => {
+        clearActivityDraft(session?.email ?? "", leadId ?? "");
+        capture.clear();
+        showToast(UI.outcomeSaved);
       },
-    );
+    });
   }
 
   return (
@@ -206,7 +213,7 @@ export default function TodayPage() {
             44px-tall filter control the same visual mass as the page name at
             390px, where the pair took the whole width. */}
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
-          {scope === "mine" ? UI.queueMine : UI.queueAll}
+          {isRep || scope === "mine" ? UI.queueMine : scope === "unassigned" ? UI.queueUnassigned : UI.queueAll}
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           {/* Two states, not a menu: the question is only ever "everything, or
@@ -214,7 +221,7 @@ export default function TodayPage() {
               closing the app. The group is named for what it controls — it
               used to be labelled with the page's own title. */}
           <div className="flex gap-1" role="group" aria-label={UI.queueScopeGroupLabel}>
-            {(["all", "mine"] as const).map((option) => (
+            {(isRep ? (["mine"] as const) : (["all", "mine", "unassigned"] as const)).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -227,7 +234,7 @@ export default function TodayPage() {
                 className={`s-tab ${scope === option ? "s-tab-active" : ""}`}
                 onClick={() => setScope(option)}
               >
-                {option === "all" ? UI.scopeAll : UI.scopeMine}
+                {option === "all" ? UI.scopeAll : option === "mine" ? UI.scopeMine : UI.scopeUnassigned}
               </button>
             ))}
           </div>
@@ -240,12 +247,30 @@ export default function TodayPage() {
           being read as one. aria-modal alone is only partly honoured on iOS. */}
       <div aria-hidden={anySheetOpen || undefined}>
         {today.isLoading ? <QueueLoading /> : null}
-        {today.isError ? <QueueError onRetry={() => void today.refetch()} /> : null}
-        {today.isSuccess && rows.length === 0 ? <QueueDone /> : null}
+        {today.isError || tasks.isError ? <QueueError onRetry={() => {
+          if (today.isError) void today.refetch();
+          if (tasks.isError) void tasks.refetch();
+        }} /> : null}
+        {today.isSuccess && tasks.isSuccess && legacyRows.length === 0 && taskRows.length === 0 ? <QueueDone /> : null}
 
-        {today.isSuccess && rows.length > 0 ? (
+        {taskRows.length > 0 ? <section className="mb-6 grid gap-2" aria-label={UI.tasksTitle}>
+          <h2 className="s-eyebrow">{UI.tasksTitle}</h2>
+          {taskRows.map((task) => <TaskCard key={task.id} task={task}
+            lead={leads.data?.find((lead) => lead.id === task.lead_id)}
+            manager={!isRep} onArm={arm}
+            onComplete={async (taskId, note) => {
+              await completeTask.mutateAsync({ taskId, note });
+              showToast(UI.taskDone);
+            }}
+            onResolveContact={async (leadId, details) => {
+              await resolveContact.mutateAsync({ leadId, ...details });
+            }} />)}
+        </section> : null}
+
+        {today.isSuccess && legacyRows.length > 0 ? (
           <TodayQueue
             rows={rows}
+            taskLeadIds={taskLeadIds}
             dailyCap={dailyCap}
             slaHours={slaHours}
             roster={settings.data?.assignees ?? []}
@@ -268,8 +293,9 @@ export default function TodayPage() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending || convert.isPending}
-          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
+          draftIdentity={{ email: session?.email ?? "", leadId: capture.pending.leadId }}
+          busy={activity.isPending || outcome.isPending || convert.isPending}
+          error={activity.error?.message ?? outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={submitOutcome}
           // Closes the sheet but leaves the intent owed — it will be asked
           // again on the next return. Only an answer clears it.

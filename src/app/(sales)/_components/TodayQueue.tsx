@@ -42,11 +42,12 @@ const PAGE = 12;
 
 export interface TodayQueueProps {
   rows: TodayRow[];
+  taskLeadIds?: ReadonlySet<string>;
   dailyCap: number;
   slaHours: number;
   roster?: AssigneeEntry[];
   templates: WhatsappTemplates | null;
-  onArm: (leadId: string, channel: "call" | "whatsapp") => void;
+  onArm: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
   onPostpone: (row: TodayRow) => void;
   onLost: (row: TodayRow) => void;
 }
@@ -155,6 +156,7 @@ function Section({
 
 export function TodayQueue({
   rows,
+  taskLeadIds,
   dailyCap,
   slaHours,
   roster,
@@ -163,6 +165,9 @@ export function TodayQueue({
   onPostpone,
   onLost,
 }: TodayQueueProps) {
+  const visibleRows = taskLeadIds
+    ? rows.filter((row) => row.item_type === "conversion" || !taskLeadIds.has(row.lead_id))
+    : rows;
   // "כמה שיחות ביום" is one number for the day, and since tranche 173 it has a
   // single claimant: the untouched backlog. Handing the full cap to every
   // section spent it twice — 15 new leads and 15 follow-ups from a cap of 15
@@ -175,7 +180,7 @@ export function TodayQueue({
   // here, where the single budget lives — not per section. Rendered per section
   // it printed twice whenever two sections overflowed, each copy claiming to
   // describe the whole queue.
-  const overflowing = rows.filter((r) => CAPPED_SECTIONS.includes(r.item_type)).length > dailyCap;
+  const overflowing = visibleRows.filter((r) => CAPPED_SECTIONS.includes(r.item_type)).length > dailyCap;
 
   return (
     <div className="flex flex-col gap-6">
@@ -189,7 +194,7 @@ export function TodayQueue({
         </p>
       ) : null}
       {SECTION_ORDER.map((type) => {
-        const section = rows.filter((r) => r.item_type === type);
+        const section = visibleRows.filter((r) => r.item_type === type);
         if (section.length === 0) return null;
         const share = budget;
         budget -= budgetSpent(section, budget);

@@ -15,7 +15,6 @@ import {
 import { RULE_MESSAGES, UI } from "./labels";
 import type {
   ActivityRow,
-  AssigneeEntry,
   AttentionRow,
   LeadEventRow,
   TodayPayload,
@@ -23,6 +22,8 @@ import type {
   OutcomeResult,
   OutreachChannel,
   SalesLeadRow,
+  SalesTaskRow,
+  SalesTaskScope,
   QueueSettings,
   SalesSettings,
   WeekStats,
@@ -98,6 +99,7 @@ export const salesKeys = {
   orgs: () => ["sales", "orgs"] as const,
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
+  tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
 };
 
 // ---- reads -----------------------------------------------------------------
@@ -125,6 +127,15 @@ export function useAttention(): UseQueryResult<AttentionRow[], SalesApiError> {
   return useQuery({
     queryKey: salesKeys.attention(),
     queryFn: async () => (await request<{ rows: AttentionRow[] }>("/api/sales/attention")).rows,
+    staleTime: 30_000,
+  });
+}
+
+export function useTasks(scope: SalesTaskScope): UseQueryResult<SalesTaskRow[], SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.tasks(scope),
+    queryFn: async () => (await request<{ rows: SalesTaskRow[] }>(
+      `/api/sales/tasks?scope=${encodeURIComponent(scope)}`)).rows,
     staleTime: 30_000,
   });
 }
@@ -283,6 +294,21 @@ export function useOutreach() {
   );
 }
 
+export function useCompleteTask() {
+  return useSalesMutation<{ taskId: string; note: string }, { task_id: string; lead_id: string; note_event_id: string }>(
+    ({ taskId, note }) => request(`/api/sales/tasks/${encodeURIComponent(taskId)}/complete`, jsonBody({ note })),
+  );
+}
+
+export function useResolveContactGap() {
+  return useSalesMutation<
+    { leadId: string; phone?: string; email?: string; provenance: string },
+    { lead_id: string; event_id: string; task_id: string }
+  >(({ leadId, ...body }) => request(`/api/sales/leads/${encodeURIComponent(leadId)}/contact`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }));
+}
+
 /** Every cached Today queue, whatever scope it was fetched under. */
 const TODAY_PREFIX = ["sales", "today"] as const;
 
@@ -326,6 +352,22 @@ export interface OutcomeVars {
   result: OutcomeResult;
   next_touch_at?: string | null;
   reason?: string | null;
+}
+
+export interface RecordActivityVars {
+  request_id: string;
+  channel: OutreachChannel;
+  result: "answered_progressing" | "no_answer" | "whatsapp_sent";
+  note?: string;
+  primary_action?: { kind: "call" | "whatsapp" | "email" | "other" | "wait_review"; due_at: string };
+  additional_actions?: Array<{ kind: "call" | "whatsapp" | "email" | "other" | "wait_review"; due_at: string }>;
+}
+
+/** Server transaction owns note, outcome, due action, task and retry identity. */
+export function useRecordActivity(leadId: string) {
+  return useSalesMutation<RecordActivityVars, { lead_id: string; outcome_event_id: string; task_ids: string[] }>(
+    (vars) => request(`/api/sales/leads/${encodeURIComponent(leadId)}/activity`, jsonBody(vars)),
+  );
 }
 
 /**

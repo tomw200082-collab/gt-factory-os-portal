@@ -18,12 +18,15 @@ import {
   useLeads,
   useConvert,
   useOutcome,
+  useRecordActivity,
   useOutreach,
   useSetNextTouch,
   useSetStatus,
   useSettings,
 } from "../../_lib/api";
 import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
+import { clearActivityDraft } from "../../_lib/activityDraft";
+import { useSession } from "@/lib/auth/session-provider";
 import { UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { ActivityFeed } from "../../_components/ActivityFeed";
@@ -33,6 +36,7 @@ import { OutcomeSheet } from "../../_components/OutcomeSheet";
 import { Toast } from "../../_components/Toast";
 
 export default function AttentionPage() {
+  const { session } = useSession();
   const attention = useAttention();
   const activity = useActivity(50);
   const settings = useSettings();
@@ -59,12 +63,13 @@ export default function AttentionPage() {
   const capture = useOutcomeCapture();
   const pendingLead = leads.data?.find((l) => l.id === capture.pending?.leadId) ?? null;
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const recordActivity = useRecordActivity(capture.pending?.leadId ?? "");
   const convert = useConvert(capture.pending?.leadId ?? "");
   // convert_lead answers 200 {converted:false} when the lead is no longer open.
   // That is not an HTTP error and carries no error.message, so it needs its own
   // channel — otherwise a close that did nothing reads as a close that worked.
   const [convertNote, setConvertNote] = useState<string | null>(null);
-  const answerSheetOpen = Boolean(capture.pending && (pendingLead || outcome.isPending));
+  const answerSheetOpen = Boolean(capture.pending && (pendingLead || recordActivity.isPending || outcome.isPending));
 
   // The answered lead leaves /attention the moment it is answered for, and the
   // sheet asking about it is still open.
@@ -73,7 +78,7 @@ export default function AttentionPage() {
     if (pendingLead) lastLeadName.current = pendingLead.contact_name ?? pendingLead.org_name;
   }, [pendingLead]);
 
-  function arm(leadId: string, channel: "call") {
+  function arm(leadId: string, channel: "call" | "whatsapp" | "email") {
     capture.arm(leadId, channel);
     outreach.mutate({ leadId, channel });
   }
@@ -199,8 +204,9 @@ export default function AttentionPage() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending || convert.isPending}
-          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
+          draftIdentity={{ email: session?.email ?? "", leadId: capture.pending.leadId }}
+          busy={recordActivity.isPending || outcome.isPending || convert.isPending}
+          error={recordActivity.error?.message ?? outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={(vars) => {
             if (!vars.result) return;
             // `won` is not an outcome — record_outcome refuses it, because a
@@ -220,6 +226,7 @@ export default function AttentionPage() {
                       setConvertNote(UI.wonNotOpen);
                       return;
                     }
+                    clearActivityDraft(session?.email ?? "", capture.pending?.leadId ?? "");
                     capture.clear();
                     setToast(UI.wonSaved);
                   },
@@ -227,15 +234,24 @@ export default function AttentionPage() {
               );
               return;
             }
-            outcome.mutate(
-              { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
-              {
-                onSuccess: () => {
-                  capture.clear();
-                  setToast(UI.outcomeSaved);
-                },
+            const leadId = capture.pending?.leadId ?? "";
+            if (vars.result === "lost") {
+              outcome.mutate({ result: "lost", reason: vars.reason }, { onSuccess: () => {
+                clearActivityDraft(session?.email ?? "", leadId);
+                capture.clear();
+                setToast(UI.outcomeSaved);
+              } });
+              return;
+            }
+            if (!vars.request_id || !capture.pending) return;
+            recordActivity.mutate({ request_id: vars.request_id, channel: capture.pending.channel,
+              result: vars.result, note: vars.note, primary_action: vars.primary_action }, {
+              onSuccess: () => {
+                clearActivityDraft(session?.email ?? "", leadId);
+                capture.clear();
+                setToast(UI.outcomeSaved);
               },
-            );
+            });
           }}
           onDismiss={capture.dismiss}
         />

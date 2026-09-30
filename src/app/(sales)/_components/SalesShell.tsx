@@ -16,6 +16,7 @@ import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
 import { Toast } from "./Toast";
+import { useSession } from "@/lib/auth/session-provider";
 
 interface Destination {
   href: string;
@@ -38,6 +39,8 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 export function SalesShell({ children }: { children: ReactNode }) {
+  const { session } = useSession();
+  const canManageSales = session?.role === "admin" || session?.role === "planner";
   const pathname = usePathname() ?? "";
   const [searchOpen, setSearchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -109,7 +112,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             <Search size={18} aria-hidden />
           </button>
 
-          <Link
+          {canManageSales ? <Link
             href="/sales/settings"
             aria-label={NAV_LABELS.settings}
             title={NAV_LABELS.settings}
@@ -117,7 +120,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <Settings size={18} aria-hidden />
-          </Link>
+          </Link> : null}
 
           {/* The phone is the primary device, and it had no way back to the
               factory at all — the bottom bar holds the three sales
@@ -159,7 +162,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
-          <Link
+          {canManageSales ? <Link
             href="/sales/settings"
             aria-current={isActive(pathname, "/sales/settings") ? "page" : undefined}
             className={`s-tab justify-start ${
@@ -168,7 +171,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
           >
             <Settings size={17} aria-hidden />
             {NAV_LABELS.settings}
-          </Link>
+          </Link> : null}
         </nav>
 
         <main

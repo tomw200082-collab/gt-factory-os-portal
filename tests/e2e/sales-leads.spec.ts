@@ -201,6 +201,25 @@ test("a selection never outlives the rows it was made on @mocked", async ({ page
   await expect(page.getByTestId("bulk-bar")).toBeVisible();
 });
 
+test("a second lead link on the same route opens its requested lead @mocked", async ({ page }) => {
+  await stub(page);
+  await page.goto("/sales/leads?lead=L1");
+  await expect(page.getByTestId("lead-drawer")).toContainText("קפה בדיקה");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("lead-drawer")).toBeHidden();
+  await expect(page).not.toHaveURL(/lead=L1/);
+  await page.getByTestId("sales-search-open").click();
+  await page.getByTestId("command-input").fill("קפה בדיקה");
+  await page.getByTestId("command-hit-L1").click();
+  await expect(page.getByTestId("lead-drawer")).toContainText("קפה בדיקה");
+  await page.keyboard.press("Escape");
+  await page.getByTestId("sales-search-open").click();
+  await page.getByTestId("command-input").fill("מסעדת בדיקה");
+  await page.getByTestId("command-hit-L2").click();
+  await expect(page).toHaveURL(/lead=L2/);
+  await expect(page.getByTestId("lead-drawer")).toContainText("מסעדת בדיקה");
+});
+
 test("a search that hides a selected lead un-selects it @mocked", async ({ page }) => {
   // Gate iteration 2 re-opened INTER-001 as P0: clearing on the tab and the two
   // chips left the search open. Select rows, type a query that narrows the list,

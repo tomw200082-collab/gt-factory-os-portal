@@ -94,15 +94,16 @@ async function stubSales(page: Page, rows: unknown[]): Promise<Posted[]> {
   await page.route("**/api/sales/leads**", (route) => route.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/orgs**", (route) => route.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/today**", (route) => route.fulfill({ json: { rows: queue, queue: QUEUE } }));
+  await page.route("**/api/sales/tasks**", (route) => route.fulfill({ json: { rows: [] } }));
 
   await page.route("**/api/sales/leads/*/outreach", (route) => {
     posted.push({ url: route.request().url(), body: route.request().postDataJSON() });
     return route.fulfill({ json: { lead_id: "L1", event_id: "E1" } });
   });
 
-  await page.route("**/api/sales/leads/*/outcome", (route) => {
+  await page.route("**/api/sales/leads/*/activity", (route) => {
     posted.push({ url: route.request().url(), body: route.request().postDataJSON() });
-    // The captured outcome is what removes the card.
+    // The committed activity removes the card on the following query.
     queue = queue.filter((r) => (r as { lead_id: string }).lead_id !== "L1");
     return route.fulfill({
       json: {
@@ -183,15 +184,20 @@ test("queue renders, an outcome is captured, and the card clears @mocked", async
   // Answering it does. (Same dispatched-click accommodation as above — every
   // control inside this overlay is affected, not just the dismiss button.)
   await page.getByTestId("outcome-answered_progressing").dispatchEvent("click");
-  await page.getByTestId("next-touch-tomorrow").dispatchEvent("click");
+  await page.getByTestId("activity-note").fill("שיחה טובה");
+  await page.getByLabel("מה הפעולה הבאה?").selectOption("call");
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  await page.getByLabel("מתי לבצע?").fill(tomorrow.toISOString().slice(0, 10));
+  await page.getByTestId("activity-save").dispatchEvent("click");
 
   await expect(page.getByTestId("outcome-sheet")).toBeHidden();
   await expect(page.getByTestId("today-card-L1")).toBeHidden();
 
-  const outcome = posted.find((p) => p.url.includes("/outcome"));
+  const outcome = posted.find((p) => p.url.includes("/activity"));
   expect(outcome).toBeTruthy();
   expect((outcome?.body as { result: string }).result).toBe("answered_progressing");
-  expect((outcome?.body as { next_touch_at: string }).next_touch_at).toBeTruthy();
+  expect((outcome?.body as { note: string }).note).toBe("שיחה טובה");
+  expect((outcome?.body as { primary_action: { kind: string; due_at: string } }).primary_action.kind).toBe("call");
 });
 
 test("a failed outcome keeps the sheet open instead of silently losing the call @mocked", async ({
@@ -212,7 +218,7 @@ test("a failed outcome keeps the sheet open instead of silently losing the call 
   await page.route("**/api/sales/leads/*/outreach", (r) =>
     r.fulfill({ json: { lead_id: "L1", event_id: "E1" } }),
   );
-  await page.route("**/api/sales/leads/*/outcome", (r) =>
+  await page.route("**/api/sales/leads/*/activity", (r) =>
     r.fulfill({ status: 500, json: { message: "boom" } }),
   );
 
@@ -224,7 +230,11 @@ test("a failed outcome keeps the sheet open instead of silently losing the call 
   // Same dispatched-click accommodation as the flow above: synthesised mouse
   // input does not reach this overlay in this container.
   await page.getByTestId("outcome-answered_progressing").dispatchEvent("click");
-  await page.getByTestId("next-touch-tomorrow").dispatchEvent("click");
+  await page.getByTestId("activity-note").fill("שיחה טובה");
+  await page.getByLabel("מה הפעולה הבאה?").selectOption("call");
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  await page.getByLabel("מתי לבצע?").fill(tomorrow.toISOString().slice(0, 10));
+  await page.getByTestId("activity-save").dispatchEvent("click");
 
   // The write failed: the sheet stays, says so, and the card is back.
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
@@ -254,7 +264,7 @@ test("the sheet stays put while the outcome is being written @mocked", async ({ 
   // Held open until the assertion below has run.
   let release: () => void = () => {};
   const inFlight = new Promise<void>((resolve) => (release = resolve));
-  await page.route("**/api/sales/leads/*/outcome", async (route) => {
+  await page.route("**/api/sales/leads/*/activity", async (route) => {
     await inFlight;
     return route.fulfill({ json: { lead_id: "L1", status: "working" } });
   });
@@ -265,10 +275,14 @@ test("the sheet stays put while the outcome is being written @mocked", async ({ 
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
 
   await page.getByTestId("outcome-answered_progressing").dispatchEvent("click");
-  await page.getByTestId("next-touch-tomorrow").dispatchEvent("click");
+  await page.getByTestId("activity-note").fill("שיחה טובה");
+  await page.getByLabel("מה הפעולה הבאה?").selectOption("call");
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  await page.getByLabel("מתי לבצע?").fill(tomorrow.toISOString().slice(0, 10));
+  await page.getByTestId("activity-save").dispatchEvent("click");
 
-  // Mid-write: the card is already gone from the queue, the sheet is not.
-  await expect(page.getByTestId("today-card-L1")).toBeHidden();
+  // Mid-write: the task/queue remains truthful until the server commits.
+  await expect(page.getByTestId("today-card-L1")).toBeVisible();
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
 
   release();
@@ -294,7 +308,7 @@ test("a failed queue load offers a way out @mocked", async ({ page }) => {
   await expect(page.getByRole("button", { name: "נסה שוב" })).toBeVisible();
 });
 
-test("the card leaves the queue optimistically on שלי, not only on הכל @mocked", async ({
+test("the card leaves mine after a committed activity @mocked", async ({
   page,
 }) => {
   // Gate iteration 2, INTER-NEW-2. The scope is part of the query key —
@@ -310,7 +324,7 @@ test("the card leaves the queue optimistically on שלי, not only on הכל @mo
   // optimistic update, never the server's answer.
   let release: () => void = () => {};
   const held = new Promise<void>((r) => (release = r));
-  await page.route("**/api/sales/leads/*/outcome", async (route) => {
+  await page.route("**/api/sales/leads/*/activity", async (route) => {
     await held;
     return route.fulfill({
       json: { lead_id: "L1", status: "working", next_touch_at: null, first_touch_at: null },
@@ -325,7 +339,7 @@ test("the card leaves the queue optimistically on שלי, not only on הכל @mo
   await leaveAndReturn(page);
   await page.getByTestId("outcome-no_answer").click();
 
-  // Still in flight, and the card is already gone.
-  await expect(page.getByTestId("today-card-L1")).toBeHidden();
+  // Still in flight: no optimistic claim that the business event committed.
+  await expect(page.getByTestId("today-card-L1")).toBeVisible();
   release();
 });

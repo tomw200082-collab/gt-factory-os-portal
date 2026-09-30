@@ -7,7 +7,7 @@ import { toDateInputValue } from "@/app/(sales)/_lib/format";
 afterEach(cleanup);
 
 describe("outcome sheet", () => {
-  it("offers the five outcomes, and lets none of them declare a win unproven", () => {
+  it("offers call results without an impossible WhatsApp claim", () => {
     // Was: "no way to declare a win" — the sheet had four outcomes and a close
     // was simply unreachable, so a deal Tom closed on the phone and invoiced in
     // Green Invoice was either not recorded or recorded as something else.
@@ -16,9 +16,20 @@ describe("outcome sheet", () => {
     render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
     expect(screen.getByText(OUTCOME_LABELS.answered_progressing)).toBeTruthy();
     expect(screen.getByText(OUTCOME_LABELS.no_answer)).toBeTruthy();
-    expect(screen.getByText(OUTCOME_LABELS.whatsapp_sent)).toBeTruthy();
+    expect(screen.queryByText(OUTCOME_LABELS.whatsapp_sent)).toBeNull();
     expect(screen.getByText(OUTCOME_LABELS.lost)).toBeTruthy();
     expect(screen.getByText(STATUS_LABELS.won)).toBeTruthy();
+  });
+
+  it("offers only channel-valid quick results for WhatsApp and email", () => {
+    const { unmount } = render(<OutcomeSheet leadName="דנה" channel="whatsapp" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    expect(screen.getByTestId("outcome-whatsapp_sent")).toBeTruthy();
+    expect(screen.queryByTestId("outcome-no_answer")).toBeNull();
+    unmount();
+    render(<OutcomeSheet leadName="דנה" channel="email" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    expect(screen.queryByTestId("outcome-whatsapp_sent")).toBeNull();
+    expect(screen.queryByTestId("outcome-no_answer")).toBeNull();
+    expect(screen.getByTestId("outcome-answered_progressing")).toBeTruthy();
   });
 
   it("will not close a deal without a Green Invoice document number", () => {
@@ -58,21 +69,66 @@ describe("outcome sheet", () => {
     const onSubmit = vi.fn();
     render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
     fireEvent.click(screen.getByTestId("outcome-no_answer"));
-    expect(onSubmit).toHaveBeenCalledWith({ result: "no_answer" });
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ result: "no_answer", request_id: expect.any(String) }));
   });
 
-  it("makes progress mean picking the next touch", () => {
+  it("requires five trimmed Hebrew characters, an action, and a future date before recording an answer", () => {
     const onSubmit = vi.fn();
     render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
     fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
-    // No submission yet — the date is the second half of the answer.
-    expect(onSubmit).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId("next-touch-tomorrow"));
+    const save = screen.getByTestId("activity-save") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(UI.activityNoteLabel), { target: { value: " אבגד " } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(UI.activityNoteLabel), { target: { value: " אבגדה " } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(UI.activityActionLabel), { target: { value: "call" } });
+    expect(save.disabled).toBe(true);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    fireEvent.change(screen.getByLabelText(UI.activityDateLabel), { target: { value: toDateInputValue(tomorrow) } });
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
     expect(onSubmit).toHaveBeenCalledTimes(1);
     const vars = onSubmit.mock.calls[0][0];
     expect(vars.result).toBe("answered_progressing");
-    expect(typeof vars.next_touch_at).toBe("string");
+    expect(vars.note).toBe("אבגדה");
+    expect(vars.primary_action.kind).toBe("call");
+    expect(typeof vars.primary_action.due_at).toBe("string");
+    expect(vars.request_id).toMatch(/^[a-f0-9-]{36}$/i);
+  });
+
+  it("requires a future review date when waiting for the customer", () => {
+    render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    fireEvent.change(screen.getByLabelText(UI.activityNoteLabel), { target: { value: "אבגדה" } });
+    fireEvent.change(screen.getByLabelText(UI.activityActionLabel), { target: { value: "wait_review" } });
+    expect((screen.getByTestId("activity-save") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("restores a failed answer after reload and retries its exact request ID", () => {
+    sessionStorage.clear();
+    const identity = { email: "rep@synthetic.invalid", leadId: "synthetic-lead" };
+    const first = vi.fn();
+    const view = render(<OutcomeSheet leadName="דנה" channel="call" draftIdentity={identity}
+      onSubmit={first} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    fireEvent.change(screen.getByLabelText(UI.activityNoteLabel), { target: { value: "שיחה טובה" } });
+    fireEvent.change(screen.getByLabelText(UI.activityActionLabel), { target: { value: "wait_review" } });
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    fireEvent.change(screen.getByLabelText(UI.activityDateLabel), { target: { value: toDateInputValue(tomorrow) } });
+    fireEvent.click(screen.getByTestId("activity-save"));
+    const firstId = first.mock.calls[0][0].request_id;
+    expect(first.mock.calls[0][0].primary_action.kind).toBe("wait_review");
+    view.unmount();
+
+    const retry = vi.fn();
+    render(<OutcomeSheet leadName="דנה" channel="call" draftIdentity={identity} error="השמירה נכשלה"
+      onSubmit={retry} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    expect((screen.getByLabelText(UI.activityNoteLabel) as HTMLTextAreaElement).value).toBe("שיחה טובה");
+    fireEvent.click(screen.getByTestId("activity-save"));
+    expect(retry.mock.calls[0][0].request_id).toBe(firstId);
   });
 
   it("records the outcome the user chose, not the one the date step assumed", () => {
@@ -109,7 +165,7 @@ describe("outcome sheet", () => {
 
   it("carries a whatsapp hand-off into the date step as itself", () => {
     const onSubmit = vi.fn();
-    render(<OutcomeSheet leadName="דנה" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    render(<OutcomeSheet leadName="דנה" channel="whatsapp" onSubmit={onSubmit} onDismiss={vi.fn()} />);
     fireEvent.click(screen.getByTestId("outcome-pick-date-whatsapp_sent"));
     fireEvent.click(screen.getByTestId("next-touch-tomorrow"));
     expect(onSubmit.mock.calls[0][0].result).toBe("whatsapp_sent");
@@ -132,8 +188,8 @@ describe("outcome sheet", () => {
     fireEvent.click(screen.getByTestId("outcome-pick-date-no_answer"));
     fireEvent.click(screen.getByTestId("outcome-back"));
     fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
-    fireEvent.click(screen.getByTestId("next-touch-tomorrow"));
-    expect(onSubmit.mock.calls[0][0].result).toBe("answered_progressing");
+    expect(screen.getByTestId("activity-save")).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("will not close a lead as lost without a reason", () => {

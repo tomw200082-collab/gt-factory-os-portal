@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function AuthCallbackPage() {
     void (async () => {
       const url = new URL(window.location.href);
       // Same default as the login form: the /apps fork, which forwards on.
-      const next = url.searchParams.get("next") ?? "/apps";
+      const next = safeRedirectTarget(url.searchParams.get("next"));
 
       const supabase = createSupabaseBrowserClient();
 
