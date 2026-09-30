@@ -99,9 +99,9 @@ Sales-only `src/app/(sales)/_lib/labels.ts`, Unit A; the action labels describe 
 
 **Approval record:** Tom answered `מאשר הכל` immediately after the assistant linked this exact table as the single requested approval. The dated transcript excerpt is `Sales-Machine/evidence/2026-09-30-gt-pulse-a-copy-assent.md`. The approved table is lines 66–93 at portal commit `103354bdce2e93cc4b19232dadc46745640d3ffb`, SHA-256 `3ee14032b307537bcb27d2b1fb05d491b4b654960eb3ce96430dece15721a19c`. This contextual assent satisfies the exact-entry threshold in brain `EXECUTION_POLICY.md` §Approval thresholds for the listed Unit A strings only. It does not approve new copy, production backlog insertion, paid staging, customer outreach or a frozen-flag change. Production release remains held on its other gates.
 
-## Additional exact copy proposed during the 2026-09-30 gate repairs — awaiting register assent
+## Additional exact copy approved during the 2026-09-30 gate repairs
 
-The prior contextual assent does not cover these later strings. They are review-branch copy only; do not release until the exact entries are approved under the same threshold. Backend task text is included because the portal displays it verbatim.
+The prior contextual assent did not cover these later strings. Tom approved all sixteen exact entries on 2026-09-30 after the assistant linked this table at portal commit `a2e1786c33fc8b257240d7076113222ec8a80028` lines 108–123 and explicitly requested assent for those entries, paid branch cost and temporary PR watching in one sentence. His immediately following reply was `אני מאשר`. This clears the register threshold for only the sixteen strings below. Backend task text is included because the portal displays it verbatim. This assent does not authorize new text, customer outreach, production deployment or a production backfill.
 
 | Source/key | Exact text |
 |---|---|
