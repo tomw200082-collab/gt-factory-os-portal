@@ -32,6 +32,7 @@ function returnDelayMs(): number {
 
 export interface ArmedOutreach {
   leadId: string;
+  taskId?: string;
   ownerEmail: string;
   channel: OutreachChannel;
   at: number;
@@ -64,7 +65,7 @@ export interface OutcomeCapture {
   /** Set once the user is back and an outcome is owed. */
   pending: ArmedOutreach | null;
   /** Call on tap, before the browser follows the tel:/wa.me link. */
-  arm: (leadId: string, channel: OutreachChannel) => void;
+  arm: (leadId: string, channel: OutreachChannel, taskId?: string) => void;
   /** Only a captured outcome clears the intent. Dismissal does not. */
   clear: () => void;
   /**
@@ -83,9 +84,9 @@ export function useOutcomeCapture(email: string | undefined): OutcomeCapture {
   // feel broken. It returns after a real trip away from the app.
   const dismissedRef = useRef(false);
 
-  const arm = useCallback((leadId: string, channel: OutreachChannel) => {
+  const arm = useCallback((leadId: string, channel: OutreachChannel, taskId?: string) => {
     if (!email) return;
-    writeArmed({ leadId, ownerEmail: email.toLowerCase(), channel, at: Date.now() });
+    writeArmed({ leadId, taskId, ownerEmail: email.toLowerCase(), channel, at: Date.now() });
     dismissedRef.current = false;
     setPending(null);
   }, [email]);

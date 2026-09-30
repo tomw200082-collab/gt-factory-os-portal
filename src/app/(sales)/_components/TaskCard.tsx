@@ -12,7 +12,7 @@ export interface TaskCardProps {
   task: SalesTaskRow;
   lead?: SalesLeadRow | null;
   manager: boolean;
-  onArm: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
+  onArm: (leadId: string, channel: "call" | "whatsapp" | "email", taskId?: string) => void;
   onComplete: (taskId: string, note: string) => Promise<unknown>;
   onResolveContact: (leadId: string, details: { phone?: string; email?: string; provenance: string }) => Promise<unknown>;
 }
@@ -91,9 +91,9 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
 
       {actionable ? (
         <div className="mt-2 flex flex-wrap gap-2">
-          {tel && task.lead_id ? <a href={tel} className="s-btn s-btn-primary flex-1" onClick={() => onArm(task.lead_id!, "call")}><Phone size={16} aria-hidden />{UI.call}</a> : null}
-          {wa && task.lead_id ? <a href={wa} target="_blank" rel="noopener noreferrer" className="s-btn s-btn-ghost flex-1" onClick={() => onArm(task.lead_id!, "whatsapp")}><MessageCircle size={16} aria-hidden />{UI.whatsapp}</a> : null}
-          {mail && task.lead_id ? <a href={mail} className="s-btn s-btn-ghost flex-1" onClick={() => onArm(task.lead_id!, "email")}><Mail size={16} aria-hidden />{UI.email}</a> : null}
+          {tel && task.lead_id ? <a href={tel} className="s-btn s-btn-primary flex-1" onClick={() => onArm(task.lead_id!, "call", task.id)}><Phone size={16} aria-hidden />{UI.call}</a> : null}
+          {wa && task.lead_id ? <a href={wa} target="_blank" rel="noopener noreferrer" className="s-btn s-btn-ghost flex-1" onClick={() => onArm(task.lead_id!, "whatsapp", task.id)}><MessageCircle size={16} aria-hidden />{UI.whatsapp}</a> : null}
+          {mail && task.lead_id ? <a href={mail} className="s-btn s-btn-ghost flex-1" onClick={() => onArm(task.lead_id!, "email", task.id)}><Mail size={16} aria-hidden />{UI.email}</a> : null}
           {task.kind !== "wait_review" ? <button type="button" className="s-btn s-btn-ghost" onClick={() => setExpanded((v) => !v)}>{UI.taskComplete}</button> : null}
         </div>
       ) : null}

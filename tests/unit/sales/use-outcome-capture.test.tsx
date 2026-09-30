@@ -7,7 +7,9 @@ function Probe({ email = "rep-a@example.invalid" }: { email?: string }) {
   return (
     <div>
       <span data-testid="pending">{pending ? `${pending.leadId}:${pending.channel}` : "none"}</span>
+      <span data-testid="task-id">{pending?.taskId ?? "none"}</span>
       <button onClick={() => arm("L1", "call")}>arm</button>
+      <button onClick={() => arm("L1", "call", "T1")}>arm-task</button>
       <button onClick={() => clear()}>clear</button>
       <button onClick={() => dismiss()}>dismiss</button>
     </div>
@@ -48,6 +50,14 @@ describe("outcome capture", () => {
     returnToApp();
 
     expect(screen.getByTestId("pending").textContent).toBe("L1:call");
+  });
+
+  it("keeps the source task through a dialler return so the performed task is completed", () => {
+    render(<Probe />);
+    act(() => screen.getByText("arm-task").click());
+    returnToApp();
+    expect(screen.getByTestId("task-id").textContent).toBe("T1");
+    expect(JSON.parse(window.sessionStorage.getItem("gt.sales.outreach") ?? "{}").taskId).toBe("T1");
   });
 
   it("clears only when an outcome is captured", () => {

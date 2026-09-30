@@ -433,6 +433,13 @@ describe("today queue", () => {
 });
 
 describe("source-backed task card", () => {
+  it("passes the source task identity when a task's call is started", () => {
+    const armed = vi.fn();
+    render(<TaskCard task={task} lead={row({ lead_id: "L1", phone_e164: "+972501111111" })}
+      manager={false} onArm={armed} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    fireEvent.click(within(screen.getByTestId("task-card")).getByRole("link", { name: UI.call }));
+    expect(armed).toHaveBeenCalledWith("L1", "call", "T1");
+  });
   it("links to its lead and requires a note before completion", async () => {
     const completed = vi.fn(async () => undefined);
     render(<TaskCard task={task} manager={false} onArm={noop} onComplete={completed} onResolveContact={vi.fn()} />);

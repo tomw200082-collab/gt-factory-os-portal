@@ -200,6 +200,30 @@ test("queue renders, an outcome is captured, and the card clears @mocked", async
   expect((outcome?.body as { primary_action: { kind: string; due_at: string } }).primary_action.kind).toBe("call");
 });
 
+test("an outcome from a task names that task in the atomic activity write @mocked", async ({ page }) => {
+  const taskId = "11111111-2222-4333-8444-555555555555";
+  const posted = await stubSales(page, [newLead]);
+  await page.route(/\/api\/sales\/leads(?:\?.*)?$/, (r) => r.fulfill({ json: { rows: [{
+    id: "L1", phone_e164: newLead.phone_e164, org_name: newLead.org_name,
+    contact_name: newLead.contact_name, status: "new", assignee: null,
+  }] } }));
+  await page.route("**/api/sales/tasks**", (r) => r.fulfill({ json: { rows: [{
+    id: taskId, lead_id: "L1", org_id: null, kind: "call", title: "להתקשר",
+    due_at: iso(new Date(now.getTime() - 3600e3)), status: "open",
+    owner_email: null, source_kind: "activity", source_id: "synthetic",
+    source_event_id: null, needs_assignment: false,
+    lead_context: { org_name: newLead.org_name, contact_name: newLead.contact_name, status: "new" },
+  }] } }));
+  await page.goto("/sales/today");
+  await page.getByTestId("task-card").getByRole("link", { name: "התקשר" }).click();
+  await leaveAndReturn(page);
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+  await page.getByTestId("outcome-no_answer").dispatchEvent("click");
+  await expect.poll(() => posted.filter((p) => p.url.includes("/activity")).length).toBe(1);
+  const body = posted.find((p) => p.url.includes("/activity"))?.body as Record<string, unknown>;
+  expect(body.source_task_id).toBe(taskId);
+});
+
 test("a failed outcome keeps the sheet open instead of silently losing the call @mocked", async ({
   page,
 }) => {

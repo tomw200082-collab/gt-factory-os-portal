@@ -131,8 +131,8 @@ export default function TodayPage() {
   );
   const anySheetOpen = Boolean(answerSheetOpen || postponing || losing);
 
-  function arm(leadId: string, channel: "call" | "whatsapp" | "email") {
-    capture.arm(leadId, channel);
+  function arm(leadId: string, channel: "call" | "whatsapp" | "email", taskId?: string) {
+    capture.arm(leadId, channel, taskId);
     // Intent, not a touch: only an outcome, a note or a status change stops the
     // SLA clock (§5.3), and record_outreach is written that way server-side.
     // The id travels in the vars — nothing is "pending" yet at this instant.
@@ -196,7 +196,8 @@ export default function TodayPage() {
       return;
     }
     if (!vars.request_id || !capture.pending) return;
-    activity.mutate({ request_id: vars.request_id, channel: capture.pending.channel,
+    activity.mutate({ request_id: vars.request_id, source_task_id: capture.pending.taskId,
+      channel: capture.pending.channel,
       result: vars.result, note: vars.note, primary_action: vars.primary_action }, {
       onSuccess: () => {
         clearActivityDraft(session?.email ?? "", leadId ?? "");

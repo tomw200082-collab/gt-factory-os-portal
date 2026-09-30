@@ -171,6 +171,10 @@ test("a call armed on the leads page is answered for on the leads page @mocked",
   // The sheet used to live only on Today, so this asked nothing and the
   // answer was thrown away without a word (audit P0-4).
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+  await expect(page.getByTestId("leads-body")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByTestId("leads-body")).toHaveAttribute("inert", "");
+  await page.getByTestId("outcome-dismiss").click();
+  await expect(page.getByTestId("leads-body")).not.toHaveAttribute("inert", "");
 });
 
 test("a leads answer posts note and due action atomically, retaining its draft after 422 @mocked", async ({ page }) => {

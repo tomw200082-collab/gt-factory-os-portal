@@ -149,6 +149,8 @@ function LeadsScreen() {
   // channel — otherwise a close that did nothing reads as a close that worked.
   const [convertNote, setConvertNote] = useState<string | null>(null);
   const answerSheetOpen = Boolean(capture.pending && (pendingRow || activity.isPending || outcome.isPending));
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bodyRef.current?.toggleAttribute("inert", answerSheetOpen); }, [answerSheetOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -207,6 +209,7 @@ function LeadsScreen() {
 
   return (
     <div className="flex flex-col gap-4">
+      <div ref={bodyRef} data-testid="leads-body" aria-hidden={answerSheetOpen || undefined}>
       <header className="flex flex-col gap-3">
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.leadsTitle}
@@ -421,6 +424,8 @@ function LeadsScreen() {
         />
       ) : null}
 
+      </div>
+
       {answerSheetOpen && capture.pending ? (
         <OutcomeSheet
           leadName={
@@ -473,7 +478,8 @@ function LeadsScreen() {
               return;
             }
             if (!vars.request_id || !capture.pending) return;
-            activity.mutate({ request_id: vars.request_id, channel: capture.pending.channel,
+            activity.mutate({ request_id: vars.request_id, source_task_id: capture.pending.taskId,
+              channel: capture.pending.channel,
               result: vars.result, note: vars.note, primary_action: vars.primary_action }, {
               onSuccess: () => {
                 clearActivityDraft(session?.email ?? "", leadId ?? "");

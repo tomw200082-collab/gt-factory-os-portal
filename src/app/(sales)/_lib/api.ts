@@ -356,6 +356,7 @@ export interface OutcomeVars {
 
 export interface RecordActivityVars {
   request_id: string;
+  source_task_id?: string;
   channel: OutreachChannel;
   result: "answered_progressing" | "no_answer" | "whatsapp_sent" | "email_sent";
   note?: string;

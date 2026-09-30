@@ -47,7 +47,7 @@ export interface TodayQueueProps {
   slaHours: number;
   roster?: AssigneeEntry[];
   templates: WhatsappTemplates | null;
-  onArm: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
+  onArm: (leadId: string, channel: "call" | "whatsapp" | "email", taskId?: string) => void;
   onPostpone: (row: TodayRow) => void;
   onLost: (row: TodayRow) => void;
 }

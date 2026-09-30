@@ -249,7 +249,8 @@ export default function AttentionPage() {
               return;
             }
             if (!vars.request_id || !capture.pending) return;
-            recordActivity.mutate({ request_id: vars.request_id, channel: capture.pending.channel,
+            recordActivity.mutate({ request_id: vars.request_id, source_task_id: capture.pending.taskId,
+              channel: capture.pending.channel,
               result: vars.result, note: vars.note, primary_action: vars.primary_action }, {
               onSuccess: () => {
                 clearActivityDraft(session?.email ?? "", leadId);
