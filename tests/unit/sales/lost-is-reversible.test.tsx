@@ -105,6 +105,7 @@ vi.mock("@/lib/auth/session-provider", () => ({
 vi.mock("next/navigation", () => ({
   usePathname: () => "/sales",
   useSearchParams: () => new URLSearchParams("lead=L1"),
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 /** The date the lead was carrying before it was lost — what the undo restores. */
