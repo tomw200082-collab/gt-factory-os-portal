@@ -30,6 +30,14 @@ describe("outcome sheet", () => {
     expect(screen.queryByTestId("outcome-whatsapp_sent")).toBeNull();
     expect(screen.queryByTestId("outcome-no_answer")).toBeNull();
     expect(screen.getByTestId("outcome-answered_progressing")).toBeTruthy();
+    expect(screen.getByTestId("outcome-email_sent")).toBeTruthy();
+  });
+
+  it("records an email send as an email send with a follow-up obligation", () => {
+    const onSubmit = vi.fn();
+    render(<OutcomeSheet leadName="דנה" channel="email" onSubmit={onSubmit} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-email_sent"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ result: "email_sent", request_id: expect.any(String) }));
   });
 
   it("will not close a deal without a Green Invoice document number", () => {

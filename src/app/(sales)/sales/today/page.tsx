@@ -48,7 +48,7 @@ export default function TodayPage() {
   const leads = useLeads();
   const stats = useWeekStats();
   const settings = useSettings();
-  const capture = useOutcomeCapture();
+  const capture = useOutcomeCapture(session?.email);
 
   // The two direct actions on a card, which skip the call-and-return cycle.
   const [postponing, setPostponing] = useState<TodayRow | null>(null);

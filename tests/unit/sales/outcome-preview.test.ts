@@ -7,11 +7,10 @@ import { nextBusinessTouchPreview } from "@/app/(sales)/_components/OutcomeSheet
 // N days out, 09:00 Israel time, never Friday or Saturday.
 
 describe("nextBusinessTouchPreview", () => {
-  it("is 09:00 local on the day it lands", () => {
+  it("is 09:00 in Israel on the day it lands", () => {
     const from = new Date("2026-08-18T13:24:00"); // a Tuesday
     const d = nextBusinessTouchPreview(1, from);
-    expect(d.getHours()).toBe(9);
-    expect(d.getMinutes()).toBe(0);
+    expect(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }).format(d)).toBe("09:00");
   });
 
   it("rolls a Friday forward to Sunday", () => {

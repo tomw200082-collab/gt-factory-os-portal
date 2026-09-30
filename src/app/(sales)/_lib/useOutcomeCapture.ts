@@ -32,6 +32,7 @@ function returnDelayMs(): number {
 
 export interface ArmedOutreach {
   leadId: string;
+  ownerEmail: string;
   channel: OutreachChannel;
   at: number;
 }
@@ -74,7 +75,7 @@ export interface OutcomeCapture {
   dismiss: () => void;
 }
 
-export function useOutcomeCapture(): OutcomeCapture {
+export function useOutcomeCapture(email: string | undefined): OutcomeCapture {
   const [pending, setPending] = useState<ArmedOutreach | null>(null);
   // Set when the sheet is closed without an answer. The intent is still owed,
   // but it must not spring straight back: the browser fires a window focus for
@@ -83,10 +84,11 @@ export function useOutcomeCapture(): OutcomeCapture {
   const dismissedRef = useRef(false);
 
   const arm = useCallback((leadId: string, channel: OutreachChannel) => {
-    writeArmed({ leadId, channel, at: Date.now() });
+    if (!email) return;
+    writeArmed({ leadId, ownerEmail: email.toLowerCase(), channel, at: Date.now() });
     dismissedRef.current = false;
     setPending(null);
-  }, []);
+  }, [email]);
 
   const clear = useCallback(() => {
     writeArmed(null);
@@ -111,6 +113,10 @@ export function useOutcomeCapture(): OutcomeCapture {
       if (dismissedRef.current) return;
       const armed = readArmed();
       if (!armed) return;
+      if (!email || armed.ownerEmail !== email.toLowerCase()) {
+        setPending(null);
+        return;
+      }
       if (Date.now() - armed.at < returnDelayMs()) return;
       setPending(armed);
     };
@@ -124,7 +130,7 @@ export function useOutcomeCapture(): OutcomeCapture {
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("focus", check);
     };
-  }, []);
+  }, [email]);
 
   return { pending, arm, clear, dismiss };
 }

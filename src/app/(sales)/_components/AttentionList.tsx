@@ -26,6 +26,8 @@ const BUCKET_LABELS: Record<(typeof BUCKETS)[number], (n: number) => string> = {
 export interface AttentionListProps {
   rows: AttentionRow[];
   roster: AssigneeEntry[];
+  ownerEmail?: string;
+  manager?: boolean;
   onOpen: (leadId: string) => void;
   /** Placing a call from here owes an outcome, exactly as it does on Today and
    *  in the drawer. Without it this screen was the one place in v2 where a
@@ -34,7 +36,7 @@ export interface AttentionListProps {
   onArm: (leadId: string, channel: "call") => void;
 }
 
-export function AttentionList({ rows, roster, onOpen, onArm }: AttentionListProps) {
+export function AttentionList({ rows, roster, ownerEmail, manager = true, onOpen, onArm }: AttentionListProps) {
   return (
     <div className="flex flex-col gap-6">
       {BUCKETS.map((bucket) => {
@@ -87,7 +89,7 @@ export function AttentionList({ rows, roster, onOpen, onArm }: AttentionListProp
                     </span>
                   </div>
 
-                  {tel ? (
+                  {tel && (manager || row.assignee === ownerEmail) ? (
                     <a
                       href={tel}
                       className="s-btn s-btn-ghost"

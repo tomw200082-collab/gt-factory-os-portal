@@ -93,6 +93,8 @@ function LeadsScreen() {
   );
 
   const openLead = rows.find((r) => r.id === openId) ?? null;
+  const isRep = session?.role === "sales_rep";
+  const canEditOpenLead = !isRep || openLead?.assignee === session?.email;
   const events = useLeadEvents(openId);
   const sourceEventId = params?.get("event");
   useEffect(() => {
@@ -114,7 +116,7 @@ function LeadsScreen() {
   // conversation was never logged and nothing said so (audit P0-4).
   const outreach = useOutreach();
   const bulkAssign = useBulkAssign();
-  const capture = useOutcomeCapture();
+  const capture = useOutcomeCapture(session?.email);
   const [toast, setToast] = useState<string | null>(null);
   // The lead a just-recorded "אבוד" can be taken back from, for as long as its
   // toast is on screen — the same affordance the Today card has had since audit
@@ -291,6 +293,9 @@ function LeadsScreen() {
       <div id="leads-panel" role="tabpanel" aria-labelledby={`leads-tab-${tab}`}>
         {leads.isLoading ? <QueueLoading /> : null}
         {leads.isError ? <QueueError onRetry={() => void leads.refetch()} what={UI.loadErrorLeads} /> : null}
+        {leads.isSuccess && requestedLeadId && !openLead ? (
+          <p role="alert" data-testid="lead-not-found" className="s-card p-4">הליד המבוקש אינו זמין. ייתכן שהקישור השתנה או שאין גישה לרשומה.</p>
+        ) : null}
 
         {leads.isSuccess && visible.length === 0 ? (
           <ListEmpty label={query ? UI.searchEmpty : UI.emptyForTab(tab)} />
@@ -303,8 +308,8 @@ function LeadsScreen() {
             // on every row. The prop stays so an "all" tab restores it.
             showStatus={false}
             roster={roster}
-            selected={selected}
-            onToggle={(id) =>
+            selected={isRep ? undefined : selected}
+            onToggle={isRep ? undefined : (id) =>
               setSelected((prev) => {
                 const next = new Set(prev);
                 if (next.has(id)) next.delete(id);
@@ -312,7 +317,7 @@ function LeadsScreen() {
                 return next;
               })
             }
-            onToggleAll={(ids) =>
+            onToggleAll={isRep ? undefined : (ids) =>
               setSelected((prev) =>
                 ids.every((id) => prev.has(id)) ? new Set() : new Set(ids),
               )
@@ -325,6 +330,9 @@ function LeadsScreen() {
       {openLead ? (
         <LeadDrawer
           lead={openLead}
+          canEdit={canEditOpenLead}
+          canAssign={!isRep}
+          suspended={answerSheetOpen}
           events={events.data ?? []}
           eventsLoading={events.isLoading}
           templates={settings.data?.whatsapp_templates ?? null}
@@ -381,7 +389,7 @@ function LeadsScreen() {
         {selected.size > 0 ? UI.bulkSelected(selected.size) : ""}
       </span>
 
-      {selected.size > 0 ? (
+      {!isRep && selected.size > 0 ? (
         <BulkBar
           count={selected.size}
           roster={roster}

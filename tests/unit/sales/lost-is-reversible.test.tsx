@@ -192,7 +192,7 @@ async function returnToApp() {
 function armReturnFromCall() {
   window.sessionStorage.setItem(
     "gt.sales.outreach",
-    JSON.stringify({ leadId: "L1", channel: "call", at: Date.now() - 60_000 }),
+    JSON.stringify({ leadId: "L1", ownerEmail: "tom@gteveryday.com", channel: "call", at: Date.now() - 60_000 }),
   );
   window.__GT_SALES_OUTCOME_DELAY_MS__ = 0;
 }

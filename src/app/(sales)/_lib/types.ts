@@ -15,6 +15,7 @@ export type OutcomeResult =
   | "answered_progressing"
   | "no_answer"
   | "whatsapp_sent"
+  | "email_sent"
   | "lost";
 
 export type OutreachChannel = "call" | "whatsapp" | "email";

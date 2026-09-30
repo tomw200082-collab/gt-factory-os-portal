@@ -349,7 +349,7 @@ function restoreTodayCaches(
 }
 
 export interface OutcomeVars {
-  result: OutcomeResult;
+  result: Exclude<OutcomeResult, "email_sent">;
   next_touch_at?: string | null;
   reason?: string | null;
 }
@@ -357,7 +357,7 @@ export interface OutcomeVars {
 export interface RecordActivityVars {
   request_id: string;
   channel: OutreachChannel;
-  result: "answered_progressing" | "no_answer" | "whatsapp_sent";
+  result: "answered_progressing" | "no_answer" | "whatsapp_sent" | "email_sent";
   note?: string;
   primary_action?: { kind: "call" | "whatsapp" | "email" | "other" | "wait_review"; due_at: string };
   additional_actions?: Array<{ kind: "call" | "whatsapp" | "email" | "other" | "wait_review"; due_at: string }>;

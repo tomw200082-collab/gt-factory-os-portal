@@ -46,6 +46,7 @@ describe("sales labels", () => {
     ]);
     expect(Object.keys(OUTCOME_LABELS).sort()).toEqual([
       "answered_progressing",
+      "email_sent",
       "lost",
       "no_answer",
       "whatsapp_sent",

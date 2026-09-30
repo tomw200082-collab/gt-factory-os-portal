@@ -5,7 +5,7 @@ export interface ActivityDraft {
   note: string;
   kind: "" | "call" | "whatsapp" | "email" | "other" | "wait_review";
   due_at: string;
-  result: "answered_progressing" | "no_answer" | "whatsapp_sent";
+  result: "answered_progressing" | "no_answer" | "whatsapp_sent" | "email_sent";
   channel: "" | "call" | "whatsapp" | "email";
   attempted?: string;
 }

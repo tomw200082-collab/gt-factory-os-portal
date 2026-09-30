@@ -60,7 +60,7 @@ export default function AttentionPage() {
   // surface built for "what is stuck" was itself a way to leave a lead stuck
   // with no record of the conversation (gate flow P1 / INTER-008).
   const outreach = useOutreach();
-  const capture = useOutcomeCapture();
+  const capture = useOutcomeCapture(session?.email);
   const pendingLead = leads.data?.find((l) => l.id === capture.pending?.leadId) ?? null;
   const outcome = useOutcome(capture.pending?.leadId ?? "");
   const recordActivity = useRecordActivity(capture.pending?.leadId ?? "");
@@ -115,6 +115,8 @@ export default function AttentionPage() {
         <AttentionList
           rows={attention.data}
           roster={roster}
+          ownerEmail={session?.email}
+          manager={session?.role !== "sales_rep"}
           onOpen={setOpenId}
           onArm={arm}
         />
@@ -159,6 +161,9 @@ export default function AttentionPage() {
       {openLead ? (
         <LeadDrawer
           lead={openLead}
+          canEdit={session?.role !== "sales_rep" || openLead.assignee === session?.email}
+          canAssign={session?.role !== "sales_rep"}
+          suspended={answerSheetOpen}
           events={events.data ?? []}
           eventsLoading={events.isLoading}
           templates={settings.data?.whatsapp_templates ?? null}

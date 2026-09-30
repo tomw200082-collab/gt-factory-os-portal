@@ -28,6 +28,7 @@ export const OUTCOME_LABELS: Record<OutcomeResult, string> = {
   answered_progressing: "ענה, מתקדם",
   no_answer: "לא ענה",
   whatsapp_sent: "וואטסאפ נשלח",
+  email_sent: "אימייל נשלח",
   lost: "אבוד",
 };
 

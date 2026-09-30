@@ -124,6 +124,27 @@ describe("leads table", () => {
 });
 
 describe("lead drawer", () => {
+  it("shows a colleague's lead as read-only to a rep", () => {
+    render(<LeadDrawer lead={lead({ assignee: "other@example.invalid" })} events={[]} eventsLoading={false}
+      templates={null} canEdit={false} canAssign={false} onClose={noop}
+      onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    expect(screen.queryByTestId("drawer-call")).toBeNull();
+    expect(screen.queryByTestId("drawer-whatsapp")).toBeNull();
+    expect(screen.queryByTestId("drawer-assign-save")).toBeNull();
+    expect(screen.getByTestId("lead-drawer")).toBeTruthy();
+  });
+
+  it("does not close the drawer through Escape while the outcome sheet owns focus", () => {
+    const onClose = vi.fn();
+    const { container } = render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+      templates={null} suspended onClose={onClose} onStatus={noop}
+      onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container.firstElementChild?.hasAttribute("inert")).toBe(true);
+    expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   function renderDrawer(over: Partial<SalesLeadRow> = {}, events: LeadEventRow[] = []) {
     const calls = {
       status: [] as [string, string | null | undefined, string | null | undefined][],

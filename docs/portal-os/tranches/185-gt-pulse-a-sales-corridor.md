@@ -25,6 +25,8 @@ manifest:
   - src/app/(sales)/_lib/useQueueScope.ts
   - src/app/(sales)/_lib/useOutcomeCapture.ts
   - src/app/(sales)/_lib/activityDraft.ts
+  - src/app/(sales)/_lib/israelTime.ts
+  - src/app/(sales)/_lib/israelTime.test.ts
   - src/app/(sales)/_lib/leadMilestones.ts
   - src/app/(sales)/_components/TaskCard.tsx
   - src/app/(sales)/_components/SalesShell.tsx
@@ -34,6 +36,7 @@ manifest:
   - src/app/(sales)/_components/TodayCard.tsx
   - src/app/(sales)/_components/OutcomeSheet.tsx
   - src/app/(sales)/_components/LeadDrawer.tsx
+  - src/app/(sales)/_components/AttentionList.tsx
   - src/app/(sales)/sales/today/page.tsx
   - src/app/(sales)/sales/leads/page.tsx
   - src/app/(sales)/sales/attention/page.tsx
@@ -44,6 +47,9 @@ manifest:
   - tests/unit/sales/api-stubs.test.ts
   - tests/unit/sales/today-queue.test.tsx
   - tests/unit/sales/outcome-sheet.test.tsx
+  - tests/unit/sales/outcome-preview.test.ts
+  - tests/unit/sales/labels.test.ts
+  - tests/unit/sales/leads.test.tsx
   - tests/unit/sales/use-outcome-capture.test.tsx
   - tests/unit/sales/activity-draft.test.ts
   - tests/unit/sales/lead-milestones.test.ts
@@ -59,9 +65,9 @@ manifest:
 
 No other path is writable under this tranche. The merged catalogue tranche 184 left a stale active pointer; opening 185 clears that pointer without editing catalogue code.
 
-## Proposed Hebrew copy register entry — awaiting Tom's exact-entry approval
+## Hebrew copy register entry — Tom approved 2026-09-30
 
-Sales-only `src/app/(sales)/_lib/labels.ts`, Unit A; the action labels describe recorded work and never imply an automatic customer send. Exact proposed additions:
+Sales-only `src/app/(sales)/_lib/labels.ts`, Unit A; the action labels describe recorded work and never imply an automatic customer send. Exact approved additions:
 
 | Key | Text |
 |---|---|
@@ -91,7 +97,29 @@ Sales-only `src/app/(sales)/_lib/labels.ts`, Unit A; the action labels describe 
 | railConverted | המרה אומתה |
 | railSource | הצג מקור |
 
-This table is a proposal, not a self-issued register approval. Production release remains held until the policy's Tom register entry is recorded.
+**Approval record:** Tom answered `מאשר הכל` immediately after the assistant linked this exact table as the single requested approval. The dated transcript excerpt is `Sales-Machine/evidence/2026-09-30-gt-pulse-a-copy-assent.md`. The approved table is lines 66–93 at portal commit `103354bdce2e93cc4b19232dadc46745640d3ffb`, SHA-256 `3ee14032b307537bcb27d2b1fb05d491b4b654960eb3ce96430dece15721a19c`. This contextual assent satisfies the exact-entry threshold in brain `EXECUTION_POLICY.md` §Approval thresholds for the listed Unit A strings only. It does not approve new copy, production backlog insertion, paid staging, customer outreach or a frozen-flag change. Production release remains held on its other gates.
+
+## Additional exact copy proposed during the 2026-09-30 gate repairs — awaiting register assent
+
+The prior contextual assent does not cover these later strings. They are review-branch copy only; do not release until the exact entries are approved under the same threshold. Backend task text is included because the portal displays it verbatim.
+
+| Source/key | Exact text |
+|---|---|
+| `OUTCOME_LABELS.email_sent` | אימייל נשלח |
+| `LeadDrawer.unownedForRep` | הליד אינו משויך אליך. מנהל יכול לשייך אותו לפני יצירת קשר. |
+| `LeadsScreen.requestedLeadUnavailable` | הליד המבוקש אינו זמין. ייתכן שהקישור השתנה או שאין גישה לרשומה. |
+| `task.title.wait_review` | בדיקת תשובת הלקוח |
+| `task.title.call` | להתקשר |
+| `task.title.whatsapp` | לכתוב בוואטסאפ |
+| `task.title.email` | לשלוח אימייל |
+| `task.title.other` | פעולת המשך |
+| `task.reason.activity` | נקבע בעקבות תוצאת קשר |
+| `task.reason.repeat_contact` | הלקוח פנה שוב |
+| `task.reason.button_tap` | הלקוח ביקש לשמוע עוד |
+| `task.reason.draft_order` | טיוטת הזמנה ממתינה לטיפול |
+| `task.reason.contact_first` | ליד חדש ממתין לקשר ראשון |
+| `task.reason.contact_resolution` | חסרים פרטי קשר מאומתים |
+| `task.reason.fallback` | פעולה שנקבעה לליד |
 
 ## Gates and rollback
 
