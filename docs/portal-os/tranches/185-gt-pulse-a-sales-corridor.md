@@ -106,6 +106,7 @@ The prior contextual assent does not cover these later strings. They are review-
 | Source/key | Exact text |
 |---|---|
 | `OUTCOME_LABELS.email_sent` | אימייל נשלח |
+| `EVENT_LABELS.outcome` | תוצאת קשר |
 | `LeadDrawer.unownedForRep` | הליד אינו משויך אליך. מנהל יכול לשייך אותו לפני יצירת קשר. |
 | `LeadsScreen.requestedLeadUnavailable` | הליד המבוקש אינו זמין. ייתכן שהקישור השתנה או שאין גישה לרשומה. |
 | `task.title.wait_review` | בדיקת תשובת הלקוח |

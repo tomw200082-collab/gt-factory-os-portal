@@ -44,7 +44,7 @@ export const EVENT_LABELS: Record<string, string> = {
   matched_existing_customer: "זוהה כלקוח קיים",
   imported: "יובא",
   outreach: "פנייה יצאה",
-  outcome: "תוצאת שיחה",
+  outcome: "תוצאת קשר",
   // Written by the morning digest (migration 0334). Without a label here the
   // drawer timeline renders the raw token "reminder_sent" on a Hebrew screen —
   // and this is the one event type a rep will see most mornings.
