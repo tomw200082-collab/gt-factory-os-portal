@@ -65,10 +65,6 @@ export interface OutcomeSheetProps {
 
 type Step = "root" | "activity" | "next-touch" | "lost-reason" | "won-evidence";
 
-function atNineAM(daysFromNow: number): string {
-  return israelNineAMAfter(daysFromNow);
-}
-
 /**
  * What the server will schedule if the user does not pick a date.
  *
@@ -435,7 +431,7 @@ export function OutcomeSheet({
               data-testid="next-touch-tomorrow"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => dateFor ? submitActivity(dateFor, atNineAM(1)) : onSubmit({ ...declared, next_touch_at: atNineAM(1) })}
+              onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(1)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(1) })}
             >
               {UI.tomorrow}
             </button>
@@ -443,7 +439,7 @@ export function OutcomeSheet({
               type="button"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => dateFor ? submitActivity(dateFor, atNineAM(3)) : onSubmit({ ...declared, next_touch_at: atNineAM(3) })}
+              onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(3)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(3) })}
             >
               {UI.inThreeDays}
             </button>
@@ -451,7 +447,7 @@ export function OutcomeSheet({
               type="button"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => dateFor ? submitActivity(dateFor, atNineAM(7)) : onSubmit({ ...declared, next_touch_at: atNineAM(7) })}
+              onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(7)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(7) })}
             >
               {UI.inAWeek}
             </button>
