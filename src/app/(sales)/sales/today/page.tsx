@@ -240,7 +240,9 @@ export default function TodayPage() {
             ))}
           </div>
         </div>
-        <StatsStrip stats={stats.data} />
+        {/* Team-wide counts read as the rep's own under "my queue" (UX gate
+            2026-10-01); a rep's queue below is their whole truth. */}
+        {isRep ? null : <StatsStrip stats={stats.data} />}
       </header>
 
       {/* While a sheet is open the queue behind it is unreachable by pointer;

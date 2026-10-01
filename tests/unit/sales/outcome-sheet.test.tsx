@@ -7,6 +7,14 @@ import { toDateInputValue } from "@/app/(sales)/_lib/format";
 afterEach(cleanup);
 
 describe("outcome sheet", () => {
+  it("marks the three activity fields as required, without new words", () => {
+    render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    const sheet = screen.getByTestId("outcome-sheet");
+    expect(sheet.querySelector("textarea")?.required).toBe(true);
+    expect(sheet.querySelector("select")?.required).toBe(true);
+    expect(sheet.querySelector('input[type="date"]')?.required).toBe(true);
+  });
   it("offers call results without an impossible WhatsApp claim", () => {
     // Was: "no way to declare a win" — the sheet had four outcomes and a close
     // was simply unreachable, so a deal Tom closed on the phone and invoiced in

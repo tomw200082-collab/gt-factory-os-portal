@@ -440,6 +440,19 @@ describe("source-backed task card", () => {
     fireEvent.click(within(screen.getByTestId("task-card")).getByRole("link", { name: UI.call }));
     expect(armed).toHaveBeenCalledWith("L1", "call", "T1");
   });
+  it("shows a registered reason instead of an unregistered trigger title", () => {
+    render(<TaskCard task={{ ...task, title: "קשר ראשון", reason: "ליד חדש ממתין לקשר ראשון" }}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(screen.queryByText("קשר ראשון")).toBeNull();
+    expect(screen.getAllByText("ליד חדש ממתין לקשר ראשון")).toHaveLength(1);
+  });
+  it("says whether the completion form is open", () => {
+    render(<TaskCard task={task} manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    const toggle = screen.getByRole("button", { name: UI.taskComplete });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
   it("lets the owning rep resolve a contact gap (D8)", () => {
     render(<TaskCard task={{ ...task, kind: "contact_resolution", title: "בירור פרטי קשר" }}
       manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);

@@ -373,12 +373,12 @@ export function OutcomeSheet({
               onClick={() => setStep("root")}>{UI.back}</button>
             <label className="flex flex-col gap-1 text-[13px]">
               {UI.activityNoteLabel}
-              <textarea className="s-input min-h-24" data-testid="activity-note" maxLength={2000}
+              <textarea className="s-input min-h-24" data-testid="activity-note" required minLength={5} maxLength={2000}
                 value={draft.note} onChange={(e) => updateDraft({ note: e.target.value })} />
             </label>
             <label className="flex flex-col gap-1 text-[13px]">
               {UI.activityActionLabel}
-              <select className="s-input" value={draft.kind} onChange={(e) => updateDraft({ kind: e.target.value as ActivityDraft["kind"] })}>
+              <select className="s-input" required value={draft.kind} onChange={(e) => updateDraft({ kind: e.target.value as ActivityDraft["kind"] })}>
                 <option value="">{UI.activityChooseAction}</option>
                 <option value="call">{UI.call}</option>
                 <option value="whatsapp">{UI.whatsapp}</option>
@@ -389,7 +389,7 @@ export function OutcomeSheet({
             </label>
             <label className="flex flex-col gap-1 text-[13px]">
               {UI.activityDateLabel}
-              <input type="date" className="s-input" min={israelDate()}
+              <input type="date" className="s-input" required min={israelDate()}
                 value={draft.due_at} onChange={(e) => updateDraft({ due_at: e.target.value })} />
             </label>
             <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"

@@ -59,6 +59,16 @@ test("manager can verify contact details on a contactless task @mocked", async (
   await expect.poll(() => saved).toEqual({ phone: "0501111234", provenance: "אומת מול העסק" });
 });
 
+test("a rep's Today carries no team-wide counts under their own queue @mocked", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("gt.fakeauth.v1", JSON.stringify({
+    user_id: "rep-1", email: "rep@synthetic.invalid", display_name: "נציג", role: "sales_rep",
+  })));
+  await stub(page, [task]);
+  await page.goto("/sales/today");
+  await expect(page.getByTestId("task-card")).toHaveCount(1);
+  await expect(page.getByTestId("stats-strip")).toHaveCount(0);
+});
+
 test("a rep cannot edit team-wide sales settings @mocked", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("gt.fakeauth.v1", JSON.stringify({
     user_id: "rep-1", email: "rep@synthetic.invalid", display_name: "נציג", role: "sales_rep",

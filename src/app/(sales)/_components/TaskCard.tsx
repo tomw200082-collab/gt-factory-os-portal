@@ -26,6 +26,10 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const contactGap = task.kind === "contact_resolution";
+  // Titles the routing trigger writes for these kinds are not in the copy
+  // register; the registered reason says the same thing (UX gate 2026-10-01).
+  const label = (task.kind === "contact_first" || task.kind === "reply" || task.kind === "draft_followup") && task.reason
+    ? task.reason : task.title;
   const actionable = Boolean(task.lead_id && !task.needs_assignment && !contactGap);
   const tel = actionable ? telHref(lead?.phone_e164 ?? null) : null;
   const wa = actionable ? waHref(lead?.phone_e164 ?? null, "") : null;
@@ -52,15 +56,15 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
-            {task.lead_context?.org_name ?? lead?.org_name ?? task.title}
+            {task.lead_context?.org_name ?? lead?.org_name ?? label}
           </h3>
-          <p className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>{task.title}</p>
+          <p className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>{label}</p>
         </div>
         <time className="s-nums shrink-0 text-xs" dateTime={task.due_at} style={{ color: "hsl(var(--s-fg-muted))" }}>
           {fmtRelative(task.due_at)}
         </time>
       </div>
-      {task.reason && task.reason !== task.title ? <p className="mt-2 text-xs" style={{ color: "hsl(var(--s-fg-muted))" }}>
+      {task.reason && task.reason !== label ? <p className="mt-2 text-xs" style={{ color: "hsl(var(--s-fg-muted))" }}>
         {UI.taskWhy}: {task.reason}
       </p> : null}
       {leadHref ? <Link href={leadHref} className="mt-2 inline-flex min-h-[44px] items-center text-sm underline" style={{ color: "hsl(var(--s-accent))" }}>
@@ -95,7 +99,7 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
           {tel && task.lead_id ? <a href={tel} className="s-btn s-btn-primary flex-1" onClick={() => onArm(task.lead_id!, "call", task.id)}><Phone size={16} aria-hidden />{UI.call}</a> : null}
           {wa && task.lead_id ? <a href={wa} target="_blank" rel="noopener noreferrer" className="s-btn s-btn-ghost flex-1" onClick={() => onArm(task.lead_id!, "whatsapp", task.id)}><MessageCircle size={16} aria-hidden />{UI.whatsapp}</a> : null}
           {mail && task.lead_id ? <a href={mail} className="s-btn s-btn-ghost flex-1" onClick={() => onArm(task.lead_id!, "email", task.id)}><Mail size={16} aria-hidden />{UI.email}</a> : null}
-          {task.kind !== "wait_review" ? <button type="button" className="s-btn s-btn-ghost" onClick={() => setExpanded((v) => !v)}>{UI.taskComplete}</button> : null}
+          {task.kind !== "wait_review" ? <button type="button" className="s-btn s-btn-ghost" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>{UI.taskComplete}</button> : null}
         </div>
       ) : null}
       {expanded ? <form className="mt-2 grid gap-2" onSubmit={(event) => {
