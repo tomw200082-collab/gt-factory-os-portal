@@ -36,6 +36,11 @@ describe("Today journey flow (D1 hero)", () => {
     ]);
   });
 
+  it("says what it counts: leads, not today's queue", () => {
+    render(<JourneyFlow rows={[base]} />);
+    expect(screen.getByTestId("journey-flow").querySelector(".s-flow-caption")?.textContent).toBe(UI.leadsTitle);
+  });
+
   it("holds its shape without numbers until the rows arrive", () => {
     render(<JourneyFlow rows={undefined} />);
     expect(screen.getByTestId("journey-flow").getAttribute("data-ready")).toBe("false");

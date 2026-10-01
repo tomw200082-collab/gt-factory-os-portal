@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLeads, useSaveSettings, useSettings } from "../../_lib/api";
 import { UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
@@ -12,6 +12,13 @@ export default function SettingsPage() {
   const settings = useSettings();
   const save = useSaveSettings();
   const [saved, setSaved] = useState(false);
+  // "Saved" is news for a moment, not a standing claim about fields edited
+  // since (UX gate FLOW-006).
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 3000);
+    return () => clearTimeout(timer);
+  }, [saved]);
   const leads = useLeads();
 
   const openLeadsByAssignee = useMemo(() => {
@@ -29,8 +36,8 @@ export default function SettingsPage() {
       {/* Every other screen frames itself — Today with the stats strip, Leads
           with the search field, /attention with a subtitle. Settings opened on
           a bare title and went straight into form controls. */}
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+      <header className="s-opening s-opening-compact flex flex-col gap-1">
+        <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.settingsTitle}
         </h1>
         <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
@@ -39,7 +46,7 @@ export default function SettingsPage() {
       </header>
 
       {session?.role === "sales_rep" ? (
-        <p role="status" className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>
+        <p className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>
           {UI.settingsManagerOnly}
         </p>
       ) : null}

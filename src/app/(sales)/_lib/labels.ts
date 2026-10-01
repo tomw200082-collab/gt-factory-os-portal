@@ -355,6 +355,11 @@ export const UI = {
   railNextAction: "פעולה הבאה נקבעה",
   railConverted: "המרה אומתה",
   railSource: "הצג מקור",
+  // Tom 2026-10-01 (tranche 187): the flow is the whole visible pipeline, the
+  // triage counts are the team's, and a note save confirms itself.
+  flowScope: "כל הלידים הפתוחים",
+  noteSaved: "נשמר ✓",
+  teamCounts: "כל הצוות",
   nextTouchSaved: "נקבע ✓",
   lostReasonTitle: "למה אבוד?",
   lostReasonOther: "פרט…",

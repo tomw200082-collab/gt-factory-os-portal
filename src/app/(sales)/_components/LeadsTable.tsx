@@ -9,6 +9,7 @@
 import { useMemo, useState } from "react";
 import { fmtDate, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
+import { MiniRail } from "./MiniRail";
 import type { AssigneeEntry, SalesLeadRow } from "../_lib/types";
 import { assigneeName } from "./AssigneePicker";
 import { CustomerBadge } from "./CustomerBadge";
@@ -88,12 +89,12 @@ export function LeadsTable({
           a table nobody reads. */}
       <ul className="flex flex-col gap-2 md:hidden">
         {visible.map((row) => (
-          <li key={row.id}>
+          <li key={row.id} className="s-enter">
             <button
               type="button"
               data-testid={`lead-card-${row.id}`}
               onClick={() => onOpen(row)}
-              className="s-card w-full p-3 text-start"
+              className="s-card w-full p-4 text-start"
             >
               <span className="flex items-start justify-between gap-2">
                 <span className="min-w-0 flex-1">
@@ -115,6 +116,7 @@ export function LeadsTable({
                 </span>
                 <StatusPill status={row.status} />
               </span>
+              <MiniRail row={row} decorative />
               <span className="mt-2 flex flex-wrap items-center gap-1.5">
                 <Badges row={row} />
                 <span className="s-nums text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
@@ -141,7 +143,7 @@ export function LeadsTable({
       ) : null}
 
       {/* Desktop: the dense table. */}
-      <div className="hidden overflow-x-auto md:block">
+      <div className="s-panel hidden overflow-x-auto p-0 md:block">
         <table className="w-full border-collapse text-[13px]">
           <thead>
             {/* Every header sticks, and every one carries the surface colour.
@@ -281,7 +283,7 @@ export function LeadsTable({
                 <td className="px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {row.contact_name ?? "—"}
                 </td>
-                <td className="s-nums px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                <td className="s-nums whitespace-nowrap px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   <bdi dir="ltr">{fmtPhone(row.phone_e164)}</bdi>
                 </td>
                 {showStatus ? (
@@ -306,11 +308,11 @@ export function LeadsTable({
                 >
                   {assigneeName(row.assignee, roster) ?? UI.ownerNone}
                 </td>
-                <td className="s-nums px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                <td className="s-nums whitespace-nowrap px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {UI.ageDays(row.age_days)}
                 </td>
                 <td
-                  className="s-nums px-2 py-2"
+                  className="s-nums whitespace-nowrap px-2 py-2"
                   style={{
                     color: row.next_touch_overdue
                       ? "hsl(var(--s-sla-overdue))"

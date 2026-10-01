@@ -257,3 +257,4 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 
 - `docs/portal-os/tranches/185-gt-pulse-a-sales-corridor.md` — active, not released: **GT Pulse Unit A**; bounded Hebrew RTL sales contact/task loop, safe email deep link and source-backed work. Brain W2 amendment and scoped RUNTIME_READY signal 36 recorded 2026-09-29; backend at `12fa6c3` has disposable-DB proof. UX gate, final review, exact runtime and production backlog remain open.
 - `docs/portal-os/tranches/186-gt-pulse-d1-visual.md` — **GT Pulse D, phase 1**: sales-corridor visual pass — petrol band with the live lead-journey flow, turquoise action, shape lock, motion with reduced-motion fallback. Presentation only, no new copy. Tom production go 2026-10-01.
+- `docs/portal-os/tranches/187-gt-pulse-d1-corridor.md` — **GT Pulse D1, corridor-wide**: every sales screen at the D1 level (shell, bands, cards, panels, states), plus three copy strings Tom approved on 2026-10-01.

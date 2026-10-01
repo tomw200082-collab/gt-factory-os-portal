@@ -661,10 +661,12 @@
 
 /* A card under a pointer lifts toward it; touch screens skip this. */
 @media (hover: hover) {
-  [data-app="sales"] article.s-card {
+  [data-app="sales"] article.s-card,
+  [data-app="sales"] button.s-card {
     transition: transform 420ms var(--s-settle), box-shadow 420ms var(--s-settle);
   }
-  [data-app="sales"] article.s-card:hover {
+  [data-app="sales"] article.s-card:hover,
+  [data-app="sales"] button.s-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--s-card-edge), var(--s-shadow-lift), var(--s-sheen);
   }
@@ -717,7 +719,10 @@
   /* D1: every arrival, sweep, flow, ping and drift stops; the final picture
      stays, so nothing is hidden from someone who asked for stillness. */
   [data-app="sales"] .s-sheet,
+  [data-app="sales"] .s-toast,
   [data-app="sales"] .s-drawer-panel,
+  [data-app="sales"] .s-empty-icon,
+  [data-app="sales"] .s-tabbar-icon,
   [data-app="sales"] .s-opening::before,
   [data-app="sales"] .s-live-dot::after,
   [data-app="sales"] .s-flow *,
@@ -737,6 +742,7 @@
     display: none;
   }
   [data-app="sales"] article.s-card:hover,
+  [data-app="sales"] button.s-card:hover,
   [data-app="sales"] .s-btn-primary:hover > svg {
     transform: none;
   }
@@ -862,6 +868,16 @@
   min-width: 0;
   max-width: 560px;
   margin-top: 4px;
+}
+[data-app="sales"] .s-flow-body {
+  position: relative;
+}
+[data-app="sales"] .s-flow-caption {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--s-opening-fg-muted));
 }
 [data-app="sales"] .s-flow-river {
   position: absolute;
@@ -1214,4 +1230,158 @@
 }
 @keyframes s-spin {
   to { transform: rotate(360deg); }
+}
+
+/* --- GT Pulse D1, corridor-wide (tranche 187) ------------------------------ */
+/* Every screen opens on the same petrol band, a size smaller than Today's. */
+[data-app="sales"] .s-opening-compact {
+  padding: 18px 18px 16px;
+}
+[data-app="sales"] .s-opening-compact h1 {
+  font-size: 22px;
+}
+/* A field on petrol keeps its own light ground; only its ring changes. */
+[data-app="sales"] .s-opening .s-input {
+  border-color: transparent;
+  box-shadow: 0 8px 20px -14px hsl(0 0% 0% / 0.6);
+}
+[data-app="sales"] .s-opening .s-input:focus-visible {
+  outline-color: hsl(var(--s-action));
+}
+
+/* App bar: glass over the page, the brand marked by a turquoise point. */
+[data-app="sales"] .s-appbar {
+  background: hsl(var(--s-bg) / 0.82);
+  box-shadow: 0 1px 0 hsl(var(--s-border));
+}
+[data-app="sales"] .s-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+[data-app="sales"] .s-brand-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: hsl(var(--s-action));
+  box-shadow: 0 0 0 4px hsl(var(--s-action) / 0.18);
+}
+
+/* Phone tab bar: a floating glass pill; the active destination's icon sits
+   in a turquoise capsule, and its label turns full ink. */
+[data-app="sales"] .s-tabbar {
+  padding-inline: 12px;
+  pointer-events: none;
+}
+[data-app="sales"] .s-tabbar > ul {
+  pointer-events: auto;
+  margin-bottom: 10px;
+  padding: 4px;
+  max-width: 480px;
+  border-radius: 26px;
+  background: hsl(var(--s-surface) / 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 0 0 1px hsl(var(--s-border)), var(--s-shadow-lift);
+}
+[data-app="sales"] .s-tabbar-link {
+  border-radius: 22px;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-tabbar-link[aria-current="page"] {
+  color: hsl(var(--s-fg));
+  font-weight: 600;
+}
+[data-app="sales"] .s-tabbar-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 28px;
+  border-radius: var(--s-radius-pill);
+  transition: background 320ms var(--s-settle), color 320ms var(--s-settle);
+}
+[data-app="sales"] .s-tabbar-link[aria-current="page"] .s-tabbar-icon {
+  background: hsl(var(--s-action));
+  color: hsl(var(--s-action-fg));
+}
+/* Drawn outside the link, on the glass: inside, the dark accent sat on the
+   turquoise capsule at 1.48:1 (A11Y-187-001). */
+[data-app="sales"] .s-tabbar-link:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+
+/* Empty, done and error states: the icon sits in a soft disc. */
+[data-app="sales"] .s-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: hsl(var(--s-accent-soft));
+  color: hsl(var(--s-accent));
+  animation: s-orb-in 620ms var(--s-spring) both;
+}
+[data-app="sales"] .s-empty-icon-won {
+  background: hsl(var(--s-status-won-soft));
+  color: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-empty-icon-alert {
+  background: hsl(var(--s-sla-overdue-soft));
+  color: hsl(var(--s-sla-overdue));
+}
+
+/* A bottom sheet shows it is one: a handle on its top edge. */
+[data-app="sales"] .s-sheet::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: -4px auto 12px;
+  border-radius: 2px;
+  background: hsl(var(--s-border-strong));
+}
+
+/* "Saved", for as long as it is news. */
+[data-app="sales"] .s-saved {
+  min-height: 20px;
+  font-weight: 500;
+  color: hsl(var(--s-status-won));
+}
+
+/* The one floating action: a turquoise disc on a phone, a labelled pill from
+   md up. Its icon sits bare, not in the primary button's inner well. */
+[data-app="sales"] .s-fab {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: var(--s-radius-pill);
+}
+[data-app="sales"] .s-fab > svg {
+  margin: 0;
+  padding: 0;
+  background: none;
+}
+@media (min-width: 768px) {
+  [data-app="sales"] .s-fab {
+    width: auto;
+    height: auto;
+    padding-inline: 18px;
+  }
+}
+
+/* The toast rises in on a spring and carries the band's depth. */
+[data-app="sales"] .s-toast {
+  box-shadow: var(--s-shadow-lift);
+  animation: s-fade-up 420ms var(--s-spring) both;
+}
+/* Below 360px the three contact buttons on a card keep one row. */
+@media (max-width: 359px) {
+  [data-app="sales"] [data-testid="lead-drawer"] .s-btn {
+    padding-inline: 12px;
+    gap: 6px;
+  }
+  [data-app="sales"] [data-testid="lead-drawer"] .s-btn-primary > svg {
+    margin-inline-start: -6px;
+  }
 }

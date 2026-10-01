@@ -29,7 +29,9 @@ export function Toast({
       role="status"
       aria-live="polite"
       data-testid="sales-toast"
-      className="fixed inset-x-0 mx-auto flex w-fit items-center gap-2 rounded-full py-2 ps-4 pe-2 text-[13px]"
+      // Above an open lead card (z-40): an undo raised while the card is open
+      // sat under it and could not be pressed (UX gate, tranche 187).
+      className="s-toast fixed inset-x-0 z-50 mx-auto flex w-fit items-center gap-2 rounded-full py-2 ps-4 pe-2 text-[13px]"
       style={{
         background: "hsl(var(--s-fg))",
         color: "hsl(var(--s-bg))",
@@ -53,7 +55,8 @@ export function Toast({
         onClick={onClose}
         aria-label={UI.close}
         data-testid="sales-toast-close"
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full"
+        // 44px of target, the floor everywhere else on a phone (A11Y-187-002).
+        className="-my-2 grid h-11 w-11 shrink-0 place-items-center rounded-full"
         style={{ color: "hsl(var(--s-bg))" }}
       >
         <X size={14} aria-hidden />

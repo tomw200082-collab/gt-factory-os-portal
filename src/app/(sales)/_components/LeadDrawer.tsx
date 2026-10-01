@@ -187,6 +187,12 @@ export function LeadDrawer({
         )
       : "",
   );
+  const [noteSaved, setNoteSaved] = useState(false);
+  useEffect(() => {
+    if (!noteSaved) return;
+    const timer = setTimeout(() => setNoteSaved(false), 2500);
+    return () => clearTimeout(timer);
+  }, [noteSaved]);
   const tel = telHref(lead.phone_e164);
   const mail = mailtoHref(lead.email);
   const won = lead.status === "won";
@@ -466,10 +472,17 @@ export function LeadDrawer({
                 // tidier but throws the text away on a failed save, and the
                 // person retyping it is standing in a factory on one bar of
                 // signal.
-                onClick={() => onNote(note.trim(), () => setNote(""))}
+                onClick={() => onNote(note.trim(), () => {
+                  setNote("");
+                  setNoteSaved(true);
+                })}
               >
                 {UI.saveNote}
               </button>
+              {/* The write landed: say so, briefly (UX gate FLOW-003). */}
+              <p role="status" className="s-saved text-[13px]" data-testid="drawer-note-saved">
+                {noteSaved ? UI.noteSaved : ""}
+              </p>
             </div>
 
             <div className="flex flex-col gap-1">

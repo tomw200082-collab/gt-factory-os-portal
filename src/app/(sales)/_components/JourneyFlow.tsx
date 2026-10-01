@@ -115,6 +115,12 @@ export function JourneyFlow({ rows }: { rows: FlowRow[] | undefined }) {
 
   return (
     <div ref={wrap} className="s-flow" data-testid="journey-flow" data-ready={counts ? "true" : "false"}>
+      {/* "כל הלידים הפתוחים" was approved for this caption, but the last node
+          counts verified orders, which are not open (UX gate COPY-T187-001).
+          The approved section name stands in until Tom approves a corrected
+          caption. */}
+      <p className="s-flow-caption">{UI.leadsTitle}</p>
+      <div className="s-flow-body">
       <svg className="s-flow-river" width={width} height={RIVER_H} viewBox={`0 0 ${width} ${RIVER_H}`}
         aria-hidden="true" focusable="false">
         <defs>
@@ -134,6 +140,7 @@ export function JourneyFlow({ rows }: { rows: FlowRow[] | undefined }) {
           <Stage key={kind} kind={kind} name={MILESTONE_NAMES[kind]} count={counts ? counts[kind] : null} index={index} />
         ))}
       </ol>
+      </div>
     </div>
   );
 }

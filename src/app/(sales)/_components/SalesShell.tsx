@@ -82,19 +82,14 @@ export function SalesShell({ children }: { children: ReactNode }) {
         דלג לתוכן
       </a>
 
-      <header
-        className="sticky top-0 z-30 border-b backdrop-blur-md"
-        style={{
-          borderColor: "hsl(var(--s-border))",
-          background: "hsl(var(--s-surface) / 0.85)",
-        }}
-      >
+      <header className="s-appbar sticky top-0 z-30 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4">
           <Link
             href="/sales/today"
-            className="text-[15px] font-semibold tracking-tight"
+            className="s-brand text-[15px] font-semibold tracking-tight"
             style={{ color: "hsl(var(--s-fg))" }}
           >
+            <span className="s-brand-mark" aria-hidden />
             {UI.appName}
           </Link>
 
@@ -192,19 +187,23 @@ export function SalesShell({ children }: { children: ReactNode }) {
       <button
         type="button"
         data-testid="sales-quick-add"
+        // Round on a phone, so the one floating action hides as little of the
+        // list under it as possible; the name stays for assistive tech.
+        aria-label={UI.quickAdd}
         onClick={() => setAddOpen(true)}
-        className="s-btn s-btn-primary fixed z-30 shadow-lg"
+        className="s-btn s-btn-primary s-fab fixed z-30"
         style={{
           // insetInlineStart resolves to the physical right in RTL, which is
           // the thumb arc of a right-handed phone grip. insetInlineEnd put the
           // one floating action on the far side of the screen from the thumb.
           insetInlineStart: 16,
-          bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
+          // Above the floating tab bar (56px row, 4px inset, 10px lift).
+          bottom: "calc(5.75rem + env(safe-area-inset-bottom, 0px))",
           borderRadius: "var(--s-radius-pill)",
         }}
       >
-        <Plus size={18} aria-hidden />
-        {UI.quickAdd}
+        <Plus size={22} aria-hidden />
+        <span className="hidden md:inline">{UI.quickAdd}</span>
       </button>
       )}
 
@@ -237,12 +236,8 @@ export function SalesShell({ children }: { children: ReactNode }) {
       {/* Phone tab bar. Three destinations, thumb-height, safe-area aware. */}
       <nav
         aria-label={UI.appName}
-        className="fixed inset-x-0 bottom-0 z-30 border-t md:hidden"
-        style={{
-          borderColor: "hsl(var(--s-border))",
-          background: "hsl(var(--s-surface))",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        }}
+        className="s-tabbar fixed inset-x-0 bottom-0 z-30 md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <ul className="mx-auto flex max-w-5xl">
           {DESTINATIONS.map((d) => {
@@ -254,12 +249,11 @@ export function SalesShell({ children }: { children: ReactNode }) {
                   href={d.href}
                   aria-current={active ? "page" : undefined}
                   data-testid={`sales-tab-${d.href}`}
-                  className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[12px] font-medium"
-                  style={{
-                    color: active ? "hsl(var(--s-accent))" : "hsl(var(--s-fg-muted))",
-                  }}
+                  className="s-tabbar-link flex min-h-[56px] flex-col items-center justify-center gap-1 text-[12px] font-medium"
                 >
-                  <Icon size={20} aria-hidden />
+                  <span className="s-tabbar-icon" aria-hidden>
+                    <Icon size={20} />
+                  </span>
                   {d.label}
                 </Link>
               </li>

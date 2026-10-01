@@ -321,3 +321,17 @@ test("the queue is hidden from assistive tech while a sheet is open @mocked", as
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
   await expect(body).toHaveAttribute("aria-hidden", "true");
 });
+
+test("a lost recorded on /attention can be taken back from its toast @mocked", async ({ page }) => {
+  // UX gate FLOW-005 (tranche 187): Today and Leads offered the way back; this
+  // screen recorded the same decision with no undo.
+  await stub(page, { leads: [LEAD_LATE] });
+  await page.goto("/sales/attention");
+  await page.getByTestId("attention-open-L-LATE-overdue").click();
+  await page.getByTestId("drawer-set-lost").click();
+  await page.locator('[data-testid^="drawer-lost-reason-"]').first().click();
+  await page.getByTestId("drawer-lost-confirm").click();
+  await expect(page.getByTestId("sales-toast-action")).toHaveText("בטל");
+  await page.getByTestId("sales-toast-action").click();
+  await expect(page.getByTestId("sales-toast")).toContainText("שוחזר");
+});

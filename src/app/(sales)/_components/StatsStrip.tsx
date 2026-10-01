@@ -18,7 +18,9 @@ export function StatsStrip({ stats }: { stats: WeekStats | undefined }) {
   // "0 · 0 · 0" for as long as a batch-imported backlog is being cleared
   // (audit P0-5), so it goes second and quieter.
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
+      {/* Team-wide whatever the scope below (Tom 2026-10-01, UX gate FLOW-004). */}
+      <p className="s-eyebrow">{UI.teamCounts}</p>
       {/* A grid, not a bullet-joined string. Four counts serialised into one
           <p> wrapped to four lines at 390px and took over the header, so the
           preamble outweighed the first card on the screen that is read
