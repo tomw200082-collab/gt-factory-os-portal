@@ -28,6 +28,7 @@ import { QueueDone, QueueError, QueueLoading } from "../../_components/EmptyStat
 import { StatsStrip } from "../../_components/StatsStrip";
 import { TodayQueue } from "../../_components/TodayQueue";
 import { TaskCard } from "../../_components/TaskCard";
+import { JourneyFlow } from "../../_components/JourneyFlow";
 import {
   OutcomeSheet,
   nextBusinessTouchPreview,
@@ -59,6 +60,16 @@ export default function TodayPage() {
   const [undo, setUndo] = useState<UndoTarget | null>(null);
 
   const rows = useMemo(() => today.data?.rows ?? [], [today.data]);
+  // The flow in the band follows the same scope as the queue under it.
+  const flowRows = useMemo(() => {
+    if (!leads.data) return undefined;
+    if (isRep || scope === "mine") return leads.data.filter((lead) => lead.assignee === session?.email);
+    if (scope === "unassigned") return leads.data.filter((lead) => !lead.assignee);
+    return leads.data;
+  }, [leads.data, isRep, scope, session?.email]);
+  const todayLabel = useMemo(() => new Intl.DateTimeFormat("he-IL", {
+    weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem",
+  }).format(new Date()), []);
   const allTaskRows = useMemo(() => tasks.data ?? [], [tasks.data]);
   const [taskClock, setTaskClock] = useState(() => Date.now());
   useEffect(() => {
@@ -209,40 +220,51 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-2">
-        {/* The title holds its own row. Sharing one with the scope pills gave a
-            44px-tall filter control the same visual mass as the page name at
-            390px, where the pair took the whole width. */}
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
-          {isRep || scope === "mine" ? UI.queueMine : scope === "unassigned" ? UI.queueUnassigned : UI.queueAll}
-        </h1>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Two states, not a menu: the question is only ever "everything, or
-              what is on me". It persists, because the answer should survive
-              closing the app. The group is named for what it controls — it
-              used to be labelled with the page's own title. */}
-          <div className="flex gap-1" role="group" aria-label={UI.queueScopeGroupLabel}>
-            {(isRep ? (["mine"] as const) : (["all", "mine", "unassigned"] as const)).map((option) => (
-              <button
-                key={option}
-                type="button"
-                data-testid={`queue-scope-${option}`}
-                aria-pressed={scope === option}
-                // Inert while a sheet is open: the queue behind it is already
-                // hidden from pointer and AT, and changing scope there swaps
-                // the list out from under a question that is still being asked.
-                disabled={anySheetOpen}
-                className={`s-tab ${scope === option ? "s-tab-active" : ""}`}
-                onClick={() => setScope(option)}
-              >
-                {option === "all" ? UI.scopeAll : option === "mine" ? UI.scopeMine : UI.scopeUnassigned}
-              </button>
-            ))}
+      {/* GT Pulse D1: the screen opens on petrol (program spec §8): where am
+          I on the start side, the live journey of the leads on the other. */}
+      <header className="s-opening grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-center lg:gap-10">
+        <div className="flex min-w-0 flex-col gap-3">
+          <p className="s-live s-nums" suppressHydrationWarning>
+            <span className="s-live-dot" aria-hidden />
+            {todayLabel}
+          </p>
+          {/* The title holds its own row. Sharing one with the scope pills gave a
+              44px-tall filter control the same visual mass as the page name at
+              390px, where the pair took the whole width. */}
+          <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
+            {isRep || scope === "mine" ? UI.queueMine : scope === "unassigned" ? UI.queueUnassigned : UI.queueAll}
+          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Two states, not a menu: the question is only ever "everything, or
+                what is on me". It persists, because the answer should survive
+                closing the app. The group is named for what it controls — it
+                used to be labelled with the page's own title. */}
+            <div className="flex gap-1" role="group" aria-label={UI.queueScopeGroupLabel}>
+              {(isRep ? (["mine"] as const) : (["all", "mine", "unassigned"] as const)).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  data-testid={`queue-scope-${option}`}
+                  aria-pressed={scope === option}
+                  // Inert while a sheet is open: the queue behind it is already
+                  // hidden from pointer and AT, and changing scope there swaps
+                  // the list out from under a question that is still being asked.
+                  disabled={anySheetOpen}
+                  className={`s-tab ${scope === option ? "s-tab-active" : ""}`}
+                  onClick={() => setScope(option)}
+                >
+                  {option === "all" ? UI.scopeAll : option === "mine" ? UI.scopeMine : UI.scopeUnassigned}
+                </button>
+              ))}
+            </div>
           </div>
+          {/* Team-wide counts read as the rep's own under "my queue" (UX gate
+              2026-10-01); a rep's queue below is their whole truth. */}
+          {isRep ? null : <StatsStrip stats={stats.data} />}
         </div>
-        {/* Team-wide counts read as the rep's own under "my queue" (UX gate
-            2026-10-01); a rep's queue below is their whole truth. */}
-        {isRep ? null : <StatsStrip stats={stats.data} />}
+        {/* Keyed by scope: a switch redraws the path, and a scope's larger
+            count is not mistaken for a lead arriving. */}
+        <JourneyFlow key={taskScope} rows={flowRows} />
       </header>
 
       {/* While a sheet is open the queue behind it is unreachable by pointer;

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { fmtDateTime } from "../_lib/format";
 import { UI } from "../_lib/labels";
 import { deriveLeadMilestones, type MilestoneKind } from "../_lib/leadMilestones";
@@ -20,8 +21,9 @@ export function LeadJourneyRail({ events }: { events: LeadEventRow[] }) {
     <section className="s-lead-rail" aria-label={UI.railTitle} data-testid="lead-rail">
       <h3 className="s-eyebrow">{UI.railTitle}</h3>
       <ol className="s-lead-rail-path">
-        {milestones.map((node) => (
-          <li key={node.kind} className={`s-lead-rail-node s-lead-rail-${node.kind}`} data-testid={`rail-${node.kind}`}>
+        {milestones.map((node, index) => (
+          <li key={node.kind} className={`s-lead-rail-node s-lead-rail-${node.kind}`} data-testid={`rail-${node.kind}`}
+            style={{ "--i": index } as CSSProperties}>
             <span className="s-lead-rail-marker" aria-hidden />
             <div className="min-w-0">
               <p className="font-semibold">{names[node.kind]}</p>

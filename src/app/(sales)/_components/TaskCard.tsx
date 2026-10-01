@@ -1,5 +1,6 @@
 "use client";
 
+import { MiniRail } from "./MiniRail";
 import Link from "next/link";
 import { useState } from "react";
 import { Mail, MessageCircle, Phone } from "lucide-react";
@@ -52,13 +53,14 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
   }
 
   return (
-    <article data-testid="task-card" className="s-card s-enter min-w-0 p-4" style={{ borderInlineStartWidth: 3, borderInlineStartColor: "hsl(var(--s-accent))" }}>
+    <article data-testid="task-card" className="s-card s-card-accent s-enter min-w-0 p-4">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
             {task.lead_context?.org_name ?? lead?.org_name ?? label}
           </h3>
           <p className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>{label}</p>
+          {lead ? <MiniRail row={lead} /> : null}
         </div>
         <time className="s-nums shrink-0 text-xs" dateTime={task.due_at} style={{ color: "hsl(var(--s-fg-muted))" }}>
           {fmtRelative(task.due_at)}
