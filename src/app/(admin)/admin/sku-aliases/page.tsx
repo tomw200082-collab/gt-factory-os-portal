@@ -344,7 +344,11 @@ function AdminSkuAliasesContent(): JSX.Element {
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["admin", "sku-aliases", "items"],
-    queryFn: () => fetchJson("/api/items?limit=1000"),
+    // include_archived=true: this list is a lookup table for resolving item
+    // names on rows that already exist, not a picker. Integration_sku_map is
+    // deliberately left mapped for discontinued SKUs until their open orders
+    // clear, so those rows must stay legible here.
+    queryFn: () => fetchJson("/api/items?limit=1000&include_archived=true"),
   });
 
   const approvedQuery = useQuery<ListEnvelope<SkuAliasRow>>({
