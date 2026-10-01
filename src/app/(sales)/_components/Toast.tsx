@@ -55,7 +55,8 @@ export function Toast({
         onClick={onClose}
         aria-label={UI.close}
         data-testid="sales-toast-close"
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full"
+        // 44px of target, the floor everywhere else on a phone (A11Y-187-002).
+        className="-my-2 grid h-11 w-11 shrink-0 place-items-center rounded-full"
         style={{ color: "hsl(var(--s-bg))" }}
       >
         <X size={14} aria-hidden />

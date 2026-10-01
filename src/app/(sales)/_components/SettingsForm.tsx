@@ -334,11 +334,11 @@ export function SettingsForm({
         </p>
       ) : null}
 
-      {saved ? (
-        <p role="status" data-testid="settings-saved" className="text-[13px]" style={{ color: "hsl(var(--s-status-won))" }}>
-          {UI.settingsSaved}
-        </p>
-      ) : null}
+      {/* Always present, so assistive tech announces the change of text
+          rather than missing a region that appears (UX gate A11Y-187-003). */}
+      <p role="status" data-testid={saved ? "settings-saved" : undefined} className="min-h-[20px] text-[13px]" style={{ color: "hsl(var(--s-status-won))" }}>
+        {saved ? UI.settingsSaved : ""}
+      </p>
 
       <div>
         <button

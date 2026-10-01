@@ -46,7 +46,7 @@ export default function SettingsPage() {
       </header>
 
       {session?.role === "sales_rep" ? (
-        <p role="status" className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>
+        <p className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>
           {UI.settingsManagerOnly}
         </p>
       ) : null}

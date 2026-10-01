@@ -1304,9 +1304,11 @@
   background: hsl(var(--s-action));
   color: hsl(var(--s-action-fg));
 }
+/* Drawn outside the link, on the glass: inside, the dark accent sat on the
+   turquoise capsule at 1.48:1 (A11Y-187-001). */
 [data-app="sales"] .s-tabbar-link:focus-visible {
   outline: 2px solid hsl(var(--s-accent));
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 /* Empty, done and error states: the icon sits in a soft disc. */
