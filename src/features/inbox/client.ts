@@ -12,11 +12,19 @@
 // submission_id, which preserves the deep-link contract already in place for
 // /inbox/approvals/{waste,physical-count}/[submission_id].
 //
-// No backend authorship. No invented query params. Where /api/exceptions
-// accepts a single-value `category` filter (Zod shape at
-// api/src/exceptions/schemas.ts lines 41-44), we prefer one-call-without-
-// category plus client-side partitioning to minimize HTTP round-trips (one
-// GET vs four GETs).
+// No backend authorship. No invented query params. Approval streams ask
+// /api/exceptions for their own `category` (Zod shape at
+// api/src/exceptions/schemas.ts lines 41-44) — one GET per category.
+//
+// The earlier one-GET-then-partition shape lost approvals outright: the
+// upstream list is `order by created_at desc limit 200` (LIST_HARD_CAP,
+// api/src/exceptions/handler.ts:73). On 2026-08-23 a LionWheel pick backlog
+// opened ~450 lw_pick_data_missing / lionwheel_order_note rows in one hour,
+// pushing 19 open count_large_variance approvals past the cap. They never
+// reached the browser, so the client-side filter found nothing and the inbox
+// showed zero pending count approvals while the stock counts sat unapplied.
+// Filtering server-side keeps an approval stream bounded by its own volume
+// instead of by unrelated integration noise.
 // ---------------------------------------------------------------------------
 
 import { get } from "@/lib/api/client";
@@ -195,6 +203,34 @@ async function fetchAllWorkingExceptions(
 }
 
 // ---------------------------------------------------------------------------
+// Internal: working-set exceptions for specific categories, one GET each.
+//
+// Used by every approval stream so a stream is capped by its own row count,
+// never by unrelated exception volume (see the LIST_HARD_CAP note above).
+// Any failed leg fails the whole call — a partial approval list is worse than
+// a visible error, because a missing approval reads as "nothing to approve".
+// ---------------------------------------------------------------------------
+async function fetchWorkingExceptionsByCategory(
+  categories: readonly string[],
+  signal?: AbortSignal,
+): Promise<Result<ExceptionsListResponse>> {
+  const results = await Promise.all(
+    categories.map((category) =>
+      get<ExceptionsListResponse>(
+        `/api/exceptions?status=open,acknowledged&category=${encodeURIComponent(category)}`,
+        { signal },
+      ),
+    ),
+  );
+
+  const failed = results.find((r) => !r.ok);
+  if (failed && !failed.ok) return failed;
+
+  const rows = results.flatMap((r) => (r.ok ? r.data.rows : []));
+  return { ok: true, status: 200, data: { rows, count: rows.length } };
+}
+
+// ---------------------------------------------------------------------------
 // Shared mapping helpers for exception → InboxRow.
 // ---------------------------------------------------------------------------
 const APPROVAL_PATH_BASE: Record<
@@ -328,7 +364,7 @@ function toExceptionInboxRow(row: ExceptionRow): InboxRow {
 export async function fetchPendingWasteApprovals(
   signal?: AbortSignal,
 ): Promise<InboxRow[]> {
-  const res = await fetchAllWorkingExceptions(signal);
+  const res = await fetchWorkingExceptionsByCategory(WASTE_APPROVAL_CATEGORIES, signal);
   if (!res.ok) {
     throw buildFetchError("pending waste approvals", res);
   }
@@ -348,7 +384,7 @@ export async function fetchPendingWasteApprovals(
 export async function fetchPendingPhysicalCountApprovals(
   signal?: AbortSignal,
 ): Promise<InboxRow[]> {
-  const res = await fetchAllWorkingExceptions(signal);
+  const res = await fetchWorkingExceptionsByCategory(PHYSICAL_COUNT_APPROVAL_CATEGORIES, signal);
   if (!res.ok) {
     throw buildFetchError("pending physical count approvals", res);
   }
@@ -370,7 +406,7 @@ export async function fetchPendingPhysicalCountApprovals(
 export async function fetchPendingInventoryMovementApprovals(
   signal?: AbortSignal,
 ): Promise<InboxRow[]> {
-  const res = await fetchAllWorkingExceptions(signal);
+  const res = await fetchWorkingExceptionsByCategory(INVENTORY_MOVEMENT_APPROVAL_CATEGORIES, signal);
   if (!res.ok) {
     throw buildFetchError("pending inventory movement approvals", res);
   }
