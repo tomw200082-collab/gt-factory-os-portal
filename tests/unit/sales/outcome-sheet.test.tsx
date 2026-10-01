@@ -7,6 +7,16 @@ import { toDateInputValue } from "@/app/(sales)/_lib/format";
 afterEach(cleanup);
 
 describe("outcome sheet", () => {
+  it("does not offer today once 09:00 Israel has passed (the saved time would be in the past)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T11:00:00Z")); // 14:00 in Israel
+    try {
+      render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+      fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+      const date = screen.getByTestId("outcome-sheet").querySelector('input[type="date"]') as HTMLInputElement;
+      expect(date.min).toBe("2026-10-02");
+    } finally { vi.useRealTimers(); }
+  });
   it("marks the three activity fields as required, without new words", () => {
     render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
     fireEvent.click(screen.getByTestId("outcome-answered_progressing"));

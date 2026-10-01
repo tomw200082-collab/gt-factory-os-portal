@@ -162,6 +162,9 @@ export function OutcomeSheet({
   const activityDueAt = /^\d{4}-\d{2}-\d{2}$/.test(draft.due_at)
     ? new Date(israelNineAM(draft.due_at)).getTime() : 0;
   const activityReady = draft.note.trim().length >= 5 && Boolean(draft.kind) && activityDueAt > Date.now();
+  // A date saves as 09:00 Israel; once that has passed today, today cannot be saved (UX gate 2026-10-01).
+  const activityDateFloor = new Date(israelNineAM(israelDate())).getTime() > Date.now()
+    ? israelDate() : addIsraelDays(israelDate(), 1);
 
   // Focus trap + Escape, mirroring MobileNav's dialog handling.
   //
@@ -389,7 +392,7 @@ export function OutcomeSheet({
             </label>
             <label className="flex flex-col gap-1 text-[13px]">
               {UI.activityDateLabel}
-              <input type="date" className="s-input" required min={israelDate()}
+              <input type="date" className="s-input" required min={activityDateFloor}
                 value={draft.due_at} onChange={(e) => updateDraft({ due_at: e.target.value })} />
             </label>
             <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"
