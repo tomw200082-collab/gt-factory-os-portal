@@ -1,6 +1,6 @@
 # Tranche 187 — GT Pulse D1, corridor-wide: every sales screen at the D1 level
 
-**Status:** in progress on `feat/gt-pulse-d1-corridor`; not deployed.
+**Status:** UX gate CONDITIONAL_SHIP (brain `docs/phase8/dry-runs/2026-10-01-gt-pulse-d1-corridor-ux-gate.md`); shipping under Tom's 2026-10-01 go.
 **Origin:** Tom, 2026-10-01: "תביא את כלל המסכים לאותה רמה עיצובית ועם חוויית משתמש מושלמת". This follows tranche 186 (D1, live at `49435b1`), under the same production go and program spec §8.
 **Spec:** Sales-Machine `docs/superpowers/specs/2026-10-01-gt-pulse-d1-visual-design.md` (V1–V12, plus V13 for the corridor).
 **Scope:**
@@ -54,6 +54,7 @@ manifest:
   - tests/unit/sales/journey-flow.test.tsx
   - tests/unit/sales/mini-rail.test.tsx
   - tests/unit/sales/today-queue.test.tsx
+  - tests/unit/sales/leads.test.tsx
   - tests/unit/sales/sales-tokens.test.ts
   - tests/e2e/sales-visual-a11y.spec.ts
   - tests/e2e/sales-attention.spec.ts
