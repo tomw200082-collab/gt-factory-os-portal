@@ -68,7 +68,8 @@ export default function TodayPage() {
     if (taskScope === "unassigned") return leads.data.filter((lead) => !lead.assignee);
     return leads.data;
   }, [leads.data, taskScope, session?.email]);
-  const todayLabel = useMemo(() => fmtDayLong(), []);
+  // Every render, not memoised: an app left open overnight must not show yesterday.
+  const todayLabel = fmtDayLong();
   const allTaskRows = useMemo(() => tasks.data ?? [], [tasks.data]);
   const [taskClock, setTaskClock] = useState(() => Date.now());
   useEffect(() => {

@@ -6,7 +6,7 @@
 // lose the reader's place in a 188-row table.
 
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Mail, MessageCircle, Phone, X } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtPhone } from "../_lib/format";
 import { LOST_REASONS, STATUS_LABELS, UI } from "../_lib/labels";
 import { mailtoHref, telHref, waHref, fillTemplate, templateFor } from "../_lib/wa";
@@ -15,6 +15,7 @@ import { AssigneePicker } from "./AssigneePicker";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
 import { LeadJourneyRail } from "./LeadJourneyRail";
+import { MiniRail } from "./MiniRail";
 import { SlaBadge } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 import { useReturnFocus } from "../_lib/useReturnFocus";
@@ -69,11 +70,13 @@ export interface LeadDrawerProps {
  */
 function Field({ label, value, isolate }: { label: string; value: string; isolate?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1">
+    // Two columns where the value may wrap: a long email or campaign name used
+    // to push the whole drawer sideways on a phone.
+    <div className="s-field grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-3">
       <dt className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
         {label}
       </dt>
-      <dd className="s-nums text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>
+      <dd className="s-nums min-w-0 text-end text-[13px] [overflow-wrap:anywhere]" style={{ color: "hsl(var(--s-fg))" }}>
         {isolate ? <bdi dir="ltr">{value}</bdi> : value}
       </dd>
     </div>
@@ -211,26 +214,31 @@ export function LeadDrawer({
         dir="rtl"
         data-testid="lead-drawer"
         // Opens from the inline-end edge; in RTL that is the left of the screen.
-        className="ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto p-4"
-        style={{ background: "hsl(var(--s-surface))" }}
+        className="s-drawer-panel ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto overflow-x-hidden p-3"
+        style={{ background: "hsl(var(--s-bg))" }}
       >
-        <header className="flex items-start gap-2">
+        {/* GT Pulse D1: the lead opens on petrol, with where it stands. */}
+        <header className="s-opening flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
+            <h2 className="line-clamp-2 break-words text-xl font-semibold leading-tight" style={{ color: "hsl(var(--s-fg))" }}>
               {lead.org_name}
             </h2>
-            <p className="mt-1 flex flex-wrap items-center gap-1.5">
+            {lead.contact_name ? (
+              <p className="mt-1 truncate text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{lead.contact_name}</p>
+            ) : null}
+            <p className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusPill status={lead.status} />
               <SlaBadge state={lead.sla_state} />
             </p>
+            <MiniRail row={lead} />
           </div>
           <button
             type="button"
             aria-label={UI.close}
             data-testid="drawer-close"
             onClick={onClose}
-            className="grid h-11 w-11 place-items-center rounded-full"
-            style={{ color: "hsl(var(--s-fg-muted))" }}
+            className="s-glass-btn grid h-11 w-11 shrink-0 place-items-center rounded-full"
+            style={{ color: "hsl(var(--s-fg))" }}
           >
             <X size={18} aria-hidden />
           </button>
@@ -275,6 +283,7 @@ export function LeadDrawer({
               className="s-btn s-btn-primary flex-1"
               onClick={() => onArm?.(lead.id, "call")}
             >
+              <Phone size={16} aria-hidden />
               {UI.call}
             </a>
           ) : null}
@@ -287,11 +296,13 @@ export function LeadDrawer({
               className="s-btn s-btn-ghost flex-1"
               onClick={() => onArm?.(lead.id, "whatsapp")}
             >
+              <MessageCircle size={16} aria-hidden />
               {UI.whatsapp}
             </a>
           ) : null}
           {mail ? (
             <a href={mail} className="s-btn s-btn-ghost" onClick={() => onArm?.(lead.id, "email")}>
+              <Mail size={16} aria-hidden />
               {UI.email}
             </a>
           ) : null}
@@ -307,7 +318,7 @@ export function LeadDrawer({
         ) : null}
 
         {/* details */}
-        <section className="mt-4">
+        <section className="s-panel mt-4">
           <h3 className="s-eyebrow">{UI.detailsTitle}</h3>
           <dl className="mt-1">
             <Field label={UI.contactName} value={lead.contact_name ?? "—"} />
@@ -330,7 +341,7 @@ export function LeadDrawer({
 
         {/* actions — absent entirely on a won lead: that status is evidence */}
         {won || !canEdit ? null : (
-          <section className="mt-4 flex flex-col gap-3">
+          <section className="s-panel mt-4 flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
               {lead.status !== "working" ? (
                 <button
@@ -560,7 +571,7 @@ export function LeadDrawer({
 
         {!eventsLoading ? <LeadJourneyRail events={events} /> : null}
 
-        <section className="mt-5">
+        <section className="s-panel mt-4">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>
           {/* Opening the drawer mid-call to check when you last spoke should
               not require tabbing around to discover the timeline arrived. */}

@@ -60,16 +60,12 @@ function describe(event: LeadEventRow): string | null {
 export function EventTimeline({ events }: { events: LeadEventRow[] }) {
   if (events.length === 0) return null;
   return (
-    <ol data-testid="event-timeline" className="flex flex-col gap-3">
+    <ol data-testid="event-timeline" className="s-timeline flex flex-col">
       {events.map((event) => {
         const detail = describe(event);
         return (
-          <li key={event.id} id={`lead-event-${event.id}`} tabIndex={-1} className="flex gap-2 focus-visible:outline focus-visible:outline-2">
-            <span
-              aria-hidden
-              className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ background: "hsl(var(--s-border-strong))" }}
-            />
+          <li key={event.id} id={`lead-event-${event.id}`} tabIndex={-1} className="s-timeline-item flex gap-3 focus-visible:outline focus-visible:outline-2">
+            <span aria-hidden className="s-timeline-dot" />
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium" style={{ color: "hsl(var(--s-fg))" }}>
                 {EVENT_LABELS[event.event_type] ?? event.event_type}
