@@ -5,16 +5,11 @@
 // screen already holds. Motion plays on load and when a count really moves;
 // under reduced motion the same picture stands still.
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { UI } from "../_lib/labels";
-import { flowCounts, type FlowRow, type RailKind } from "../_lib/leadMilestones";
+import { MILESTONE_NAMES, flowCounts, type FlowRow, type RailKind } from "../_lib/leadMilestones";
 
-const STAGES: [RailKind, string][] = [
-  ["created", UI.railCreated],
-  ["outreach", UI.railOutreach],
-  ["next_action", UI.railNextAction],
-  ["converted", UI.railConverted],
-];
+const STAGES: RailKind[] = ["created", "outreach", "next_action", "converted"];
 /** Height of the orb row; the river runs through the orbs' centres. */
 const RIVER_H = 56;
 
@@ -97,7 +92,7 @@ function Stage({ kind, name, count, index }: { kind: RailKind; name: string; cou
 }
 
 export function JourneyFlow({ rows }: { rows: FlowRow[] | undefined }) {
-  const counts = rows ? flowCounts(rows) : null;
+  const counts = useMemo(() => (rows ? flowCounts(rows) : null), [rows]);
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
   useEffect(() => {
@@ -109,7 +104,7 @@ export function JourneyFlow({ rows }: { rows: FlowRow[] | undefined }) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const d = riverPath(width);
+  const d = useMemo(() => riverPath(width), [width]);
 
   return (
     <div ref={wrap} className="s-flow" data-testid="journey-flow" data-ready={counts ? "true" : "false"}>
@@ -128,8 +123,8 @@ export function JourneyFlow({ rows }: { rows: FlowRow[] | undefined }) {
         <path className="s-flow-comet s-flow-comet-late" d={d} pathLength={100} />
       </svg>
       <ol className="s-flow-stages" aria-label={UI.railTitle}>
-        {STAGES.map(([kind, name], index) => (
-          <Stage key={kind} kind={kind} name={name} count={counts ? counts[kind] : null} index={index} />
+        {STAGES.map((kind, index) => (
+          <Stage key={kind} kind={kind} name={MILESTONE_NAMES[kind]} count={counts ? counts[kind] : null} index={index} />
         ))}
       </ol>
     </div>

@@ -22,11 +22,17 @@ manifest:
   - tests/unit/sales/mini-rail.test.tsx
   - tests/unit/sales/journey-flow.test.tsx
   - tests/unit/sales/sales-tokens-contrast.test.ts
+  - tests/unit/sales/sales-tokens.test.ts
+  - src/app/(sales)/_lib/format.ts
   - tests/unit/sales/today-queue.test.tsx
 
 ## Gates
 
 Unit tests (row → rail nodes, accessible names, token contrast ≥ 4.5:1 for every text pair, light and dark); full sales unit and mocked e2e; typecheck, lint, build; fixture render before/after at 390 and 1280; Tom sees before/after before merge.
+
+## Follow-up (2026-10-01, after release)
+
+The post-release simplify pass (reuse, simplification, efficiency, altitude) and an independent correctness review ran on the merged diff. Their fixes stay inside this tranche's files, plus `_lib/format.ts` (the date helper) and `sales-tokens.test.ts`, which absorbs the D1 contrast pairs so only one contrast suite remains.
 
 ## Rollback
 

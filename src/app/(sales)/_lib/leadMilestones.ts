@@ -1,3 +1,4 @@
+import { UI } from "./labels";
 import type { LeadEventRow } from "./types";
 
 /** The fields every Today row and lead row already carry (D1 mini rail). */
@@ -20,6 +21,13 @@ export function railFromRow(row: RailRow): { kind: RailKind; reached: boolean }[
   ];
 }
 
+/** The furthest node a lead has reached on the rail. */
+export function furthestNode(row: RailRow): RailKind {
+  if (row.converted_order_ref) return "converted";
+  if (row.first_touch_at && row.next_touch_at) return "next_action";
+  return row.first_touch_at ? "outreach" : "created";
+}
+
 export interface FlowRow extends RailRow {
   status: string;
 }
@@ -31,14 +39,21 @@ export function flowCounts(rows: FlowRow[]): Record<RailKind, number> {
   const counts: Record<RailKind, number> = { created: 0, outreach: 0, next_action: 0, converted: 0 };
   for (const row of rows) {
     if (row.converted_order_ref) counts.converted += 1;
-    else if (row.status === "new" || row.status === "working") {
-      counts[railFromRow(row).filter((node) => node.reached).at(-1)!.kind] += 1;
-    }
+    else if (row.status === "new" || row.status === "working") counts[furthestNode(row)] += 1;
   }
   return counts;
 }
 
-export type MilestoneKind ="created" | "outreach" | "answered" | "next_action" | "converted";
+export type MilestoneKind = "created" | "outreach" | "answered" | "next_action" | "converted";
+
+/** Approved names of every milestone; the rails and the flow share them. */
+export const MILESTONE_NAMES: Record<MilestoneKind, string> = {
+  created: UI.railCreated,
+  outreach: UI.railOutreach,
+  answered: UI.railAnswered,
+  next_action: UI.railNextAction,
+  converted: UI.railConverted,
+};
 export interface LeadMilestone {
   kind: MilestoneKind;
   sourceEventId: string;

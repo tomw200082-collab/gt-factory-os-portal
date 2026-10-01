@@ -3,16 +3,8 @@
 import type { CSSProperties } from "react";
 import { fmtDateTime } from "../_lib/format";
 import { UI } from "../_lib/labels";
-import { deriveLeadMilestones, type MilestoneKind } from "../_lib/leadMilestones";
+import { MILESTONE_NAMES as names, deriveLeadMilestones } from "../_lib/leadMilestones";
 import type { LeadEventRow } from "../_lib/types";
-
-const names: Record<MilestoneKind, string> = {
-  created: UI.railCreated,
-  outreach: UI.railOutreach,
-  answered: UI.railAnswered,
-  next_action: UI.railNextAction,
-  converted: UI.railConverted,
-};
 
 export function LeadJourneyRail({ events }: { events: LeadEventRow[] }) {
   const milestones = deriveLeadMilestones(events);

@@ -44,7 +44,6 @@
 
   /* the one action colour on any screen */
   --s-accent: 186 42% 24%;
-  --s-accent-hover: 186 42% 19%;
   --s-accent-fg: 0 0% 100%;
   --s-accent-soft: 186 38% 94%;
   /* GT Pulse D1 (program spec §8): deep petrol opens a screen, electric
@@ -125,6 +124,11 @@
   --s-flow-created: 217 88% 66%;
   --s-flow-outreach: 199 88% 62%;
   --s-flow-converted: 152 62% 52%;
+  /* the band's lit corner and the aurora's two ink strengths (asserted
+     against the band text in sales-tokens.test) */
+  --s-opening-glow: 189 62% 19%;
+  --s-aurora-a: 0.12;
+  --s-aurora-b: 0.08;
 
   /* Rubik arrives from next/font in the (sales) layout. */
   --s-font: var(--font-rubik), system-ui, sans-serif;
@@ -147,7 +151,6 @@
   --s-border-strong: 220 12% 30%;
   --s-border-field: 220 12% 45%;
   --s-accent: 186 44% 46%;
-  --s-accent-hover: 186 44% 52%;
   --s-accent-fg: 220 20% 10%;
   --s-accent-soft: 186 30% 20%;
   --s-petrol: 189 48% 17%;
@@ -228,12 +231,14 @@
   background: hsl(var(--s-surface));
   border: 1px solid hsl(var(--s-border));
   border-radius: var(--s-radius-card);
-  box-shadow: var(--s-shadow-card), var(--s-sheen);
+  --s-card-edge: 0 0 #0000;
+  box-shadow: var(--s-card-edge), var(--s-shadow-card), var(--s-sheen);
 }
 /* The inline-start accent of a task or a returning customer: an inset edge
-   follows the 22px curve where a side border would square it off. */
-[data-app="sales"] .s-card-accent {
-  box-shadow: inset -3px 0 0 hsl(var(--s-accent)), var(--s-shadow-card), var(--s-sheen);
+   follows the 22px curve where a side border would square it off. Set on the
+   card itself, so a nested card does not inherit it. */
+[data-app="sales"] .s-card.s-card-accent {
+  --s-card-edge: inset -3px 0 0 hsl(var(--s-accent));
 }
 
 [data-app="sales"] .s-sheet {
@@ -660,10 +665,7 @@
   }
   [data-app="sales"] article.s-card:hover {
     transform: translateY(-2px);
-    box-shadow: var(--s-shadow-lift), var(--s-sheen);
-  }
-  [data-app="sales"] article.s-card.s-card-accent:hover {
-    box-shadow: inset -3px 0 0 hsl(var(--s-accent)), var(--s-shadow-lift), var(--s-sheen);
+    box-shadow: var(--s-card-edge), var(--s-shadow-lift), var(--s-sheen);
   }
 }
 
@@ -710,7 +712,6 @@
   /* D1: every arrival, sweep, flow, ping and drift stops; the final picture
      stays, so nothing is hidden from someone who asked for stillness. */
   [data-app="sales"] .s-sheet,
-  [data-app="sales"] .s-card-won::after,
   [data-app="sales"] .s-opening::before,
   [data-app="sales"] .s-live-dot::after,
   [data-app="sales"] .s-flow *,
@@ -750,7 +751,7 @@
   isolation: isolate;
   overflow: hidden;
   background:
-    radial-gradient(120% 140% at 100% 0%, hsl(189 62% 19%) 0%, transparent 60%),
+    radial-gradient(120% 140% at 100% 0%, hsl(var(--s-opening-glow)) 0%, transparent 60%),
     hsl(var(--s-petrol));
   color: hsl(var(--s-opening-fg));
   border-radius: var(--s-radius-band);
@@ -760,17 +761,17 @@
 [data-app="sales"] .s-opening::before {
   content: "";
   position: absolute;
-  inset: -45%;
+  inset: -20%;
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(closest-side at 32% 38%, hsl(var(--s-action) / 0.12), transparent),
-    radial-gradient(closest-side at 72% 68%, hsl(var(--s-flow-created) / 0.08), transparent);
+    radial-gradient(closest-side at 32% 38%, hsl(var(--s-action) / var(--s-aurora-a)), transparent),
+    radial-gradient(closest-side at 72% 68%, hsl(var(--s-flow-created) / var(--s-aurora-b)), transparent);
   animation: s-aurora 22s ease-in-out infinite alternate;
 }
 @keyframes s-aurora {
-  from { transform: translate3d(-8%, -5%, 0) rotate(0deg); }
-  to { transform: translate3d(8%, 6%, 0) rotate(28deg); }
+  from { transform: translate3d(-10%, -6%, 0); }
+  to { transform: translate3d(10%, 8%, 0); }
 }
 [data-app="sales"] .s-opening h1 {
   font-size: 26px;
@@ -785,8 +786,6 @@
   width: fit-content;
   padding: 4px 12px;
   border-radius: var(--s-radius-pill);
-  background: hsl(0 0% 100% / 0.07);
-  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.1);
   font-size: 12px;
   font-weight: 500;
   color: hsl(var(--s-opening-fg-muted));
@@ -810,13 +809,18 @@
   from { transform: scale(1); opacity: 0.7; }
   70%, to { transform: scale(2.8); opacity: 0; }
 }
+/* Glass on petrol: the date pill, the scope track and the triage chips. */
+[data-app="sales"] .s-live,
+[data-app="sales"] .s-opening .s-segmented,
+[data-app="sales"] .s-opening [data-testid="stats-strip"] > div {
+  background: hsl(0 0% 100% / 0.07);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.1);
+}
 /* The scope switch is a glass track with a turquoise thumb. */
-[data-app="sales"] .s-opening [role="group"] {
+[data-app="sales"] .s-opening .s-segmented {
   width: fit-content;
   padding: 4px;
   border-radius: var(--s-radius-pill);
-  background: hsl(0 0% 100% / 0.07);
-  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.1);
 }
 [data-app="sales"] .s-opening .s-tab {
   transition: background 360ms var(--s-settle), color 360ms var(--s-settle), transform 360ms var(--s-spring);
@@ -837,13 +841,9 @@
   gap: 6px;
 }
 [data-app="sales"] .s-opening [data-testid="stats-strip"] > div {
-  white-space: nowrap;
-}
-[data-app="sales"] .s-opening [data-testid="stats-strip"] > div {
   padding: 5px 12px;
   border-radius: var(--s-radius-pill);
-  background: hsl(0 0% 100% / 0.06);
-  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.08);
+  white-space: nowrap;
 }
 
 /* --- GT Pulse D1: the journey flow (hero) -------------------------------- */
@@ -888,7 +888,6 @@
   stroke-width: 3.5;
   stroke-dasharray: 3 97;
   stroke-dashoffset: 3;
-  filter: drop-shadow(0 0 4px hsl(var(--s-action)));
   animation: s-comet 4200ms cubic-bezier(0.45, 0.05, 0.35, 1) 1500ms infinite both;
 }
 [data-app="sales"] .s-flow-comet-late { animation-delay: 3600ms; }
@@ -996,9 +995,6 @@
   to { transform: scale(1.9); opacity: 0; }
 }
 @media (min-width: 640px) {
-  [data-app="sales"] .s-flow-orb { width: 64px; height: 64px; }
-  /* the river is drawn for a 56px row; centre it on the larger orb */
-  [data-app="sales"] .s-flow-river { top: 4px; }
   [data-app="sales"] .s-flow-count { font-size: 22px; }
   [data-app="sales"] .s-flow-label { font-size: 13px; }
 }
@@ -1032,8 +1028,11 @@
 /* A segment is lit only when both ends are reached. */
 [data-app="sales"] .s-mini-rail-reached:has(+ .s-mini-rail-reached)::after {
   background: hsl(var(--s-status-new) / 0.6);
+  transform-origin: right;
+  animation: s-segment 640ms var(--s-settle) both;
 }
 [data-app="sales"] .s-mini-rail-dot {
+  position: relative;
   width: 10px;
   height: 10px;
   flex: none;
@@ -1059,18 +1058,11 @@
 
 /* Motion: the lit segments draw in from the start node one after another,
    and the current node rings twice when the card arrives, then rests. */
-[data-app="sales"] .s-mini-rail-reached:has(+ .s-mini-rail-reached)::after {
-  transform-origin: right;
-  animation: s-segment 640ms var(--s-settle) both;
-}
 [data-app="sales"] .s-mini-rail-node:nth-child(2)::after { animation-delay: 120ms; }
 [data-app="sales"] .s-mini-rail-node:nth-child(3)::after { animation-delay: 240ms; }
 @keyframes s-segment {
   from { transform: scaleX(0); }
   to { transform: none; }
-}
-[data-app="sales"] .s-mini-rail-dot {
-  position: relative;
 }
 [data-app="sales"] .s-mini-rail-current .s-mini-rail-dot::after {
   content: "";
@@ -1102,11 +1094,18 @@
   animation: s-orb-in 620ms var(--s-spring) calc(80ms + var(--i, 0) * 110ms) both;
 }
 [data-app="sales"] .s-lead-rail-node:last-child .s-lead-rail-marker {
-  animation:
-    s-orb-in 620ms var(--s-spring) calc(80ms + var(--i, 0) * 110ms) both,
-    s-glow 2600ms ease-in-out calc(700ms + var(--i, 0) * 110ms) infinite alternate;
+  position: relative;
+}
+/* A fixed ring that only fades and swells: compositor work, no repaint. */
+[data-app="sales"] .s-lead-rail-node:last-child .s-lead-rail-marker::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px hsl(var(--s-rail-accent) / 0.35);
+  animation: s-glow 2600ms ease-in-out calc(700ms + var(--i, 0) * 110ms) infinite alternate both;
 }
 @keyframes s-glow {
-  from { box-shadow: 0 0 0 3px hsl(var(--s-rail-accent) / 0.16); }
-  to { box-shadow: 0 0 0 7px hsl(var(--s-rail-accent) / 0.28); }
+  from { opacity: 0.2; transform: scale(0.85); }
+  to { opacity: 1; transform: none; }
 }

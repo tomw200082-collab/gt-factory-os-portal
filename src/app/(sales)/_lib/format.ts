@@ -16,6 +16,16 @@ export function fmtDate(iso: string | null | undefined): string {
   }).format(d);
 }
 
+/** יום חמישי, 1 באוקטובר — today's date for the Today band. */
+export function fmtDayLong(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat(IL_LOCALE, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: IL_TZ,
+  }).format(d);
+}
+
 /** 5 באוג׳, 14:30 */
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";

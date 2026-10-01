@@ -121,6 +121,23 @@ function relativeLuminance(hsl: string): number {
     .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
 }
 
+function rgb(hsl: string): number[] {
+  const [h, s, l] = hsl.split(/\s+/).map(parseFloat);
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const f = (n: number) => { const k = (n + h / 30) % 12; return l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return [f(0), f(8), f(4)];
+}
+
+/** `top` at `alpha` over `base`, back as an HSL triplet string. */
+function blend(base: string, top: string, alpha: number): string {
+  const t = rgb(top);
+  const [r, g, b] = rgb(base).map((c, i) => c * (1 - alpha) + t[i] * alpha);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const hue = d === 0 ? 0 : max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+  return `${(hue + 360) % 360} ${sat * 100}% ${l * 100}%`;
+}
+
 function contrast(fg: string, bg: string): number {
   const [lighter, darker] = [relativeLuminance(fg), relativeLuminance(bg)].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
@@ -158,6 +175,12 @@ const PAIRS: Array<[string, string, string, number]> = [
   ["focus ring against the page", "--s-accent", "--s-bg", 3],
   ["field boundary against its fill", "--s-border-field", "--s-surface", 3],
   ["field boundary against the page", "--s-border-field", "--s-bg", 3],
+  // GT Pulse D1: turquoise is a fill under petrol text, the band is petrol.
+  ["D1 action label on its fill", "--s-action-fg", "--s-action", 4.5],
+  ["D1 band text on petrol", "--s-opening-fg", "--s-petrol", 4.5],
+  ["D1 band muted text on petrol", "--s-opening-fg-muted", "--s-petrol", 4.5],
+  ["D1 lead blue text on a card", "--s-status-new", "--s-surface", 4.5],
+  ["D1 order green text on a card", "--s-status-won", "--s-surface", 4.5],
 ];
 
 describe.each([
@@ -168,6 +191,15 @@ describe.each([
     expect(tokens[ink], ink).toBeDefined();
     expect(tokens[ground], ground).toBeDefined();
     expect(contrast(tokens[ink], tokens[ground])).toBeGreaterThanOrEqual(minimum);
+  });
+
+  // The brightest the D1 band can be behind its text: the lit corner with
+  // both aurora inks at full strength over it.
+  it("D1 band text where the aurora is brightest", () => {
+    const peak = blend(blend(tokens["--s-opening-glow"], tokens["--s-action"], Number(tokens["--s-aurora-a"])),
+      tokens["--s-flow-created"], Number(tokens["--s-aurora-b"]));
+    expect(contrast(tokens["--s-opening-fg"], peak)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(tokens["--s-opening-fg-muted"], peak)).toBeGreaterThanOrEqual(4.5);
   });
 });
 
