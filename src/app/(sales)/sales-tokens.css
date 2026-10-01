@@ -719,6 +719,7 @@
   /* D1: every arrival, sweep, flow, ping and drift stops; the final picture
      stays, so nothing is hidden from someone who asked for stillness. */
   [data-app="sales"] .s-sheet,
+  [data-app="sales"] .s-toast,
   [data-app="sales"] .s-drawer-panel,
   [data-app="sales"] .s-empty-icon,
   [data-app="sales"] .s-tabbar-icon,
@@ -1364,5 +1365,21 @@
     width: auto;
     height: auto;
     padding-inline: 18px;
+  }
+}
+
+/* The toast rises in on a spring and carries the band's depth. */
+[data-app="sales"] .s-toast {
+  box-shadow: var(--s-shadow-lift);
+  animation: s-fade-up 420ms var(--s-spring) both;
+}
+/* Below 360px the three contact buttons on a card keep one row. */
+@media (max-width: 359px) {
+  [data-app="sales"] [data-testid="lead-drawer"] .s-btn {
+    padding-inline: 12px;
+    gap: 6px;
+  }
+  [data-app="sales"] [data-testid="lead-drawer"] .s-btn-primary > svg {
+    margin-inline-start: -6px;
   }
 }

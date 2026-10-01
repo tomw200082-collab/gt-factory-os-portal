@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLeads, useSaveSettings, useSettings } from "../../_lib/api";
 import { UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
@@ -12,6 +12,13 @@ export default function SettingsPage() {
   const settings = useSettings();
   const save = useSaveSettings();
   const [saved, setSaved] = useState(false);
+  // "Saved" is news for a moment, not a standing claim about fields edited
+  // since (UX gate FLOW-006).
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 3000);
+    return () => clearTimeout(timer);
+  }, [saved]);
   const leads = useLeads();
 
   const openLeadsByAssignee = useMemo(() => {

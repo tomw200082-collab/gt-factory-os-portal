@@ -33,7 +33,8 @@ import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { ActivityFeed } from "../../_components/ActivityFeed";
 import { AttentionList } from "../../_components/AttentionList";
 import { LeadDrawer } from "../../_components/LeadDrawer";
-import { OutcomeSheet } from "../../_components/OutcomeSheet";
+import { OutcomeSheet, nextBusinessTouchPreview } from "../../_components/OutcomeSheet";
+import type { UndoTarget } from "../../_lib/types";
 import { Toast } from "../../_components/Toast";
 
 export default function AttentionPage() {
@@ -45,6 +46,22 @@ export default function AttentionPage() {
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // A "lost" recorded here can be taken back from its toast, as on Today and
+  // Leads (UX gate FLOW-005); raising any toast replaces the way back.
+  const [undo, setUndo] = useState<UndoTarget | null>(null);
+  const undoStatus = useSetStatus(undo?.leadId ?? "");
+  function showToast(message: string, undoTarget: UndoTarget | null = null) {
+    setToast(message);
+    setUndo(undoTarget);
+  }
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => {
+      setToast(null);
+      setUndo(null);
+    }, 4500);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const roster = useMemo(() => settings.data?.assignees ?? [], [settings.data]);
   const openLead = leads.data?.find((l) => l.id === openId) ?? null;
@@ -54,7 +71,7 @@ export default function AttentionPage() {
   const addNote = useAddNote(openId ?? "");
   const setNextTouch = useSetNextTouch(openId ?? "");
   const assign = useAssign(openId ?? "");
-  const saved = { onSuccess: () => setToast(UI.saved) };
+  const saved = { onSuccess: () => showToast(UI.saved) };
 
   // A call placed from this screen owes an outcome, the same as one placed
   // from Today. Until now this screen dialled and asked nothing, so the one
@@ -187,11 +204,14 @@ export default function AttentionPage() {
             null
           }
           onClose={() => setOpenId(null)}
-          onStatus={(status, reason, nextTouchAt) =>
-            setStatus.mutate({ status, reason, next_touch_at: nextTouchAt }, saved)
-          }
+          onStatus={(status, reason, nextTouchAt) => {
+            const before = openLead ? { leadId: openLead.id, previousNextTouch: openLead.next_touch_at } : null;
+            setStatus.mutate({ status, reason, next_touch_at: nextTouchAt }, {
+              onSuccess: () => showToast(UI.saved, status === "lost" ? before : null),
+            });
+          }}
           onNote={(note, done) =>
-            addNote.mutate({ note }, { onSuccess: () => { done(); setToast(UI.saved); } })
+            addNote.mutate({ note }, { onSuccess: () => { done(); showToast(UI.saved); } })
           }
           onNextTouch={(at) => setNextTouch.mutate({ at }, saved)}
           onAssign={(assignee, nextTouchAt) =>
@@ -241,7 +261,7 @@ export default function AttentionPage() {
                     }
                     clearActivityDraft(session?.email ?? "", capture.pending?.leadId ?? "");
                     capture.clear();
-                    setToast(UI.wonSaved);
+                    showToast(UI.wonSaved);
                   },
                 },
               );
@@ -249,10 +269,11 @@ export default function AttentionPage() {
             }
             const leadId = capture.pending?.leadId ?? "";
             if (vars.result === "lost") {
+              const previousNextTouch = leads.data?.find((l) => l.id === leadId)?.next_touch_at ?? null;
               outcome.mutate({ result: "lost", reason: vars.reason }, { onSuccess: () => {
                 clearActivityDraft(session?.email ?? "", leadId);
                 capture.clear();
-                setToast(UI.outcomeSaved);
+                showToast(UI.outcomeSaved, leadId ? { leadId, previousNextTouch } : null);
               } });
               return;
             }
@@ -263,7 +284,7 @@ export default function AttentionPage() {
               onSuccess: () => {
                 clearActivityDraft(session?.email ?? "", leadId);
                 capture.clear();
-                setToast(UI.outcomeSaved);
+                showToast(UI.outcomeSaved);
               },
             });
           }}
@@ -271,7 +292,25 @@ export default function AttentionPage() {
         />
       ) : null}
 
-      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
+      {toast ? (
+        <Toast
+          message={toast}
+          action={undo ? {
+            label: UI.undo,
+            onAction: () => {
+              const target = undo;
+              setUndo(null);
+              // 0324 refuses a working lead with no next touch: restore the
+              // date it carried, or the default next business touch.
+              undoStatus.mutate({
+                status: "working",
+                next_touch_at: target.previousNextTouch ?? nextBusinessTouchPreview(1).toISOString(),
+              }, { onSuccess: () => showToast(UI.undone) });
+            },
+          } : undefined}
+          onClose={() => { setToast(null); setUndo(null); }}
+        />
+      ) : null}
     </div>
   );
 }

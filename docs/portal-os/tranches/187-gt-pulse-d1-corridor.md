@@ -19,7 +19,7 @@ No backend change, no flag.
 
 | Key | Hebrew | Where |
 |---|---|---|
-| `UI.flowScope` | כל הלידים הפתוחים | caption of the Today journey flow; the flow shows the whole visible pipeline |
+| `UI.flowScope` | כל הלידים הפתוחים | **registered, not rendered**: the flow's last node counts verified orders, which are not open (UX gate COPY-T187-001). The caption shows the approved `UI.leadsTitle` until Tom approves a corrected string |
 | `UI.noteSaved` | נשמר ✓ | inline status next to the lead card's note save, after the write lands |
 | `UI.teamCounts` | כל הצוות | caption of the manager's triage counts on Today |
 
@@ -43,6 +43,7 @@ manifest:
   - src/app/(sales)/_components/ActivityFeed.tsx
   - src/app/(sales)/_components/SettingsForm.tsx
   - src/app/(sales)/_components/EmptyStates.tsx
+  - src/app/(sales)/_components/Toast.tsx
   - src/app/(sales)/sales/today/page.tsx
   - src/app/(sales)/sales/leads/page.tsx
   - src/app/(sales)/sales/attention/page.tsx
@@ -53,6 +54,7 @@ manifest:
   - tests/unit/sales/today-queue.test.tsx
   - tests/unit/sales/sales-tokens.test.ts
   - tests/e2e/sales-visual-a11y.spec.ts
+  - tests/e2e/sales-attention.spec.ts
 
 ## Gates
 
