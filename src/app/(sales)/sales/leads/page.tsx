@@ -3,7 +3,7 @@
 // The full table: every lead GT has ever received, in one place.
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useAddNote,
   useAssign,
@@ -12,12 +12,15 @@ import {
   useLeads,
   useConvert,
   useOutcome,
+  useRecordActivity,
   useOutreach,
   useSetNextTouch,
   useSetStatus,
   useSettings,
 } from "../../_lib/api";
 import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
+import { clearActivityDraft } from "../../_lib/activityDraft";
+import { useSession } from "@/lib/auth/session-provider";
 import { matchesQuery } from "../../_lib/format";
 import { STATUS_LABELS, UI } from "../../_lib/labels";
 import type { LeadStatus, UndoTarget } from "../../_lib/types";
@@ -32,7 +35,9 @@ import { Toast } from "../../_components/Toast";
 const TABS: LeadStatus[] = ["new", "working", "won", "lost"];
 
 function LeadsScreen() {
+  const { session } = useSession();
   const params = useSearchParams();
+  const router = useRouter();
   const leads = useLeads();
   const settings = useSettings();
 
@@ -46,6 +51,17 @@ function LeadsScreen() {
   const [unownedOnly, setUnownedOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(params?.get("lead") ?? null);
+  const requestedLeadId = params?.get("lead") ?? null;
+  useEffect(() => setOpenId(requestedLeadId), [requestedLeadId]);
+  function closeLead() {
+    setOpenId(null);
+    if (requestedLeadId) {
+      const next = new URLSearchParams(params?.toString() ?? "");
+      next.delete("lead");
+      next.delete("event");
+      router.replace(`/sales/leads${next.size ? `?${next}` : ""}`, { scroll: false });
+    }
+  }
 
   const rows = useMemo(() => leads.data ?? [], [leads.data]);
   const counts = useMemo(() => {
@@ -77,7 +93,16 @@ function LeadsScreen() {
   );
 
   const openLead = rows.find((r) => r.id === openId) ?? null;
+  const isRep = session?.role === "sales_rep";
+  const canEditOpenLead = !isRep || openLead?.assignee === session?.email;
   const events = useLeadEvents(openId);
+  const sourceEventId = params?.get("event");
+  useEffect(() => {
+    if (!openId || !sourceEventId || events.isLoading) return;
+    const source = document.getElementById(`lead-event-${sourceEventId}`);
+    source?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    source?.focus();
+  }, [openId, sourceEventId, events.isLoading, events.data]);
 
   const setStatus = useSetStatus(openId ?? "");
   const addNote = useAddNote(openId ?? "");
@@ -91,7 +116,7 @@ function LeadsScreen() {
   // conversation was never logged and nothing said so (audit P0-4).
   const outreach = useOutreach();
   const bulkAssign = useBulkAssign();
-  const capture = useOutcomeCapture();
+  const capture = useOutcomeCapture(session?.email);
   const [toast, setToast] = useState<string | null>(null);
   // The lead a just-recorded "אבוד" can be taken back from, for as long as its
   // toast is on screen — the same affordance the Today card has had since audit
@@ -117,12 +142,15 @@ function LeadsScreen() {
     if (pendingRow) lastLeadName.current = pendingRow.contact_name ?? pendingRow.org_name;
   }, [pendingRow]);
   const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const activity = useRecordActivity(capture.pending?.leadId ?? "");
   const convert = useConvert(capture.pending?.leadId ?? "");
   // convert_lead answers 200 {converted:false} when the lead is no longer open.
   // That is not an HTTP error and carries no error.message, so it needs its own
   // channel — otherwise a close that did nothing reads as a close that worked.
   const [convertNote, setConvertNote] = useState<string | null>(null);
-  const answerSheetOpen = Boolean(capture.pending && (pendingRow || outcome.isPending));
+  const answerSheetOpen = Boolean(capture.pending && (pendingRow || activity.isPending || outcome.isPending));
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bodyRef.current?.toggleAttribute("inert", answerSheetOpen); }, [answerSheetOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -181,6 +209,7 @@ function LeadsScreen() {
 
   return (
     <div className="flex flex-col gap-4">
+      <div ref={bodyRef} data-testid="leads-body" aria-hidden={answerSheetOpen || undefined}>
       <header className="flex flex-col gap-3">
         <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.leadsTitle}
@@ -267,6 +296,9 @@ function LeadsScreen() {
       <div id="leads-panel" role="tabpanel" aria-labelledby={`leads-tab-${tab}`}>
         {leads.isLoading ? <QueueLoading /> : null}
         {leads.isError ? <QueueError onRetry={() => void leads.refetch()} what={UI.loadErrorLeads} /> : null}
+        {leads.isSuccess && requestedLeadId && !openLead ? (
+          <p role="alert" data-testid="lead-not-found" className="s-card p-4">הליד המבוקש אינו זמין. ייתכן שהקישור השתנה או שאין גישה לרשומה.</p>
+        ) : null}
 
         {leads.isSuccess && visible.length === 0 ? (
           <ListEmpty label={query ? UI.searchEmpty : UI.emptyForTab(tab)} />
@@ -279,8 +311,8 @@ function LeadsScreen() {
             // on every row. The prop stays so an "all" tab restores it.
             showStatus={false}
             roster={roster}
-            selected={selected}
-            onToggle={(id) =>
+            selected={isRep ? undefined : selected}
+            onToggle={isRep ? undefined : (id) =>
               setSelected((prev) => {
                 const next = new Set(prev);
                 if (next.has(id)) next.delete(id);
@@ -288,7 +320,7 @@ function LeadsScreen() {
                 return next;
               })
             }
-            onToggleAll={(ids) =>
+            onToggleAll={isRep ? undefined : (ids) =>
               setSelected((prev) =>
                 ids.every((id) => prev.has(id)) ? new Set() : new Set(ids),
               )
@@ -301,6 +333,9 @@ function LeadsScreen() {
       {openLead ? (
         <LeadDrawer
           lead={openLead}
+          canEdit={canEditOpenLead}
+          canAssign={!isRep}
+          suspended={answerSheetOpen}
           events={events.data ?? []}
           eventsLoading={events.isLoading}
           templates={settings.data?.whatsapp_templates ?? null}
@@ -309,7 +344,7 @@ function LeadsScreen() {
           savingNextTouch={setNextTouch.isPending}
           savingAssignee={assign.isPending}
           error={error}
-          onClose={() => setOpenId(null)}
+          onClose={closeLead}
           roster={roster}
           lostReasons={settings.data?.lost_reasons}
           onStatus={(status, reason, nextTouchAt) => {
@@ -357,7 +392,7 @@ function LeadsScreen() {
         {selected.size > 0 ? UI.bulkSelected(selected.size) : ""}
       </span>
 
-      {selected.size > 0 ? (
+      {!isRep && selected.size > 0 ? (
         <BulkBar
           count={selected.size}
           roster={roster}
@@ -389,8 +424,12 @@ function LeadsScreen() {
         />
       ) : null}
 
+      </div>
+
       {answerSheetOpen && capture.pending ? (
         <OutcomeSheet
+          // One sheet per lead: a re-arm on another lead never inherits this draft.
+          key={capture.pending.leadId}
           leadName={
             pendingRow
               ? (pendingRow.contact_name ?? pendingRow.org_name)
@@ -398,8 +437,9 @@ function LeadsScreen() {
           }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
-          busy={outcome.isPending || convert.isPending}
-          error={outcome.error?.message ?? convert.error?.message ?? convertNote}
+          draftIdentity={{ email: session?.email ?? "", leadId: capture.pending.leadId }}
+          busy={activity.isPending || outcome.isPending || convert.isPending}
+          error={activity.error?.message ?? outcome.error?.message ?? convert.error?.message ?? convertNote}
           onSubmit={(vars) => {
             if (!vars.result) return;
             // `won` is not an outcome — record_outcome refuses it, because a
@@ -419,6 +459,7 @@ function LeadsScreen() {
                       setConvertNote(UI.wonNotOpen);
                       return;
                     }
+                    clearActivityDraft(session?.email ?? "", capture.pending?.leadId ?? "");
                     capture.clear();
                     showToast(UI.wonSaved);
                   },
@@ -430,18 +471,24 @@ function LeadsScreen() {
             // the row leaves the list on success and takes its date with it.
             const leadId = capture.pending?.leadId ?? null;
             const previousNextTouch = pendingRow?.next_touch_at ?? null;
-            outcome.mutate(
-              { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
-              {
-                onSuccess: () => {
-                  capture.clear();
-                  showToast(
-                    UI.outcomeSaved,
-                    vars.result === "lost" && leadId ? { leadId, previousNextTouch } : null,
-                  );
-                },
+            if (vars.result === "lost") {
+              outcome.mutate({ result: "lost", reason: vars.reason }, { onSuccess: () => {
+                clearActivityDraft(session?.email ?? "", leadId ?? "");
+                capture.clear();
+                showToast(UI.outcomeSaved, leadId ? { leadId, previousNextTouch } : null);
+              } });
+              return;
+            }
+            if (!vars.request_id || !capture.pending) return;
+            activity.mutate({ request_id: vars.request_id, source_task_id: capture.pending.taskId,
+              channel: capture.pending.channel,
+              result: vars.result, note: vars.note, primary_action: vars.primary_action }, {
+              onSuccess: () => {
+                clearActivityDraft(session?.email ?? "", leadId ?? "");
+                capture.clear();
+                showToast(UI.outcomeSaved);
               },
-            );
+            });
           }}
           // Dismissal here means the same as on Today: the sheet closes, the
           // intent stays owed, and the next return asks again.

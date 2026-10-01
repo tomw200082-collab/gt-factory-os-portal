@@ -15,6 +15,7 @@ export type OutcomeResult =
   | "answered_progressing"
   | "no_answer"
   | "whatsapp_sent"
+  | "email_sent"
   | "lost";
 
 export type OutreachChannel = "call" | "whatsapp" | "email";
@@ -202,6 +203,25 @@ export interface ActivityRow {
 export interface TodayPayload {
   rows: TodayRow[];
   queue: QueueSettings;
+}
+
+export type SalesTaskScope = "mine" | "unassigned" | "all";
+
+export interface SalesTaskRow {
+  id: string;
+  lead_id: string | null;
+  org_id: string | null;
+  kind: string;
+  title: string;
+  due_at: string;
+  status: "open" | "done" | "cancelled";
+  owner_email: string | null;
+  source_kind: string;
+  source_id: string;
+  source_event_id: string | null;
+  reason: string;
+  needs_assignment: boolean;
+  lead_context: { org_name: string | null; contact_name: string | null; status: string | null } | null;
 }
 
 /**

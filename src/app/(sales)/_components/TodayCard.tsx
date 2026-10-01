@@ -6,10 +6,10 @@
 // things you can do about it. A conversion is the exception — it is news, not
 // work, so it carries no actions at all.
 
-import { MessageCircle, PartyPopper, Phone } from "lucide-react";
+import { Mail, MessageCircle, PartyPopper, Phone } from "lucide-react";
 import { fmtMoney, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
-import { telHref, templateFor, waHref, fillTemplate } from "../_lib/wa";
+import { mailtoHref, telHref, templateFor, waHref, fillTemplate } from "../_lib/wa";
 import { agedTone } from "../_lib/queue";
 import type { AssigneeEntry, TodayRow, WhatsappTemplates } from "../_lib/types";
 import { assigneeName } from "./AssigneePicker";
@@ -25,7 +25,7 @@ export interface TodayCardProps {
   slaHours: number;
   templates: WhatsappTemplates | null;
   /** Called on tap, before the browser follows the tel:/wa.me link. */
-  onArm: (leadId: string, channel: "call" | "whatsapp") => void;
+  onArm: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
   onPostpone: (row: TodayRow) => void;
   onLost: (row: TodayRow) => void;
 }
@@ -77,6 +77,7 @@ export function TodayCard({
   const aged = agedTone(row.age_days, slaHours);
   const name = row.contact_name ?? row.org_name;
   const tel = telHref(row.phone_e164);
+  const mail = mailtoHref(row.email);
   const waText = templates
     ? fillTemplate(
         templateFor(templates, {
@@ -163,9 +164,7 @@ export function TodayCard({
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {/* Without a phone number there is no call to make. A disabled button
-            says so honestly; an anchor with no href would look identical and
-            behave like text. */}
+        {/* Offer only a channel that exists; a contact gap opens the lead. */}
         {tel ? (
           <a
             href={tel}
@@ -175,22 +174,12 @@ export function TodayCard({
             <Phone size={16} aria-hidden />
             {UI.call}
           </a>
+        ) : mail ? (
+          <a href={mail} onClick={() => onArm(row.lead_id, "email")}
+            className="s-btn s-btn-primary flex-1"><Mail size={16} aria-hidden />{UI.email}</a>
         ) : (
-          <button
-            type="button"
-            // aria-disabled, not disabled: iOS VoiceOver does not announce the
-            // title of a disabled button, so the reason never reached the one
-            // person who most needed it. This keeps the control focusable and
-            // names why it does nothing.
-            aria-disabled
-            aria-describedby={`no-phone-${row.lead_id}`}
-            className="s-btn s-btn-primary flex-1"
-            style={{ opacity: 0.45 }}
-            onClick={(e) => e.preventDefault()}
-          >
-            <Phone size={16} aria-hidden />
-            {UI.call}
-          </button>
+          <a href={`/sales/leads?lead=${encodeURIComponent(row.lead_id)}`}
+            className="s-btn s-btn-primary flex-1">{UI.taskOpenLead}</a>
         )}
         {wa ? (
           <a
@@ -203,22 +192,7 @@ export function TodayCard({
             <MessageCircle size={16} aria-hidden />
             {UI.whatsapp}
           </a>
-        ) : (
-          <button
-            type="button"
-            aria-disabled
-            aria-describedby={`no-phone-${row.lead_id}`}
-            className="s-btn s-btn-ghost flex-1"
-            style={{ opacity: 0.45 }}
-            onClick={(e) => e.preventDefault()}
-          >
-            <MessageCircle size={16} aria-hidden />
-            {UI.whatsapp}
-            <span id={`no-phone-${row.lead_id}`} className="sr-only">
-              {UI.noPhone}
-            </span>
-          </button>
-        )}
+        ) : null}
       </div>
 
       {/* Demoted out of the button row on purpose. Both of these are exits from

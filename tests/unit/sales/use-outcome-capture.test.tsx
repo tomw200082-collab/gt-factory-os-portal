@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { useOutcomeCapture } from "@/app/(sales)/_lib/useOutcomeCapture";
 
-function Probe() {
-  const { pending, arm, clear, dismiss } = useOutcomeCapture();
+function Probe({ email = "rep-a@example.invalid" }: { email?: string }) {
+  const { pending, arm, clear, dismiss } = useOutcomeCapture(email);
   return (
     <div>
       <span data-testid="pending">{pending ? `${pending.leadId}:${pending.channel}` : "none"}</span>
+      <span data-testid="task-id">{pending?.taskId ?? "none"}</span>
       <button onClick={() => arm("L1", "call")}>arm</button>
+      <button onClick={() => arm("L1", "call", "T1")}>arm-task</button>
       <button onClick={() => clear()}>clear</button>
       <button onClick={() => dismiss()}>dismiss</button>
     </div>
@@ -50,6 +52,14 @@ describe("outcome capture", () => {
     expect(screen.getByTestId("pending").textContent).toBe("L1:call");
   });
 
+  it("keeps the source task through a dialler return so the performed task is completed", () => {
+    render(<Probe />);
+    act(() => screen.getByText("arm-task").click());
+    returnToApp();
+    expect(screen.getByTestId("task-id").textContent).toBe("T1");
+    expect(JSON.parse(window.sessionStorage.getItem("gt.sales.outreach") ?? "{}").taskId).toBe("T1");
+  });
+
   it("clears only when an outcome is captured", () => {
     render(<Probe />);
     act(() => screen.getByText("arm").click());
@@ -64,7 +74,7 @@ describe("outcome capture", () => {
   it("survives a reload — the intent is still owed on mount", () => {
     window.sessionStorage.setItem(
       "gt.sales.outreach",
-      JSON.stringify({ leadId: "L9", channel: "whatsapp", at: Date.now() - 10_000 }),
+      JSON.stringify({ leadId: "L9", ownerEmail: "rep-a@example.invalid", channel: "whatsapp", at: Date.now() - 10_000 }),
     );
     render(<Probe />);
     expect(screen.getByTestId("pending").textContent).toBe("L9:whatsapp");
@@ -111,5 +121,18 @@ describe("outcome capture", () => {
     window.sessionStorage.setItem("gt.sales.outreach", "{not json");
     render(<Probe />);
     expect(screen.getByTestId("pending").textContent).toBe("none");
+  });
+
+  it("never offers rep A's armed call to rep B in the same tab", () => {
+    const view = render(<Probe />);
+    act(() => screen.getByText("arm").click());
+    returnToApp();
+    expect(screen.getByTestId("pending").textContent).toBe("L1:call");
+    view.rerender(<Probe email="rep-b@example.invalid" />);
+    expect(screen.getByTestId("pending").textContent).toBe("none");
+    returnToApp();
+    expect(screen.getByTestId("pending").textContent).toBe("none");
+    view.rerender(<Probe />);
+    expect(screen.getByTestId("pending").textContent).toBe("L1:call");
   });
 });

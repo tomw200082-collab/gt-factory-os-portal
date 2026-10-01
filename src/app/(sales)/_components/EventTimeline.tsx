@@ -64,7 +64,7 @@ export function EventTimeline({ events }: { events: LeadEventRow[] }) {
       {events.map((event) => {
         const detail = describe(event);
         return (
-          <li key={event.id} className="flex gap-2">
+          <li key={event.id} id={`lead-event-${event.id}`} tabIndex={-1} className="flex gap-2 focus-visible:outline focus-visible:outline-2">
             <span
               aria-hidden
               className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"

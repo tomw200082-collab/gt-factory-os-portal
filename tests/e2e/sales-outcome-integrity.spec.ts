@@ -110,6 +110,7 @@ async function stub(
   await page.route("**/api/sales/today**", (r) =>
     r.fulfill({ json: { rows: opts.queueRows ?? [], queue: QUEUE } }),
   );
+  await page.route("**/api/sales/tasks**", (r) => r.fulfill({ json: { rows: [] } }));
   await page.route("**/api/sales/leads/*/events**", (r) => r.fulfill({ json: { rows: [] } }));
   await page.route("**/api/sales/leads/*/outreach", (r) => {
     posted.push({ url: r.request().url(), body: r.request().postDataJSON() });
@@ -127,6 +128,13 @@ async function stub(
     return r.fulfill({
       json: { lead_id: "X", status: "lost", next_touch_at: null, first_touch_at: iso(now) },
     });
+  });
+  await page.route("**/api/sales/leads/*/activity", (r) => {
+    posted.push({ url: r.request().url(), body: r.request().postDataJSON() });
+    if (opts.outcomeStatus && opts.outcomeStatus >= 400) {
+      return r.fulfill({ status: opts.outcomeStatus, json: { error: "nope" } });
+    }
+    return r.fulfill({ json: { lead_id: "X", outcome_event_id: "E", task_ids: ["T"] } });
   });
   return posted;
 }
@@ -163,9 +171,57 @@ test("a call armed on the leads page is answered for on the leads page @mocked",
   // The sheet used to live only on Today, so this asked nothing and the
   // answer was thrown away without a word (audit P0-4).
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+  await expect(page.getByTestId("leads-body")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByTestId("leads-body")).toHaveAttribute("inert", "");
+  await page.getByTestId("outcome-dismiss").click();
+  await expect(page.getByTestId("leads-body")).not.toHaveAttribute("inert", "");
 });
 
-test("the two quick outcomes show the date they are about to schedule @mocked", async ({
+test("a leads answer posts note and due action atomically, retaining its draft after 422 @mocked", async ({ page }) => {
+  const posted = await stub(page, { leadRows: [offQueueLead], outcomeStatus: 422 });
+  await page.goto("/sales/leads");
+  await page.getByTestId("leads-tab-working").click();
+  await page.getByTestId("lead-row-OFFQ").click();
+  await page.getByTestId("drawer-call").click();
+  await leaveAndReturn(page);
+  await page.getByTestId("outcome-answered_progressing").click();
+  await page.getByTestId("activity-note").fill("אבגדה");
+  await page.getByLabel("מה הפעולה הבאה?").selectOption("wait_review");
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  await page.getByLabel("מתי לבצע?").fill(tomorrow.toISOString().slice(0, 10));
+  await page.getByTestId("activity-save").click();
+  await expect(page.getByTestId("outcome-error")).toBeVisible();
+  expect(posted.filter((p) => p.url.includes("/activity"))).toHaveLength(1);
+  const body = posted.find((p) => p.url.includes("/activity"))?.body as Record<string, unknown>;
+  expect(body).toMatchObject({ result: "answered_progressing", note: "אבגדה", primary_action: { kind: "wait_review" } });
+  expect(posted.filter((p) => p.url.includes("/outcome"))).toHaveLength(0);
+  await page.reload();
+  await leaveAndReturn(page);
+  await page.getByTestId("outcome-answered_progressing").click();
+  await expect(page.getByTestId("activity-note")).toHaveValue("אבגדה");
+  await page.getByTestId("activity-save").click();
+  const attempts = posted.filter((p) => p.url.includes("/activity"));
+  expect((attempts[1].body as { request_id: string }).request_id).toBe((attempts[0].body as { request_id: string }).request_id);
+});
+
+test("the result sheet keeps Save reachable in a short mobile viewport @mocked", async ({ page }) => {
+  await stub(page, { leadRows: [offQueueLead] });
+  await page.setViewportSize({ width: 320, height: 480 });
+  await page.goto("/sales/leads");
+  await page.getByTestId("leads-tab-working").click();
+  await page.getByRole("tabpanel").getByRole("button", { name: /מסעדת בדיקה/ }).click();
+  await page.getByTestId("drawer-call").click();
+  await leaveAndReturn(page);
+  await page.getByTestId("outcome-answered_progressing").click();
+  await page.getByTestId("activity-note").focus();
+  const sheet = page.getByTestId("outcome-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(page.getByTestId("activity-save")).toBeInViewport();
+  const dimensions = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: window.innerWidth }));
+  expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
+});
+
+test("a call shows only its valid quick outcome and scheduled date @mocked", async ({
   page,
 }) => {
   await stub(page, { queueRows: [queueLead] });
@@ -174,7 +230,7 @@ test("the two quick outcomes show the date they are about to schedule @mocked", 
   await leaveAndReturn(page);
 
   await expect(page.getByTestId("outcome-preview-no_answer")).toContainText("המגע הבא");
-  await expect(page.getByTestId("outcome-preview-whatsapp_sent")).toContainText("המגע הבא");
+  await expect(page.getByTestId("outcome-preview-whatsapp_sent")).toHaveCount(0);
 
   // And a way to disagree with it — one per outcome, sitting under the outcome
   // it belongs to. There used to be a single bare "שנה תאריך" at the root of
@@ -182,7 +238,7 @@ test("the two quick outcomes show the date they are about to schedule @mocked", 
   // submitted answered_progressing whichever date was tapped: "no answer, call
   // back Thursday" was recorded as a conversation that went well (D4).
   await expect(page.getByTestId("outcome-pick-date-no_answer")).toBeVisible();
-  await expect(page.getByTestId("outcome-pick-date-whatsapp_sent")).toBeVisible();
+  await expect(page.getByTestId("outcome-pick-date-whatsapp_sent")).toHaveCount(0);
   await expect(page.getByTestId("outcome-pick-date")).toHaveCount(0);
 });
 
@@ -191,7 +247,7 @@ test("the backdrop cannot dismiss the sheet while the write is in the air @mocke
 }) => {
   await stub(page, { queueRows: [queueLead] });
   // Hold the outcome open so the sheet is genuinely busy.
-  await page.route("**/api/sales/leads/*/outcome", async (r) => {
+  await page.route("**/api/sales/leads/*/activity", async (r) => {
     await new Promise((res) => setTimeout(res, 1500));
     await r.fulfill({ json: { lead_id: "Q1", status: "working" } });
   });

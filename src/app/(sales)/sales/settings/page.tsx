@@ -5,8 +5,10 @@ import { useLeads, useSaveSettings, useSettings } from "../../_lib/api";
 import { UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { SettingsForm } from "../../_components/SettingsForm";
+import { useSession } from "@/lib/auth/session-provider";
 
 export default function SettingsPage() {
+  const { session } = useSession();
   const settings = useSettings();
   const save = useSaveSettings();
   const [saved, setSaved] = useState(false);
@@ -36,10 +38,15 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      {settings.isLoading ? <QueueLoading /> : null}
-      {settings.isError ? <QueueError onRetry={() => void settings.refetch()} what={UI.loadErrorSettings} /> : null}
+      {session?.role === "sales_rep" ? (
+        <p role="status" className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>
+          {UI.settingsManagerOnly}
+        </p>
+      ) : null}
+      {session?.role !== "sales_rep" && settings.isLoading ? <QueueLoading /> : null}
+      {session?.role !== "sales_rep" && settings.isError ? <QueueError onRetry={() => void settings.refetch()} what={UI.loadErrorSettings} /> : null}
 
-      {settings.isSuccess ? (
+      {session?.role !== "sales_rep" && settings.isSuccess ? (
         <SettingsForm
           settings={settings.data}
           // Deactivating somebody who still owns open leads should say so

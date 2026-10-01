@@ -1,0 +1,11 @@
+import { proxyRequest } from "@/lib/api-proxy";
+
+export async function POST(req: Request, { params }: { params: Promise<{ task_id: string }> }): Promise<Response> {
+  const { task_id } = await params;
+  return proxyRequest(req, {
+    method: "POST",
+    upstreamPath: `/api/v1/mutations/sales/tasks/${encodeURIComponent(task_id)}/complete`,
+    forwardQuery: false,
+    errorLabel: "sales task completion",
+  });
+}

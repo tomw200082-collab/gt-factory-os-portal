@@ -58,6 +58,16 @@ describe("middleware — auth gating", () => {
     expect(location).toContain("redirectTo=%2Fdashboard");
   });
 
+  it("keeps the lead UUID through a signed-out sales redirect", async () => {
+    mockUpdate.mockResolvedValue({ response: NextResponse.next(), user: null });
+    const res = await run("/sales/leads?lead=11111111-2222-3333-4444-555555555555");
+    const login = new URL(res.headers.get("location")!);
+    expect(login.pathname).toBe("/login");
+    expect(login.searchParams.get("redirectTo"))
+      .toBe("/sales/leads?lead=11111111-2222-3333-4444-555555555555");
+    expect(login.searchParams.get("lead")).toBeNull();
+  });
+
   // Note: the role-gate JSON branch (return 403 JSON when isApiPath +
   // forbidden role) is intentionally defensive. Today no entry in
   // ROLE_GATES matches an /api/* prefix — the gates target web routes

@@ -199,6 +199,90 @@
   border-start-start-radius: 16px;
   border-start-end-radius: 16px;
   box-shadow: var(--s-shadow-sheet);
+  max-height: var(--s-sheet-viewport-height, 100dvh);
+  max-width: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+[data-app="sales"] .s-sheet-save {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  box-shadow: 0 -8px 12px hsl(var(--s-surface) / 0.95);
+}
+
+/* Each lit point is a recorded event; the connecting stroke never fills a
+   future step. The source control opens that exact event in the history. */
+[data-app="sales"] .s-lead-rail {
+  --s-rail-line: 206 76% 61%;
+  --s-rail-accent: 178 82% 64%;
+  margin-top: 20px;
+  padding: 16px;
+  min-width: 0;
+  border-radius: 16px;
+  background: linear-gradient(145deg, hsl(197 54% 13%), hsl(204 55% 19%));
+  color: hsl(0 0% 100%);
+  box-shadow: 0 10px 24px hsl(204 55% 12% / 0.16);
+}
+
+[data-app="sales"] .s-lead-rail .s-eyebrow { color: hsl(var(--s-rail-accent)); }
+[data-app="sales"] .s-lead-rail-path {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  margin-top: 12px;
+}
+[data-app="sales"] .s-lead-rail-node {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 16px;
+  color: hsl(0 0% 100%);
+  overflow-wrap: anywhere;
+}
+[data-app="sales"] .s-lead-rail-node:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: hsl(var(--s-rail-line) / 0.55);
+}
+[data-app="sales"] .s-lead-rail-marker {
+  z-index: 1;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 3px solid hsl(var(--s-rail-accent));
+  border-radius: 50%;
+  background: hsl(197 54% 13%);
+  box-shadow: 0 0 0 3px hsl(var(--s-rail-accent) / 0.16);
+}
+[data-app="sales"] .s-lead-rail-converted .s-lead-rail-marker {
+  border-color: hsl(152 69% 67%);
+  border-radius: 4px;
+}
+[data-app="sales"] .s-lead-rail-next_action .s-lead-rail-marker {
+  border-color: hsl(39 97% 70%);
+  transform: rotate(45deg) scale(0.85);
+}
+[data-app="sales"] .s-lead-rail time { display: block; color: hsl(195 18% 82%); }
+[data-app="sales"] .s-lead-rail-source {
+  min-height: 44px;
+  margin-inline-start: -10px;
+  padding-inline: 10px;
+  color: hsl(var(--s-rail-accent));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 13px;
+}
+[data-app="sales"] .s-lead-rail-source:focus-visible {
+  outline: 2px solid hsl(var(--s-rail-accent));
+  outline-offset: 2px;
 }
 
 /* --- numerals ------------------------------------------------------------- */
@@ -364,6 +448,12 @@
   /* Applies to the textareas that share this class. A horizontal drag handle
      lets a user pull a field out of an RTL form's alignment for good. */
   resize: vertical;
+}
+
+/* A required field left empty or out of range shows it once touched, so a
+   disabled Save always has a visible cause (UX gate 2026-10-01). */
+[data-app="sales"] .s-input:user-invalid {
+  border-color: hsl(var(--s-sla-overdue));
 }
 
 [data-app="sales"] .s-input::placeholder {

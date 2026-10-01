@@ -7,19 +7,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { fmtDate, fmtDateTime, fmtPhone, toDateInputValue } from "../_lib/format";
+import { fmtDate, fmtDateTime, fmtPhone } from "../_lib/format";
 import { LOST_REASONS, STATUS_LABELS, UI } from "../_lib/labels";
 import { mailtoHref, telHref, waHref, fillTemplate, templateFor } from "../_lib/wa";
 import type { AssigneeEntry, LeadEventRow, SalesLeadRow, WhatsappTemplates } from "../_lib/types";
 import { AssigneePicker } from "./AssigneePicker";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
+import { LeadJourneyRail } from "./LeadJourneyRail";
 import { SlaBadge } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 import { useReturnFocus } from "../_lib/useReturnFocus";
+import { atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM } from "../_lib/israelTime";
 
 export interface LeadDrawerProps {
   lead: SalesLeadRow;
+  canEdit?: boolean;
+  canAssign?: boolean;
+  suspended?: boolean;
   events: LeadEventRow[];
   eventsLoading: boolean;
   templates: WhatsappTemplates | null;
@@ -54,7 +59,7 @@ export interface LeadDrawerProps {
    * outcome sheet — the loop the product is built on would close on one surface
    * and silently not on the other.
    */
-  onArm?: (leadId: string, channel: "call" | "whatsapp") => void;
+  onArm?: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
 }
 
 /**
@@ -77,6 +82,9 @@ function Field({ label, value, isolate }: { label: string; value: string; isolat
 
 export function LeadDrawer({
   lead,
+  canEdit = true,
+  canAssign = true,
+  suspended = false,
   events,
   eventsLoading,
   templates,
@@ -97,19 +105,21 @@ export function LeadDrawer({
   useReturnFocus();
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState<string | null>(lead.assignee);
-  const [assignDate, setAssignDate] = useState(
-    lead.next_touch_at ? toDateInputValue(new Date(lead.next_touch_at)) : toDateInputValue(new Date()),
+  // Every date here saves at 09:00 Israel, so none may start or land before
+  // the first date whose 09:00 is still ahead (review 2026-10-01).
+  const scheduleFloor = israelFirstSchedulableDate();
+  const startDate = atLeastSchedulable(
+    lead.next_touch_at ? israelDate(new Date(lead.next_touch_at)) : scheduleFloor,
   );
-  const [date, setDate] = useState(
-    lead.next_touch_at ? toDateInputValue(new Date(lead.next_touch_at)) : toDateInputValue(new Date()),
-  );
+  const [assignDate, setAssignDate] = useState(startDate);
+  const [date, setDate] = useState(startDate);
   const [losing, setLosing] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [otherReason, setOtherReason] = useState("");
   // 0324 refuses to move a lead to working without a next touch, so the button
   // collects one instead of failing after the tap.
   const [working, setWorking] = useState(false);
-  const [workingDate, setWorkingDate] = useState(toDateInputValue(new Date()));
+  const [workingDate, setWorkingDate] = useState(scheduleFloor);
 
   const reasons = lostReasons?.length ? lostReasons : LOST_REASONS;
   // Positional, not a literal: the list is Tom's to rename (0326), and keying
@@ -120,15 +130,19 @@ export function LeadDrawer({
   // What Escape and the backdrop would throw away.
   const dirty = note.trim().length > 0 || (assignee ?? "") !== (lead.assignee ?? "");
   const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panelRef.current?.parentElement?.toggleAttribute("inert", suspended);
+  }, [suspended]);
 
   // Escape closes, and Tab stays inside: the drawer covers the list behind a
   // backdrop, so focus escaping into unreachable rows would strand a keyboard
   // or screen-reader user. Same trap MobileNav uses for its drawer.
   useEffect(() => {
     const panel = panelRef.current;
-    panel?.focus();
+    if (!suspended) panel?.focus();
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (suspended) return;
       if (e.key === "Escape") {
         // Typed text is work. Closing over it without asking is the same class
         // of loss as a dropped save, and it happened on a key nobody aims for.
@@ -155,7 +169,7 @@ export function LeadDrawer({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, dirty]);
+  }, [onClose, dirty, suspended]);
 
   const name = lead.contact_name ?? lead.org_name;
   const wa = waHref(
@@ -177,9 +191,10 @@ export function LeadDrawer({
   return (
     <div
       className="fixed inset-0 z-40 flex justify-start"
+      aria-hidden={suspended || undefined}
       style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
-        if (e.target !== e.currentTarget) return;
+        if (suspended || e.target !== e.currentTarget) return;
         // Escape asks before discarding an unsaved note; the backdrop did not,
         // so the same keystroke-equivalent gesture threw away typed work
         // depending only on how the drawer was dismissed (gate P1).
@@ -191,7 +206,7 @@ export function LeadDrawer({
         ref={panelRef}
         tabIndex={-1}
         role="dialog"
-        aria-modal="true"
+        aria-modal={!suspended}
         aria-label={lead.org_name}
         dir="rtl"
         data-testid="lead-drawer"
@@ -251,7 +266,8 @@ export function LeadDrawer({
         ) : null}
 
         {/* contact */}
-        <div className="mt-3 flex flex-wrap gap-2">
+        {!canEdit && !won ? <p className="mt-3 text-sm" role="status">הליד אינו משויך אליך. מנהל יכול לשייך אותו לפני יצירת קשר.</p> : null}
+        {canEdit ? <div className="mt-3 flex flex-wrap gap-2">
           {tel ? (
             <a
               href={tel}
@@ -275,11 +291,11 @@ export function LeadDrawer({
             </a>
           ) : null}
           {mail ? (
-            <a href={mail} className="s-btn s-btn-ghost">
+            <a href={mail} className="s-btn s-btn-ghost" onClick={() => onArm?.(lead.id, "email")}>
               {UI.email}
             </a>
           ) : null}
-        </div>
+        </div> : null}
 
         {lead.is_existing_customer ? (
           <div className="mt-3">
@@ -313,7 +329,7 @@ export function LeadDrawer({
         </section>
 
         {/* actions — absent entirely on a won lead: that status is evidence */}
-        {won ? null : (
+        {won || !canEdit ? null : (
           <section className="mt-4 flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
               {lead.status !== "working" ? (
@@ -356,8 +372,9 @@ export function LeadDrawer({
                   id="drawer-working-date"
                   type="date"
                   className="s-input"
+                  min={scheduleFloor}
                   value={workingDate}
-                  onChange={(e) => setWorkingDate(e.target.value)}
+                  onChange={(e) => setWorkingDate(atLeastSchedulable(e.target.value))}
                 />
                 <button
                   type="button"
@@ -365,7 +382,7 @@ export function LeadDrawer({
                   disabled={savingStatus || !workingDate}
                   className="s-btn s-btn-ghost"
                   onClick={() =>
-                    onStatus("working", null, new Date(`${workingDate}T09:00:00`).toISOString())
+                    onStatus("working", null, israelNineAM(workingDate))
                   }
                 >
                   {UI.saveDate}
@@ -473,22 +490,22 @@ export function LeadDrawer({
                 // Same floor the outcome sheet enforces: a next touch in the
                 // past lands the lead straight back in the queue as overdue
                 // work that was already done.
-                min={toDateInputValue(new Date())}
+                min={scheduleFloor}
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => setDate(atLeastSchedulable(e.target.value))}
               />
               <button
                 type="button"
                 data-testid="drawer-next-touch-save"
                 disabled={savingNextTouch || !date}
                 className="s-btn s-btn-ghost"
-                onClick={() => onNextTouch(new Date(`${date}T09:00:00`).toISOString())}
+                onClick={() => onNextTouch(israelNineAM(date))}
               >
                 {UI.saveDate}
               </button>
             </div>
 
-            <div className="flex flex-col gap-1">
+            {canAssign ? <div className="flex flex-col gap-1">
               <label className="s-eyebrow" htmlFor="drawer-assignee">
                 {UI.assigneeLabel}
               </label>
@@ -511,8 +528,9 @@ export function LeadDrawer({
                     id="drawer-assign-date"
                     type="date"
                     className="s-input"
+                    min={scheduleFloor}
                     value={assignDate}
-                    onChange={(e) => setAssignDate(e.target.value)}
+                    onChange={(e) => setAssignDate(atLeastSchedulable(e.target.value))}
                   />
                 </>
               ) : null}
@@ -530,15 +548,17 @@ export function LeadDrawer({
                 onClick={() =>
                   onAssign(
                     assignee ?? "",
-                    assignee ? new Date(`${assignDate}T09:00:00`).toISOString() : null,
+                    assignee ? israelNineAM(assignDate) : null,
                   )
                 }
               >
                 {UI.saveAssignee}
               </button>
-            </div>
+            </div> : null}
           </section>
         )}
+
+        {!eventsLoading ? <LeadJourneyRail events={events} /> : null}
 
         <section className="mt-5">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>

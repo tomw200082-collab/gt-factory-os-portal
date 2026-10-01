@@ -33,6 +33,10 @@ const STUBS: Stub[] = [
   { file: "leads/[lead_id]/assign/route.ts", upstream: "mutations/sales/leads/", methods: ["POST"] },
   { file: "leads/[lead_id]/outreach/route.ts", upstream: "mutations/sales/leads/", methods: ["POST"] },
   { file: "leads/[lead_id]/outcome/route.ts", upstream: "mutations/sales/leads/", methods: ["POST"] },
+  { file: "tasks/route.ts", upstream: "/api/v1/queries/sales/tasks", methods: ["GET"] },
+  { file: "tasks/[task_id]/complete/route.ts", upstream: "/api/v1/mutations/sales/tasks/", methods: ["POST"] },
+  { file: "leads/[lead_id]/contact/route.ts", upstream: "/api/v1/mutations/sales/leads/", methods: ["PATCH"] },
+  { file: "leads/[lead_id]/activity/route.ts", upstream: "/api/v1/mutations/sales/leads/", methods: ["POST"] },
 ];
 
 function read(stub: Stub): string {
@@ -68,5 +72,11 @@ describe("sales API proxy stubs", () => {
       expect(src).toContain("encodeURIComponent(lead_id)");
       expect(src).toContain("await params");
     }
+  });
+
+  it("escapes the task id on task completion", () => {
+    const src = read(STUBS.find((s) => s.file.includes("[task_id]"))!);
+    expect(src).toContain("encodeURIComponent(task_id)");
+    expect(src).toContain("await params");
   });
 });

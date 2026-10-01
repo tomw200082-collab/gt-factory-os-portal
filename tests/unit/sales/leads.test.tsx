@@ -124,6 +124,38 @@ describe("leads table", () => {
 });
 
 describe("lead drawer", () => {
+  it("never offers a next touch whose 09:00 has already passed", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T11:00:00Z")); // 14:00 in Israel
+    try {
+      const { container } = render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+        templates={null} onClose={noop} onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
+      const input = container.querySelector("#drawer-next-touch") as HTMLInputElement;
+      expect(input.min).toBe("2026-10-02");
+      expect(input.value).toBe("2026-10-02");
+    } finally { vi.useRealTimers(); }
+  });
+  it("shows a colleague's lead as read-only to a rep", () => {
+    render(<LeadDrawer lead={lead({ assignee: "other@example.invalid" })} events={[]} eventsLoading={false}
+      templates={null} canEdit={false} canAssign={false} onClose={noop}
+      onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    expect(screen.queryByTestId("drawer-call")).toBeNull();
+    expect(screen.queryByTestId("drawer-whatsapp")).toBeNull();
+    expect(screen.queryByTestId("drawer-assign-save")).toBeNull();
+    expect(screen.getByTestId("lead-drawer")).toBeTruthy();
+  });
+
+  it("does not close the drawer through Escape while the outcome sheet owns focus", () => {
+    const onClose = vi.fn();
+    const { container } = render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+      templates={null} suspended onClose={onClose} onStatus={noop}
+      onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(container.firstElementChild?.hasAttribute("inert")).toBe(true);
+    expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   function renderDrawer(over: Partial<SalesLeadRow> = {}, events: LeadEventRow[] = []) {
     const calls = {
       status: [] as [string, string | null | undefined, string | null | undefined][],

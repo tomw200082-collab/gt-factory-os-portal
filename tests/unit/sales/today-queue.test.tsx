@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { TodayQueue } from "@/app/(sales)/_components/TodayQueue";
+import { TaskCard } from "@/app/(sales)/_components/TaskCard";
 import { TODAY_SECTION_LABELS, UI } from "@/app/(sales)/_lib/labels";
-import type { TodayRow } from "@/app/(sales)/_lib/types";
+import type { SalesLeadRow, SalesTaskRow, TodayRow } from "@/app/(sales)/_lib/types";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/sales/today" }));
 
@@ -38,6 +39,13 @@ function row(over: Partial<TodayRow>): TodayRow {
 }
 
 const noop = () => {};
+const task: SalesTaskRow = {
+  id: "T1", lead_id: "L1", org_id: null, kind: "contact_first", title: "קשר ראשון",
+  due_at: new Date().toISOString(), status: "open", owner_email: "rep@synthetic.invalid",
+  source_kind: "lead_event", source_id: "E1", source_event_id: "E1",
+  reason: "קשר ראשון", needs_assignment: false,
+  lead_context: { org_name: "קפה בדיקה", contact_name: "דנה", status: "new" },
+};
 
 /** The cap defaults high so the existing cases keep testing what they were
  *  written to test; the cases that are about capping pass their own. */
@@ -58,6 +66,20 @@ function renderQueue(rows: TodayRow[], dailyCap = 500) {
 afterEach(cleanup);
 
 describe("today queue", () => {
+  it("offers the recorded email channel when an assigned task has email but no phone", () => {
+    const armed: Array<[string, string]> = [];
+    const emailLead = { ...base, id: "L1", phone_e164: null, email: "synthetic@example.invalid",
+      source: "import", lost_reason: null, possible_duplicate_of: null,
+      shopify_customer_id: null, shopify_snapshot_at: null } as SalesLeadRow;
+    render(<TaskCard task={task} lead={emailLead} manager={false}
+      onArm={(id, channel) => armed.push([id, channel])}
+      onComplete={async () => undefined} onResolveContact={async () => undefined} />);
+    const mail = screen.getByRole("link", { name: UI.email });
+    expect(mail.getAttribute("href")).toContain("mailto:synthetic@example.invalid");
+    expect(screen.queryByRole("link", { name: UI.call })).toBeNull();
+    fireEvent.click(mail);
+    expect(armed).toEqual([["L1", "email"]]);
+  });
   it("groups rows under their Hebrew section headings", () => {
     renderQueue([
       row({ lead_id: "A", item_type: "new_lead" }),
@@ -103,6 +125,14 @@ describe("today queue", () => {
     ]);
     const section = screen.getByTestId("today-section-new_lead");
     expect(within(section).getByTestId("today-section-count").textContent).toBe("2");
+  });
+
+  it("does not repeat a lead-work card already represented by an open task", () => {
+    render(<TodayQueue rows={[row({ lead_id: "A" }), row({ lead_id: "B", item_type: "conversion", status: "won" })]}
+      taskLeadIds={new Set(["A"])} dailyCap={15} slaHours={24} templates={null}
+      onArm={noop} onPostpone={noop} onLost={noop} />);
+    expect(screen.queryByTestId("today-card-A")).toBeNull();
+    expect(screen.getByTestId("today-card-B")).toBeTruthy();
   });
 
   it("celebrates a conversion and offers it no actions", () => {
@@ -199,17 +229,32 @@ describe("today queue", () => {
     expect(armed).toEqual([["L7", "call"]]);
   });
 
-  it("refuses the call when the lead has no phone, and says why", () => {
+  it("routes a phone-less lead to its record without suggesting a call", () => {
     renderQueue([row({ lead_id: "NP", phone_e164: null })]);
     const card = screen.getByTestId("today-card-NP");
-    const call = within(card).getByText(UI.call).closest("button");
-    expect(call).not.toBeNull();
+    expect(within(card).getByRole("link", { name: UI.taskOpenLead })).toBeTruthy();
+    expect(within(card).queryByText(UI.call)).toBeNull();
+  });
 
-    // aria-disabled rather than disabled: iOS VoiceOver does not announce the
-    // title of a disabled button, so the reason never reached the person who
-    // most needed it. The control stays focusable and names why it is inert.
-    expect(call?.getAttribute("aria-disabled")).toBe("true");
-    expect(within(card).getByText(UI.noPhone)).toBeTruthy();
+  it("offers email as the contact path when the lead has email but no phone", () => {
+    const armed: Array<[string, string]> = [];
+    render(<TodayQueue rows={[row({ lead_id: "EM", phone_e164: null, email: "synthetic@example.invalid" })]}
+      dailyCap={500} slaHours={24} templates={null}
+      onArm={(id, channel) => armed.push([id, channel])} onPostpone={noop} onLost={noop} />);
+    const card = screen.getByTestId("today-card-EM");
+    const email = within(card).getByRole("link", { name: UI.email });
+    expect(email.getAttribute("href")).toBe("mailto:synthetic@example.invalid");
+    expect(within(card).queryByRole("button", { name: UI.call })).toBeNull();
+    fireEvent.click(email);
+    expect(armed).toEqual([["EM", "email"]]);
+  });
+
+  it("routes a contactless lead to its record without offering an impossible call", () => {
+    renderQueue([row({ lead_id: "GAP", phone_e164: null, email: null })]);
+    const card = screen.getByTestId("today-card-GAP");
+    expect(within(card).getByRole("link", { name: UI.taskOpenLead }).getAttribute("href"))
+      .toBe("/sales/leads?lead=GAP");
+    expect(within(card).queryByRole("button", { name: UI.call })).toBeNull();
   });
 
   it("reveals a long section in batches, always naming the true total", () => {
@@ -384,5 +429,70 @@ describe("today queue", () => {
     expect(
       within(screen.getByTestId("today-card-LATE")).getByTestId("sla-badge").textContent,
     ).toBe(UI.slaOverdue);
+  });
+});
+
+describe("source-backed task card", () => {
+  it("passes the source task identity when a task's call is started", () => {
+    const armed = vi.fn();
+    render(<TaskCard task={task} lead={row({ lead_id: "L1", phone_e164: "+972501111111" })}
+      manager={false} onArm={armed} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    fireEvent.click(within(screen.getByTestId("task-card")).getByRole("link", { name: UI.call }));
+    expect(armed).toHaveBeenCalledWith("L1", "call", "T1");
+  });
+  it("shows a registered reason instead of an unregistered trigger title", () => {
+    render(<TaskCard task={{ ...task, title: "קשר ראשון", reason: "ליד חדש ממתין לקשר ראשון" }}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(screen.queryByText("קשר ראשון")).toBeNull();
+    expect(screen.getAllByText("ליד חדש ממתין לקשר ראשון")).toHaveLength(1);
+  });
+  it("says whether the completion form is open", () => {
+    render(<TaskCard task={task} manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    const toggle = screen.getByRole("button", { name: UI.taskComplete });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+  it("lets the owning rep resolve a contact gap (D8)", () => {
+    render(<TaskCard task={{ ...task, kind: "contact_resolution", title: "בירור פרטי קשר" }}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(screen.getByText(UI.taskContactSave)).toBeTruthy();
+  });
+  it("keeps an unassigned contact gap with the manager (D8)", () => {
+    render(<TaskCard task={{ ...task, kind: "contact_resolution", owner_email: null, needs_assignment: true }}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(screen.queryByText(UI.taskContactSave)).toBeNull();
+  });
+  it("links to its lead and requires a note before completion", async () => {
+    const completed = vi.fn(async () => undefined);
+    render(<TaskCard task={task} manager={false} onArm={noop} onComplete={completed} onResolveContact={vi.fn()} />);
+    const card = screen.getByTestId("task-card");
+    expect(within(card).queryByText(/למה עכשיו/)).toBeNull();
+    expect(within(card).getByRole("link", { name: UI.taskSource }).getAttribute("href"))
+      .toContain("lead=L1");
+    fireEvent.click(within(card).getAllByText(UI.taskComplete)[0]);
+    const note = within(card).getByLabelText(UI.taskNote);
+    const save = within(card).getAllByRole("button", { name: UI.taskComplete })[1];
+    fireEvent.change(note, { target: { value: "אבגד" } });
+    expect(save).toHaveProperty("disabled", true);
+    fireEvent.change(note, { target: { value: "אבגדה" } });
+    fireEvent.click(save);
+    await waitFor(() => expect(completed).toHaveBeenCalledWith("T1", "אבגדה"));
+  });
+
+  it("sends contactless work only through the manager verification form", async () => {
+    const corrected = vi.fn(async () => undefined);
+    render(<TaskCard task={{ ...task, kind: "contact_resolution", owner_email: null,
+      needs_assignment: true }} manager onArm={noop} onComplete={vi.fn()} onResolveContact={corrected} />);
+    const card = screen.getByTestId("task-card");
+    expect(within(card).queryByText(UI.call)).toBeNull();
+    const save = within(card).getByRole("button", { name: UI.taskContactSave });
+    expect(save).toHaveProperty("disabled", true);
+    fireEvent.change(within(card).getByLabelText(UI.phone), { target: { value: "0501111234" } });
+    fireEvent.change(within(card).getByLabelText(UI.taskContactSource), { target: { value: "אומת מול העסק" } });
+    fireEvent.click(save);
+    await waitFor(() => expect(corrected).toHaveBeenCalledWith("L1", {
+      phone: "0501111234", email: undefined, provenance: "אומת מול העסק",
+    }));
   });
 });

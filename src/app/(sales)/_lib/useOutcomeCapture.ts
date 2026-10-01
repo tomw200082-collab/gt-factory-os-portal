@@ -32,6 +32,8 @@ function returnDelayMs(): number {
 
 export interface ArmedOutreach {
   leadId: string;
+  taskId?: string;
+  ownerEmail: string;
   channel: OutreachChannel;
   at: number;
 }
@@ -63,7 +65,7 @@ export interface OutcomeCapture {
   /** Set once the user is back and an outcome is owed. */
   pending: ArmedOutreach | null;
   /** Call on tap, before the browser follows the tel:/wa.me link. */
-  arm: (leadId: string, channel: OutreachChannel) => void;
+  arm: (leadId: string, channel: OutreachChannel, taskId?: string) => void;
   /** Only a captured outcome clears the intent. Dismissal does not. */
   clear: () => void;
   /**
@@ -74,7 +76,7 @@ export interface OutcomeCapture {
   dismiss: () => void;
 }
 
-export function useOutcomeCapture(): OutcomeCapture {
+export function useOutcomeCapture(email: string | undefined): OutcomeCapture {
   const [pending, setPending] = useState<ArmedOutreach | null>(null);
   // Set when the sheet is closed without an answer. The intent is still owed,
   // but it must not spring straight back: the browser fires a window focus for
@@ -82,11 +84,12 @@ export function useOutcomeCapture(): OutcomeCapture {
   // feel broken. It returns after a real trip away from the app.
   const dismissedRef = useRef(false);
 
-  const arm = useCallback((leadId: string, channel: OutreachChannel) => {
-    writeArmed({ leadId, channel, at: Date.now() });
+  const arm = useCallback((leadId: string, channel: OutreachChannel, taskId?: string) => {
+    if (!email) return;
+    writeArmed({ leadId, taskId, ownerEmail: email.toLowerCase(), channel, at: Date.now() });
     dismissedRef.current = false;
     setPending(null);
-  }, []);
+  }, [email]);
 
   const clear = useCallback(() => {
     writeArmed(null);
@@ -111,6 +114,10 @@ export function useOutcomeCapture(): OutcomeCapture {
       if (dismissedRef.current) return;
       const armed = readArmed();
       if (!armed) return;
+      if (!email || armed.ownerEmail !== email.toLowerCase()) {
+        setPending(null);
+        return;
+      }
       if (Date.now() - armed.at < returnDelayMs()) return;
       setPending(armed);
     };
@@ -124,7 +131,7 @@ export function useOutcomeCapture(): OutcomeCapture {
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("focus", check);
     };
-  }, []);
+  }, [email]);
 
   return { pending, arm, clear, dismiss };
 }

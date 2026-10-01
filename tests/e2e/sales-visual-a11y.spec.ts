@@ -65,10 +65,57 @@ async function stub(page: Page) {
   await page.route("**/api/sales/today**", (r) =>
     r.fulfill({ json: { rows: [lead], queue: QUEUE } }),
   );
+  await page.route("**/api/sales/tasks**", (r) => r.fulfill({ json: { rows: [] } }));
   await page.route("**/api/sales/leads/*/outreach", (r) =>
     r.fulfill({ json: { lead_id: "V1", event_id: "E" } }),
   );
 }
+
+test("the Unit A corridor fits 320, 390 and 430px without horizontal page scroll @mocked", async ({ page }) => {
+  await stub(page);
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 740 });
+    for (const route of ["/sales/today", "/sales/leads", "/sales/attention"]) {
+      await page.goto(route);
+      const dimensions = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: window.innerWidth }));
+      expect(dimensions.scroll, `${route} at ${width}px`).toBeLessThanOrEqual(dimensions.width);
+    }
+  }
+});
+
+test("a saved-event rail names and opens its source without promoting a draft @mocked", async ({ page }) => {
+  await stub(page);
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [{
+    ...lead, id: "V1", source: "import", lost_reason: null, assignee: null,
+    possible_duplicate_of: null, shopify_customer_id: null, shopify_snapshot_at: null,
+    status: "won", converted_order_ref: "GI-synthetic", converted_at: iso(now),
+    next_touch_at: null, first_touch_at: iso(now),
+  }] } }));
+  await page.route("**/api/sales/leads/*/events**", (r) => r.fulfill({ json: { rows: [
+    { id: "e1", lead_id: "V1", event_type: "created", payload: {}, actor: "synthetic", created_at: iso(now) },
+    { id: "e2", lead_id: "V1", event_type: "outreach", payload: { channel: "call" }, actor: "synthetic", created_at: iso(now) },
+    { id: "e3", lead_id: "V1", event_type: "draft_order", payload: { idem_key: "synthetic" }, actor: "synthetic", created_at: iso(now) },
+    { id: "e4", lead_id: "V1", event_type: "converted", payload: { order_ref: "GI-synthetic" }, actor: "synthetic", created_at: iso(now) },
+  ] } }));
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/sales/leads");
+  await page.getByTestId("leads-tab-won").click();
+  await page.getByRole("tabpanel").getByRole("button", { name: /קפה בדיקה/ }).click();
+  await expect(page.getByTestId("rail-converted")).toBeVisible();
+  await expect(page.getByTestId("rail-answered")).toHaveCount(0);
+  await page.getByRole("button", { name: "המרה אומתה — הצג מקור" }).click();
+  await expect(page.locator("#lead-event-e4")).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("reduced motion and dark mode retain named sales actions @mocked", async ({ page }) => {
+  await stub(page);
+  await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
+  await page.goto("/sales/today");
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await expect(page.getByTestId("today-card-V1").getByRole("link", { name: "התקשר" })).toBeVisible();
+  expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
+});
 
 test.beforeEach(async ({ page }) => {
   await setFakeRole(page, "admin");

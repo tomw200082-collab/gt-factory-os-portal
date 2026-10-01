@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const pathname = { current: "/sales/today" };
+const currentRole = vi.hoisted(() => ({ value: "planner" }));
+vi.mock("@/lib/auth/session-provider", () => ({
+  useSession: () => ({ session: { role: currentRole.value } }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname.current,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
@@ -23,6 +27,7 @@ import { NAV_LABELS, UI } from "@/app/(sales)/_lib/labels";
 afterEach(() => {
   cleanup();
   pathname.current = "/sales/today";
+  currentRole.value = "planner";
 });
 
 describe("sales shell", () => {
@@ -91,6 +96,18 @@ describe("sales shell", () => {
     );
     expect(screen.getByText(UI.switchToFactory)).toBeTruthy();
     expect(screen.getAllByText(NAV_LABELS.settings).length).toBeGreaterThan(0);
+  });
+
+  it("does not send a sales rep to a factory they cannot use (D11)", () => {
+    currentRole.value = "sales_rep";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.queryByTestId("sales-switch-factory")).toBeNull();
+  });
+
+  it("does not offer team settings to a sales rep", () => {
+    currentRole.value = "sales_rep";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.queryByRole("link", { name: NAV_LABELS.settings })).toBeNull();
   });
 
   it("keeps quick-add and search reachable from every screen", () => {

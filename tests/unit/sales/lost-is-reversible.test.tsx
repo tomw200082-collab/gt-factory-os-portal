@@ -56,6 +56,10 @@ vi.mock("@/app/(sales)/_lib/api", () => {
   return {
     useSetStatus: recorder(sink.status),
     useOutcome: recorder(sink.outcome),
+    useRecordActivity: recorder([]),
+    useTasks: () => settled([]),
+    useCompleteTask: idle,
+    useResolveContactGap: idle,
     // S5 added a close on all three sheets; unmocked, the pages throw here.
     useConvert: (leadId: string) => ({
       mutate: (
@@ -101,6 +105,7 @@ vi.mock("@/lib/auth/session-provider", () => ({
 vi.mock("next/navigation", () => ({
   usePathname: () => "/sales",
   useSearchParams: () => new URLSearchParams("lead=L1"),
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 /** The date the lead was carrying before it was lost — what the undo restores. */
@@ -187,7 +192,7 @@ async function returnToApp() {
 function armReturnFromCall() {
   window.sessionStorage.setItem(
     "gt.sales.outreach",
-    JSON.stringify({ leadId: "L1", channel: "call", at: Date.now() - 60_000 }),
+    JSON.stringify({ leadId: "L1", ownerEmail: "tom@gteveryday.com", channel: "call", at: Date.now() - 60_000 }),
   );
   window.__GT_SALES_OUTCOME_DELAY_MS__ = 0;
 }

@@ -60,7 +60,7 @@ const ACTIVITY = [
 
 async function stub(
   page: Page,
-  opts: { attention?: unknown[]; saved?: unknown[]; leads?: unknown[]; outreach?: string[] } = {},
+  opts: { attention?: unknown[]; saved?: unknown[]; leads?: unknown[]; outreach?: string[]; activityPosts?: unknown[] } = {},
 ) {
   await page.route("**/api/sales/week-stats**", (r) =>
     r.fulfill({
@@ -86,6 +86,10 @@ async function stub(
   await page.route("**/api/sales/leads/*/outreach", (r) => {
     opts.outreach?.push(r.request().url());
     return r.fulfill({ json: { lead_id: "L-LATE", event_id: "E9" } });
+  });
+  await page.route("**/api/sales/leads/*/activity", (r) => {
+    opts.activityPosts?.push(r.request().postDataJSON());
+    return r.fulfill({ json: { lead_id: "L-LATE", outcome_event_id: "E10", task_ids: ["T10"] } });
   });
   await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/attention**", (r) =>
@@ -276,6 +280,28 @@ test("a call placed from the drawer on /attention is answered for too @mocked", 
 
   await leaveAndReturn(page);
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+});
+
+test("card and drawer answers both use the atomic activity command @mocked", async ({ page }) => {
+  const activityPosts: unknown[] = [];
+  await stub(page, { leads: [LEAD_LATE], activityPosts });
+  await page.goto("/sales/attention");
+  for (const source of ["card", "drawer"]) {
+    if (source === "drawer") {
+      await page.getByTestId("attention-open-L-LATE-overdue").click();
+      await page.getByTestId("drawer-call").click();
+    } else await page.getByTestId("attention-call-L-LATE-overdue").click();
+    await leaveAndReturn(page);
+    await page.getByTestId("outcome-answered_progressing").click();
+    await page.getByTestId("activity-note").fill("שיחה טובה");
+    await page.getByLabel("מה הפעולה הבאה?").selectOption("call");
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    await page.getByLabel("מתי לבצע?").fill(tomorrow.toISOString().slice(0, 10));
+    await page.getByTestId("activity-save").click();
+    await expect.poll(() => activityPosts.length).toBe(source === "card" ? 1 : 2);
+    await expect(page.getByTestId("outcome-sheet")).toBeHidden();
+  }
+  expect(activityPosts.every((body) => (body as { result: string }).result === "answered_progressing")).toBe(true);
 });
 
 test("the queue is hidden from assistive tech while a sheet is open @mocked", async ({

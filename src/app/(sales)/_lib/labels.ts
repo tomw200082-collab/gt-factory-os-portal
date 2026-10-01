@@ -28,6 +28,7 @@ export const OUTCOME_LABELS: Record<OutcomeResult, string> = {
   answered_progressing: "ענה, מתקדם",
   no_answer: "לא ענה",
   whatsapp_sent: "וואטסאפ נשלח",
+  email_sent: "אימייל נשלח",
   lost: "אבוד",
 };
 
@@ -43,7 +44,7 @@ export const EVENT_LABELS: Record<string, string> = {
   matched_existing_customer: "זוהה כלקוח קיים",
   imported: "יובא",
   outreach: "פנייה יצאה",
-  outcome: "תוצאת שיחה",
+  outcome: "תוצאת קשר",
   // Written by the morning digest (migration 0334). Without a label here the
   // drawer timeline renders the raw token "reminder_sent" on a Hebrew screen —
   // and this is the one event type a rep will see most mornings.
@@ -245,6 +246,19 @@ export const UI = {
   scopeMine: "שלי",
   queueMine: "התור שלי",
   queueAll: "כל התור",
+  queueUnassigned: "ללא שיוך",
+  scopeUnassigned: "ללא שיוך",
+  tasksTitle: "משימות",
+  taskWhy: "למה עכשיו",
+  taskSource: "מקור",
+  taskComplete: "השלם משימה",
+  taskDone: "המשימה הושלמה",
+  taskNote: "מה בוצע?",
+  taskContactGap: "בירור פרטי קשר",
+  taskContactSource: "איך אומתו הפרטים?",
+  taskContactSave: "שמור פרטי קשר",
+  taskOpenLead: "פתח את הליד",
+  settingsManagerOnly: "הגדרות אלה מנוהלות בידי מנהל המכירות",
   chipUnowned: (n: number) => `ללא בעלים (${n})`,
   attentionTitle: "מצב",
   attentionHint: "מה תקוע, מה ללא בעלים, מה השתתק",
@@ -326,6 +340,21 @@ export const UI = {
 
   // outcome sheet
   outcomeSaved: "נרשם ✓",
+  activityNoteLabel: "מה קרה?",
+  activityActionLabel: "מה הפעולה הבאה?",
+  activityDateLabel: "מתי לבצע?",
+  activityWaitReview: "ממתין ללקוח — בדיקה",
+  activityOther: "פעולה אחרת",
+  activityChooseAction: "בחר פעולה",
+  // Tom approved this exact string 2026-10-01 (UX gate B-FLOW-04).
+  activitySaveNeeds: "כדי לשמור צריך: מה קרה (5 תווים לפחות), מה הפעולה הבאה ומתי לבצע.",
+  railTitle: "מסלול הליד",
+  railCreated: "פנייה נקלטה",
+  railOutreach: "ניסיון קשר תועד",
+  railAnswered: "קשר דו־כיווני תועד",
+  railNextAction: "פעולה הבאה נקבעה",
+  railConverted: "המרה אומתה",
+  railSource: "הצג מקור",
   nextTouchSaved: "נקבע ✓",
   lostReasonTitle: "למה אבוד?",
   lostReasonOther: "פרט…",

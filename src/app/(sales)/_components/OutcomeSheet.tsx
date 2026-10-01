@@ -7,14 +7,15 @@
 // the sheet returns, because "I'll remember to log it" is exactly the habit
 // this product exists to replace.
 //
-// Four buttons, deliberately large. This gets used one-handed, standing up,
-// with a phone that was against an ear a second ago.
+// The answer and next action must reach the server in one request.
 
 import { useEffect, useRef, useState } from "react";
 import { LOST_REASONS, OUTCOME_LABELS, OUTCOME_TITLES, STATUS_LABELS, UI } from "../_lib/labels";
-import { fmtDate, toDateInputValue } from "../_lib/format";
+import { fmtDate } from "../_lib/format";
 import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 import { useReturnFocus } from "../_lib/useReturnFocus";
+import { markActivityAttempt, readActivityDraft, saveActivityDraft, type ActivityDraft } from "../_lib/activityDraft";
+import { addIsraelDays, atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter } from "../_lib/israelTime";
 
 /**
  * `won` is not an OutcomeResult and cannot be: sales_core.record_outcome
@@ -29,6 +30,9 @@ export interface OutcomeSubmit {
   reason?: string | null;
   /** Green Invoice document number. Present only when result is "won". */
   document_number?: string;
+  request_id?: string;
+  note?: string;
+  primary_action?: { kind: Exclude<ActivityDraft["kind"], "">; due_at: string };
 }
 
 export interface OutcomeSheetProps {
@@ -51,6 +55,7 @@ export interface OutcomeSheetProps {
    * question about a conversation that was typed.
    */
   channel?: OutreachChannel;
+  draftIdentity?: { email: string; leadId: string };
   busy?: boolean;
   error?: string | null;
   onSubmit: (vars: OutcomeSubmit) => void;
@@ -58,14 +63,7 @@ export interface OutcomeSheetProps {
   onDismiss: () => void;
 }
 
-type Step = "root" | "next-touch" | "lost-reason" | "won-evidence";
-
-function atNineAM(daysFromNow: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromNow);
-  d.setHours(9, 0, 0, 0);
-  return d.toISOString();
-}
+type Step = "root" | "activity" | "next-touch" | "lost-reason" | "won-evidence";
 
 /**
  * What the server will schedule if the user does not pick a date.
@@ -77,15 +75,13 @@ function atNineAM(daysFromNow: number): string {
  * commits a date should say which date before it commits it.
  */
 export function nextBusinessTouchPreview(days: number, from: Date = new Date()): Date {
-  const d = new Date(from);
-  d.setDate(d.getDate() + days);
-  d.setHours(9, 0, 0, 0);
+  let day = addIsraelDays(israelDate(from), days);
   // getDay(): 5 = Friday, 6 = Saturday. The Israeli weekend, not the American
   // one — a "tomorrow" that lands on Shabbat is not a call anyone will make.
-  const day = d.getDay();
-  if (day === 5) d.setDate(d.getDate() + 2);
-  else if (day === 6) d.setDate(d.getDate() + 1);
-  return d;
+  const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+  if (weekday === 5) day = addIsraelDays(day, 2);
+  else if (weekday === 6) day = addIsraelDays(day, 1);
+  return new Date(israelNineAM(day));
 }
 
 export function OutcomeSheet({
@@ -93,6 +89,7 @@ export function OutcomeSheet({
   lostReasons,
   mode = "outcome",
   channel,
+  draftIdentity,
   busy = false,
   error = null,
   onSubmit,
@@ -110,12 +107,66 @@ export function OutcomeSheet({
   // call went unanswered but a callback was agreed — the exact case this whole
   // workspace exists to keep — wrote down a conversation that went well. The
   // outcome is chosen first now, and travels here.
-  const [dateFor, setDateFor] = useState<OutcomeResult | null>(null);
+  const [dateFor, setDateFor] = useState<"no_answer" | "whatsapp_sent" | "email_sent" | null>(null);
   const [reason, setReason] = useState<string>("");
   const [otherReason, setOtherReason] = useState<string>("");
-  const [customDate, setCustomDate] = useState<string>(toDateInputValue(new Date()));
+  const [customDate, setCustomDate] = useState<string>(israelFirstSchedulableDate);
   const [documentNumber, setDocumentNumber] = useState<string>("");
+  const [draft, setDraft] = useState<ActivityDraft>(() =>
+    readActivityDraft(draftIdentity?.email ?? "", draftIdentity?.leadId ?? ""));
   const panelRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // iOS keeps fixed overlays behind the keyboard in the layout viewport.
+  // Move the sheet's bottom to the visible viewport while the keyboard opens.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const resize = () => {
+      const overlay = overlayRef.current;
+      if (!overlay) return;
+      const covered = Math.max(0, window.innerHeight - viewport.offsetTop - viewport.height);
+      overlay.style.bottom = `${covered}px`;
+      overlay.style.setProperty("--s-sheet-viewport-height", `${viewport.height}px`);
+    };
+    resize();
+    viewport.addEventListener("resize", resize);
+    viewport.addEventListener("scroll", resize);
+    return () => {
+      viewport.removeEventListener("resize", resize);
+      viewport.removeEventListener("scroll", resize);
+    };
+  }, []);
+
+  function updateDraft(patch: Partial<ActivityDraft>): void {
+    setDraft((current) => saveActivityDraft(draftIdentity?.email ?? "", draftIdentity?.leadId ?? "", { ...current, ...patch }));
+  }
+
+  function submitActivity(result: "answered_progressing" | "no_answer" | "whatsapp_sent" | "email_sent", dueAt?: string): void {
+    const updated = markActivityAttempt(draftIdentity?.email ?? "", draftIdentity?.leadId ?? "",
+      { ...draft, result, channel: channel ?? "call", due_at: result === "answered_progressing" ? draft.due_at : (dueAt ?? "") });
+    setDraft(updated);
+    if (result === "answered_progressing") {
+      if (!updated.kind || updated.note.trim().length < 5 || !updated.due_at) return;
+      const date = israelNineAM(updated.due_at);
+      if (new Date(date).getTime() <= Date.now()) return;
+      onSubmit({ result, request_id: updated.request_id, note: updated.note.trim(),
+        primary_action: { kind: updated.kind, due_at: date } });
+    } else {
+      onSubmit({ result, request_id: updated.request_id,
+        ...(dueAt ? { next_touch_at: dueAt,
+          primary_action: { kind: result === "no_answer" ? "call" : result === "email_sent" ? "email" : "whatsapp", due_at: dueAt } } : {}) });
+    }
+  }
+
+  const activityDueAt = /^\d{4}-\d{2}-\d{2}$/.test(draft.due_at)
+    ? new Date(israelNineAM(draft.due_at)).getTime() : 0;
+  const activityReady = draft.note.trim().length >= 5 && Boolean(draft.kind) && activityDueAt > Date.now();
+  // A date saves as 09:00 Israel; once that has passed today, today cannot be
+  // saved. Typed or restored dates below the floor are lifted to it. An
+  // attempted draft keeps its date: changing it would rotate the request ID.
+  const activityDateFloor = israelFirstSchedulableDate();
+  const floorDate = atLeastSchedulable;
 
   // Focus trap + Escape, mirroring MobileNav's dialog handling.
   //
@@ -169,6 +220,7 @@ export function OutcomeSheet({
 
   return (
     <div
+      ref={overlayRef}
       data-testid="outcome-sheet"
       className="fixed inset-0 z-50 flex items-end justify-center"
       style={{ background: "hsl(var(--s-overlay))" }}
@@ -222,19 +274,20 @@ export function OutcomeSheet({
               disabled={busy}
               className="s-btn s-btn-primary min-h-[56px] text-base"
               onClick={() => {
-                setDateFor("answered_progressing");
-                setStep("next-touch");
+                updateDraft({ result: "answered_progressing",
+                  due_at: draft.due_at.includes("T") ? "" : draft.attempted ? draft.due_at : floorDate(draft.due_at) });
+                setStep("activity");
               }}
             >
               {OUTCOME_LABELS.answered_progressing}
             </button>
-            <div className="flex flex-col gap-1">
+            {(channel ?? "call") === "call" && <div className="flex flex-col gap-1">
               <button
                 type="button"
                 data-testid="outcome-no_answer"
                 disabled={busy}
                 className="s-btn s-btn-ghost min-h-[56px] text-base"
-                onClick={() => onSubmit({ result: "no_answer" })}
+                onClick={() => submitActivity("no_answer")}
               >
                 {OUTCOME_LABELS.no_answer}
               </button>
@@ -261,19 +314,19 @@ export function OutcomeSheet({
               >
                 {UI.chooseAnotherDate}
               </button>
-            </div>
-            <div className="flex flex-col gap-1">
+            </div>}
+            {(channel === "whatsapp" || channel === "email") && <div className="flex flex-col gap-1">
               <button
                 type="button"
-                data-testid="outcome-whatsapp_sent"
+                data-testid={channel === "email" ? "outcome-email_sent" : "outcome-whatsapp_sent"}
                 disabled={busy}
                 className="s-btn s-btn-ghost min-h-[56px] text-base"
-                onClick={() => onSubmit({ result: "whatsapp_sent" })}
+                onClick={() => submitActivity(channel === "email" ? "email_sent" : "whatsapp_sent")}
               >
-                {OUTCOME_LABELS.whatsapp_sent}
+                {OUTCOME_LABELS[channel === "email" ? "email_sent" : "whatsapp_sent"]}
               </button>
               <p
-                data-testid="outcome-preview-whatsapp_sent"
+                data-testid={channel === "email" ? "outcome-preview-email_sent" : "outcome-preview-whatsapp_sent"}
                 className="s-nums text-[12px]"
                 style={{ color: "hsl(var(--s-fg-muted))" }}
               >
@@ -281,17 +334,17 @@ export function OutcomeSheet({
               </p>
               <button
                 type="button"
-                data-testid="outcome-pick-date-whatsapp_sent"
+                data-testid={channel === "email" ? "outcome-pick-date-email_sent" : "outcome-pick-date-whatsapp_sent"}
                 disabled={busy}
                 className="s-btn s-btn-ghost self-start text-[13px]"
                 onClick={() => {
-                  setDateFor("whatsapp_sent");
+                  setDateFor(channel === "email" ? "email_sent" : "whatsapp_sent");
                   setStep("next-touch");
                 }}
               >
                 {UI.chooseAnotherDate}
               </button>
-            </div>
+            </div>}
             {/* A close, and the only outcome on this sheet that asks for
                 evidence before it will commit. It sits above אבוד and below the
                 three that describe a conversation, because it is the rarest and
@@ -317,6 +370,44 @@ export function OutcomeSheet({
             >
               {OUTCOME_LABELS.lost}
             </button>
+          </div>
+        ) : null}
+
+        {step === "activity" ? (
+          <div className="flex flex-col gap-3">
+            <button type="button" data-testid="outcome-back" className="s-btn s-btn-ghost self-start"
+              onClick={() => setStep("root")}>{UI.back}</button>
+            <label className="flex flex-col gap-1 text-[13px]">
+              {UI.activityNoteLabel}
+              <textarea className="s-input min-h-24" data-testid="activity-note" required minLength={5} maxLength={2000}
+                value={draft.note} onChange={(e) => updateDraft({ note: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-1 text-[13px]">
+              {UI.activityActionLabel}
+              <select className="s-input" required value={draft.kind} onChange={(e) => updateDraft({ kind: e.target.value as ActivityDraft["kind"] })}>
+                <option value="">{UI.activityChooseAction}</option>
+                <option value="call">{UI.call}</option>
+                <option value="whatsapp">{UI.whatsapp}</option>
+                <option value="email">{UI.email}</option>
+                <option value="other">{UI.activityOther}</option>
+                <option value="wait_review">{UI.activityWaitReview}</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[13px]">
+              {UI.activityDateLabel}
+              <input type="date" className="s-input" required min={activityDateFloor}
+                value={draft.due_at} onChange={(e) => updateDraft({ due_at: floorDate(e.target.value) })} />
+            </label>
+            <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"
+              disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}
+              aria-describedby={activityReady ? undefined : "activity-save-needs"}>
+              {busy ? UI.saving : UI.save}
+            </button>
+            {activityReady ? null : (
+              <p id="activity-save-needs" className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                {UI.activitySaveNeeds}
+              </p>
+            )}
           </div>
         ) : null}
 
@@ -352,7 +443,7 @@ export function OutcomeSheet({
               data-testid="next-touch-tomorrow"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => onSubmit({ ...declared, next_touch_at: atNineAM(1) })}
+              onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(1)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(1) })}
             >
               {UI.tomorrow}
             </button>
@@ -360,7 +451,7 @@ export function OutcomeSheet({
               type="button"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => onSubmit({ ...declared, next_touch_at: atNineAM(3) })}
+              onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(3)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(3) })}
             >
               {UI.inThreeDays}
             </button>
@@ -368,7 +459,7 @@ export function OutcomeSheet({
               type="button"
               disabled={busy}
               className="s-btn s-btn-ghost min-h-[52px]"
-              onClick={() => onSubmit({ ...declared, next_touch_at: atNineAM(7) })}
+              onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(7)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(7) })}
             >
               {UI.inAWeek}
             </button>
@@ -381,9 +472,9 @@ export function OutcomeSheet({
                 className="s-input"
                 // A next touch in the past would land the lead straight back in
                 // the queue as overdue work that was already done.
-                min={toDateInputValue(new Date())}
+                min={activityDateFloor}
                 value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
+                onChange={(e) => setCustomDate(atLeastSchedulable(e.target.value))}
               />
             </label>
             <button
@@ -391,12 +482,11 @@ export function OutcomeSheet({
               data-testid="next-touch-custom"
               disabled={busy || !customDate}
               className="s-btn s-btn-primary"
-              onClick={() =>
-                onSubmit({
-                  ...declared,
-                  next_touch_at: new Date(`${customDate}T09:00:00`).toISOString(),
-                })
-              }
+              onClick={() => {
+                const dueAt = israelNineAM(customDate);
+                if (dateFor) submitActivity(dateFor, dueAt);
+                else onSubmit({ ...declared, next_touch_at: dueAt });
+              }}
             >
               {UI.save}
             </button>

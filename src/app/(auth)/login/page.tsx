@@ -20,6 +20,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { safeRedirectTarget } from "@/lib/auth/safe-redirect";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Mail, KeyRound, Check } from "lucide-react";
 import { createSupabaseBrowserClient, createSupabaseOtpClient } from "@/lib/supabase/client";
@@ -294,7 +295,7 @@ function MagicLinkLogin() {
   // /apps is the post-login fork (tranche 162). It forwards straight through
   // for anyone with a single workspace or a remembered choice, so the extra
   // stop is invisible to factory users.
-  const redirectTo = params.get("redirectTo") ?? "/apps";
+  const redirectTo = safeRedirectTarget(params.get("redirectTo"));
 
   const [mode, setMode] = useState<"magic" | "password">("magic");
   const [email, setEmail] = useState("");

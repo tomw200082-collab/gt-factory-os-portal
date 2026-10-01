@@ -11,9 +11,9 @@ import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_KEY = "sales.queueScope";
 
-export type QueueScope = "all" | "mine";
+export type QueueScope = "all" | "mine" | "unassigned";
 
-export function useQueueScope(): [QueueScope, (next: QueueScope) => void] {
+export function useQueueScope(isRep: boolean): [QueueScope, (next: QueueScope) => void] {
   // Starts "all" on the server and on the first client render, so the markup
   // matches; the stored preference is applied after mount.
   const [scope, setScope] = useState<QueueScope>("all");
@@ -21,20 +21,22 @@ export function useQueueScope(): [QueueScope, (next: QueueScope) => void] {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "mine" || stored === "all") setScope(stored);
+      if (isRep) setScope("mine");
+      else if (stored === "mine" || stored === "all" || stored === "unassigned") setScope(stored);
     } catch {
       /* private mode: the toggle simply will not persist */
     }
-  }, []);
+  }, [isRep]);
 
   const update = useCallback((next: QueueScope) => {
+    if (isRep && next !== "mine") return;
     setScope(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
       /* as above */
     }
-  }, []);
+  }, [isRep]);
 
   return [scope, update];
 }
