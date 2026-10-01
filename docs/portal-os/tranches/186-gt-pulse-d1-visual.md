@@ -10,6 +10,7 @@
 manifest:
   - docs/portal-os/tranches/186-gt-pulse-d1-visual.md
   - docs/portal-os/tranches/_active.txt
+  - docs/portal-os/registry.md
   - src/app/(sales)/sales-tokens.css
   - src/app/(sales)/_lib/leadMilestones.ts
   - src/app/(sales)/_components/MiniRail.tsx
