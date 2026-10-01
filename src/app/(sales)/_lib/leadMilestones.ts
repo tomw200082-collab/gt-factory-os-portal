@@ -1,5 +1,25 @@
 import type { LeadEventRow } from "./types";
 
+/** The fields every Today row and lead row already carry (D1 mini rail). */
+export interface RailRow {
+  created_at: string;
+  first_touch_at: string | null;
+  next_touch_at: string | null;
+  converted_order_ref: string | null;
+}
+export type RailKind = "created" | "outreach" | "next_action" | "converted";
+
+/** Four nodes from the row itself — no extra query per card. A next touch
+ *  counts only after a first contact: new leads carry an SLA next touch. */
+export function railFromRow(row: RailRow): { kind: RailKind; reached: boolean }[] {
+  return [
+    { kind: "created", reached: true },
+    { kind: "outreach", reached: Boolean(row.first_touch_at) },
+    { kind: "next_action", reached: Boolean(row.first_touch_at && row.next_touch_at) },
+    { kind: "converted", reached: Boolean(row.converted_order_ref) },
+  ];
+}
+
 export type MilestoneKind = "created" | "outreach" | "answered" | "next_action" | "converted";
 export interface LeadMilestone {
   kind: MilestoneKind;

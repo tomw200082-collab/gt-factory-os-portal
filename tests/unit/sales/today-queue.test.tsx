@@ -80,6 +80,10 @@ describe("today queue", () => {
     fireEvent.click(mail);
     expect(armed).toEqual([["L1", "email"]]);
   });
+  it("shows the mini journey rail on every queue card (D1)", () => {
+    renderQueue([row({ lead_id: "A", item_type: "new_lead" })]);
+    expect(screen.getAllByTestId("mini-rail").length).toBe(1);
+  });
   it("groups rows under their Hebrew section headings", () => {
     renderQueue([
       row({ lead_id: "A", item_type: "new_lead" }),
@@ -433,6 +437,11 @@ describe("today queue", () => {
 });
 
 describe("source-backed task card", () => {
+  it("carries the lead's mini journey rail when the lead row is known (D1)", () => {
+    render(<TaskCard task={task} lead={row({ lead_id: "L1", first_touch_at: new Date().toISOString() }) as never}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(within(screen.getByTestId("task-card")).getByTestId("mini-rail")).toBeTruthy();
+  });
   it("passes the source task identity when a task's call is started", () => {
     const armed = vi.fn();
     render(<TaskCard task={task} lead={row({ lead_id: "L1", phone_e164: "+972501111111" })}

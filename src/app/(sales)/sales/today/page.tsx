@@ -209,7 +209,8 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-2">
+      {/* GT Pulse D1: the screen opens on petrol (program spec §8). */}
+      <header className="s-opening flex flex-col gap-2">
         {/* The title holds its own row. Sharing one with the scope pills gave a
             44px-tall filter control the same visual mass as the page name at
             390px, where the pair took the whole width. */}

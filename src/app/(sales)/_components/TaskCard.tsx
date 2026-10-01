@@ -1,5 +1,6 @@
 "use client";
 
+import { MiniRail } from "./MiniRail";
 import Link from "next/link";
 import { useState } from "react";
 import { Mail, MessageCircle, Phone } from "lucide-react";
@@ -59,6 +60,7 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
             {task.lead_context?.org_name ?? lead?.org_name ?? label}
           </h3>
           <p className="text-sm" style={{ color: "hsl(var(--s-fg-muted))" }}>{label}</p>
+          {lead ? <MiniRail row={lead} /> : null}
         </div>
         <time className="s-nums shrink-0 text-xs" dateTime={task.due_at} style={{ color: "hsl(var(--s-fg-muted))" }}>
           {fmtRelative(task.due_at)}

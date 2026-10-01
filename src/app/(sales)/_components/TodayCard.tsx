@@ -6,6 +6,7 @@
 // things you can do about it. A conversion is the exception — it is news, not
 // work, so it carries no actions at all.
 
+import { MiniRail } from "./MiniRail";
 import { Mail, MessageCircle, PartyPopper, Phone } from "lucide-react";
 import { fmtMoney, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
@@ -123,6 +124,7 @@ export function TodayCard({
               {fmtPhone(row.phone_e164)}
             </bdi>
           </p>
+          <MiniRail row={row} />
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {row.is_existing_customer ? <CustomerBadge /> : null}

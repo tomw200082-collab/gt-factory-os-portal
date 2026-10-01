@@ -47,6 +47,15 @@
   --s-accent-hover: 186 42% 19%;
   --s-accent-fg: 0 0% 100%;
   --s-accent-soft: 186 38% 94%;
+  /* GT Pulse D1 (program spec §8): deep petrol opens a screen, electric
+     turquoise is the action. Turquoise is a fill under petrol text, never
+     text on white (contrast pairs are asserted in sales-tokens-contrast.test). */
+  --s-petrol: 189 65% 16%;
+  --s-action: 175 78% 44%;
+  --s-action-hover: 175 78% 39%;
+  --s-action-fg: 189 65% 16%;
+  --s-opening-fg: 40 20% 97%;
+  --s-opening-fg-muted: 186 22% 78%;
 
   /* status — the row's visual anchor. Every foreground here is solved against
      its own -soft fill at ≥4.5:1: these pills carry the only colour-coded
@@ -122,6 +131,12 @@
   --s-accent-hover: 186 44% 52%;
   --s-accent-fg: 220 20% 10%;
   --s-accent-soft: 186 30% 20%;
+  --s-petrol: 189 48% 17%;
+  --s-action: 175 70% 46%;
+  --s-action-hover: 175 70% 52%;
+  --s-action-fg: 189 65% 12%;
+  --s-opening-fg: 40 20% 97%;
+  --s-opening-fg-muted: 186 18% 76%;
   /* Both halves of every pair are remapped. Re-tinting only the -soft fills
      and keeping foregrounds tuned for near-white is what makes dark themes
      unreadable; each value below is solved against its own dark fill. */
@@ -390,11 +405,11 @@
 }
 
 [data-app="sales"] .s-btn-primary {
-  background: hsl(var(--s-accent));
-  color: hsl(var(--s-accent-fg));
+  background: hsl(var(--s-action));
+  color: hsl(var(--s-action-fg));
 }
 [data-app="sales"] .s-btn-primary:hover {
-  background: hsl(var(--s-accent-hover));
+  background: hsl(var(--s-action-hover));
 }
 
 [data-app="sales"] .s-btn-ghost {
@@ -602,4 +617,78 @@
   [data-app="sales"] .animate-pulse {
     animation: none;
   }
+}
+
+/* --- GT Pulse D1: opening band ------------------------------------------ */
+/* The screen opens on petrol: where am I and whose work is this, apart from
+   the work itself. Inside it the text tokens are remapped, so every child
+   (title, scope switch, triage counts) stays readable without its own rule. */
+[data-app="sales"] .s-opening {
+  --s-fg: var(--s-opening-fg);
+  --s-fg-muted: var(--s-opening-fg-muted);
+  --s-fg-faint: var(--s-opening-fg-muted);
+  background: hsl(var(--s-petrol));
+  color: hsl(var(--s-opening-fg));
+  border-radius: var(--s-radius);
+  padding: 16px;
+}
+[data-app="sales"] .s-opening .s-tab:hover { background: hsl(0 0% 100% / 0.08); }
+[data-app="sales"] .s-opening .s-tab-active {
+  background: hsl(var(--s-action));
+  color: hsl(var(--s-action-fg));
+}
+[data-app="sales"] .s-opening .s-tab:focus-visible { outline-color: hsl(var(--s-action)); }
+
+/* --- GT Pulse D1: mini journey rail (signature) -------------------------- */
+/* Four nodes on every Today card: received, contacted, next action set,
+   verified order. Filled = reached (lead blue), turquoise = where the lead is
+   now, green = a verified order. Shape and accessible name carry the state too. */
+[data-app="sales"] .s-mini-rail {
+  display: flex;
+  align-items: center;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 220px;
+}
+[data-app="sales"] .s-mini-rail-node {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+[data-app="sales"] .s-mini-rail-node:last-child { flex: 0; }
+[data-app="sales"] .s-mini-rail-node:not(:last-child)::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  margin-inline: 4px;
+  border-radius: 2px;
+  background: hsl(var(--s-border-strong));
+}
+/* A segment is lit only when both ends are reached. */
+[data-app="sales"] .s-mini-rail-reached:has(+ .s-mini-rail-reached)::after {
+  background: hsl(var(--s-status-new) / 0.6);
+}
+[data-app="sales"] .s-mini-rail-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--s-border-field));
+  background: transparent;
+}
+[data-app="sales"] .s-mini-rail-reached .s-mini-rail-dot {
+  border-color: hsl(var(--s-status-new));
+  background: hsl(var(--s-status-new));
+}
+[data-app="sales"] .s-mini-rail-current .s-mini-rail-dot {
+  width: 14px;
+  height: 14px;
+  border-color: hsl(var(--s-action-fg));
+  background: hsl(var(--s-action));
+  box-shadow: 0 0 0 3px hsl(var(--s-action) / 0.25);
+}
+[data-app="sales"] .s-mini-rail-converted.s-mini-rail-reached .s-mini-rail-dot {
+  border-color: hsl(var(--s-status-won));
+  background: hsl(var(--s-status-won));
 }
