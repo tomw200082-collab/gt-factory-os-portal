@@ -505,3 +505,12 @@ describe("source-backed task card", () => {
     }));
   });
 });
+
+describe("triage counts caption (Tom 2026-10-01, FLOW-004)", () => {
+  it("says the counts are the team's", async () => {
+    const { StatsStrip } = await import("@/app/(sales)/_components/StatsStrip");
+    render(<StatsStrip stats={{ week_new_leads: 0, working_now: 0, week_converted: 0, queue_today: 1,
+      overdue_count: 0, unassigned_open_count: 1, never_contacted_count: 1, uncontactable_count: 0 }} />);
+    expect(screen.getByText(UI.teamCounts)).toBeTruthy();
+  });
+});

@@ -13,7 +13,9 @@ export function QueueDone() {
       data-testid="queue-done"
       className="s-card s-enter flex flex-col items-center gap-2 px-6 py-12 text-center"
     >
-      <CheckCircle2 size={30} aria-hidden style={{ color: "hsl(var(--s-status-won))" }} />
+      <span className="s-empty-icon s-empty-icon-won" aria-hidden>
+        <CheckCircle2 size={28} />
+      </span>
       <p className="text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
         {UI.queueDone}
       </p>
@@ -36,7 +38,9 @@ export function QueueError({ onRetry, what }: { onRetry: () => void; what?: stri
       role="alert"
       className="s-card flex flex-col items-center gap-3 px-6 py-10 text-center"
     >
-      <AlertCircle size={26} aria-hidden style={{ color: "hsl(var(--s-sla-overdue))" }} />
+      <span className="s-empty-icon s-empty-icon-alert" aria-hidden>
+        <AlertCircle size={26} />
+      </span>
       <div>
         <p className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
           {what ? UI.loadError(what) : UI.queueError}
@@ -74,7 +78,9 @@ export function ListEmpty({ label }: { label: string }) {
       data-testid="list-empty"
       className="s-card flex flex-col items-center gap-2 px-6 py-10 text-center"
     >
-      <Inbox size={24} aria-hidden style={{ color: "hsl(var(--s-fg-faint))" }} />
+      <span className="s-empty-icon" aria-hidden>
+        <Inbox size={24} />
+      </span>
       <p className="text-[14px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
         {label}
       </p>

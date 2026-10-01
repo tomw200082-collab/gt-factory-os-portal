@@ -29,8 +29,8 @@ export default function SettingsPage() {
       {/* Every other screen frames itself — Today with the stats strip, Leads
           with the search field, /attention with a subtitle. Settings opened on
           a bare title and went straight into form controls. */}
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+      <header className="s-opening s-opening-compact flex flex-col gap-1">
+        <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.settingsTitle}
         </h1>
         <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>

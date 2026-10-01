@@ -82,15 +82,16 @@ export function OrgCard({
         aria-label={org.display_name}
         dir="rtl"
         data-testid="org-card"
-        className="ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto p-4"
-        style={{ background: "hsl(var(--s-surface))" }}
+        className="s-drawer-panel ms-auto flex h-full w-full max-w-md flex-col overflow-y-auto overflow-x-hidden p-3"
+        style={{ background: "hsl(var(--s-bg))" }}
       >
-        <header className="flex items-start gap-2">
+        {/* Same frame as the lead card: the business opens on petrol. */}
+        <header className="s-opening flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
+            <h2 className="line-clamp-2 break-words text-xl font-semibold leading-tight" style={{ color: "hsl(var(--s-fg))" }}>
               {org.display_name}
             </h2>
-            <p className="s-nums text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+            <p className="s-nums mt-1 text-[13px] [overflow-wrap:anywhere]" style={{ color: "hsl(var(--s-fg-muted))" }}>
               <bdi dir="ltr">{fmtPhone(org.phone_e164)}</bdi>
               {org.email ? (
                 <>
@@ -105,8 +106,8 @@ export function OrgCard({
             aria-label={UI.close}
             data-testid="org-close"
             onClick={onClose}
-            className="grid h-11 w-11 place-items-center rounded-full"
-            style={{ color: "hsl(var(--s-fg-muted))" }}
+            className="s-glass-btn grid h-11 w-11 shrink-0 place-items-center rounded-full"
+            style={{ color: "hsl(var(--s-fg))" }}
           >
             <X size={18} aria-hidden />
           </button>
@@ -118,7 +119,7 @@ export function OrgCard({
           </div>
         ) : null}
 
-        <section className="mt-4">
+        <section className="s-panel mt-4">
           <h3 className="s-eyebrow">{UI.orgLeadsTitle}</h3>
           <ul className="mt-2 flex flex-col gap-1">
             {leads.map((lead) => (
@@ -126,7 +127,7 @@ export function OrgCard({
                 <Link
                   href={`/sales/leads?lead=${encodeURIComponent(lead.id)}`}
                   data-testid={`org-lead-${lead.id}`}
-                  className="flex min-h-[44px] items-center justify-between gap-2 rounded-[var(--s-radius-sm)] px-2 py-2"
+                  className="flex min-h-[44px] items-center justify-between gap-2 rounded-[var(--s-radius)] px-3 py-2"
                   style={{ background: "hsl(var(--s-surface-sunken))" }}
                 >
                   <span className="min-w-0 flex-1 truncate text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>
@@ -143,7 +144,7 @@ export function OrgCard({
           </ul>
         </section>
 
-        <section className="mt-5">
+        <section className="s-panel mt-4">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>
           {/* One lead's history, not a merge. Saying which one is cheaper than
               a merged view and more honest than a partial history wearing the

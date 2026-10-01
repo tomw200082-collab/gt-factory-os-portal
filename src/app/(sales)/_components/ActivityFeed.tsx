@@ -20,14 +20,15 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
   }
 
   return (
-    <ul data-testid="activity-feed" className="flex flex-col gap-2">
+    <ul data-testid="activity-feed" className="s-timeline flex flex-col">
       {rows.map((row) => (
         <li
           key={row.event_id}
           data-testid={`activity-${row.event_id}`}
-          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b pb-1 text-[13px]"
-          style={{ borderColor: "hsl(var(--s-border))" }}
+          className="s-timeline-item flex gap-3 text-[13px]"
         >
+          <span aria-hidden className="s-timeline-dot" />
+          <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
           {/* Four fields with nothing between them read as one run-on string.
               A hairline per row and a separator between the two quiet fields
               is enough; anything heavier turns a log into a table. */}
@@ -45,6 +46,7 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
             <span className="s-nums" style={{ color: "hsl(var(--s-fg-faint))" }}>
               {fmtRelative(row.created_at)}
             </span>
+          </span>
           </span>
         </li>
       ))}

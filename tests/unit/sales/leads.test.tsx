@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LeadsTable } from "@/app/(sales)/_components/LeadsTable";
 import { LeadDrawer } from "@/app/(sales)/_components/LeadDrawer";
 import { EventTimeline } from "@/app/(sales)/_components/EventTimeline";
@@ -135,6 +135,23 @@ describe("lead drawer", () => {
       expect(input.value).toBe("2026-10-02");
     } finally { vi.useRealTimers(); }
   });
+  it("confirms a note only after the write lands, then lets the message go", () => {
+    vi.useFakeTimers();
+    try {
+      let land: (() => void) | undefined;
+      render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+        templates={null} onClose={noop} onStatus={noop}
+        onNote={(_note, done) => { land = done; }} onNextTouch={noop} onAssign={noop} />);
+      fireEvent.change(screen.getByLabelText(UI.addNote), { target: { value: "דיברנו, חוזרים מחר" } });
+      fireEvent.click(screen.getByTestId("drawer-note-save"));
+      expect(screen.getByTestId("drawer-note-saved").textContent).toBe("");
+      act(() => land?.());
+      expect(screen.getByTestId("drawer-note-saved").textContent).toBe(UI.noteSaved);
+      act(() => { vi.advanceTimersByTime(2600); });
+      expect(screen.getByTestId("drawer-note-saved").textContent).toBe("");
+    } finally { vi.useRealTimers(); }
+  });
+
   it("shows a colleague's lead as read-only to a rep", () => {
     render(<LeadDrawer lead={lead({ assignee: "other@example.invalid" })} events={[]} eventsLoading={false}
       templates={null} canEdit={false} canAssign={false} onClose={noop}

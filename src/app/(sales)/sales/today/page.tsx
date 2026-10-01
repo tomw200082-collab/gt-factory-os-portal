@@ -61,13 +61,6 @@ export default function TodayPage() {
   const [undo, setUndo] = useState<UndoTarget | null>(null);
 
   const rows = useMemo(() => today.data?.rows ?? [], [today.data]);
-  // The flow in the band follows the same scope as the queue under it.
-  const flowRows = useMemo(() => {
-    if (!leads.data) return undefined;
-    if (taskScope === "mine") return leads.data.filter((lead) => lead.assignee === session?.email);
-    if (taskScope === "unassigned") return leads.data.filter((lead) => !lead.assignee);
-    return leads.data;
-  }, [leads.data, taskScope, session?.email]);
   // Every render, not memoised: an app left open overnight must not show yesterday.
   const todayLabel = fmtDayLong();
   const allTaskRows = useMemo(() => tasks.data ?? [], [tasks.data]);
@@ -262,9 +255,9 @@ export default function TodayPage() {
               2026-10-01); a rep's queue below is their whole truth. */}
           {isRep ? null : <StatsStrip stats={stats.data} />}
         </div>
-        {/* Keyed by scope: a switch redraws the path, and a scope's larger
-            count is not mistaken for a lead arriving. */}
-        <JourneyFlow key={taskScope} rows={flowRows} />
+        {/* The whole visible pipeline, captioned as such (Tom 2026-10-01):
+            the queue below is today's work in the chosen scope. */}
+        <JourneyFlow rows={leads.data} />
       </header>
 
       {/* While a sheet is open the queue behind it is unreachable by pointer;

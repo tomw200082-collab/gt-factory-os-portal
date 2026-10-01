@@ -210,8 +210,9 @@ function LeadsScreen() {
   return (
     <div className="flex flex-col gap-4">
       <div ref={bodyRef} data-testid="leads-body" aria-hidden={answerSheetOpen || undefined}>
-      <header className="flex flex-col gap-3">
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+      {/* D1 corridor: every screen opens on petrol, with its own controls. */}
+      <header className="s-opening s-opening-compact flex flex-col gap-3">
+        <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.leadsTitle}
         </h1>
 

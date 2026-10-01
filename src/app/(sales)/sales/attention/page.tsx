@@ -8,6 +8,7 @@
 // one question the person running this asks every day, so it gets a screen —
 // the fourth, and the last (decision gate D5).
 
+import { CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useActivity,
@@ -85,8 +86,8 @@ export default function AttentionPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+      <header className="s-opening s-opening-compact flex flex-col gap-1">
+        <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.attentionTitle}
         </h1>
         <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
@@ -106,9 +107,14 @@ export default function AttentionPage() {
 
       {attention.isSuccess && attention.data.length === 0 ? (
         // An authored empty state: this one is the good news.
-        <p data-testid="attention-clear" className="text-[15px]" style={{ color: "hsl(var(--s-fg))" }}>
-          {UI.attentionClear}
-        </p>
+        <div data-testid="attention-clear" className="s-panel s-enter flex items-center gap-3">
+          <span className="s-empty-icon s-empty-icon-won" aria-hidden>
+            <CheckCircle2 size={26} />
+          </span>
+          <p className="text-[15px] font-medium" style={{ color: "hsl(var(--s-fg))" }}>
+            {UI.attentionClear}
+          </p>
+        </div>
       ) : null}
 
       {attention.isSuccess && attention.data.length > 0 ? (
@@ -126,7 +132,7 @@ export default function AttentionPage() {
           middle of the viewport and the feed floated on the background below
           them, so the page read as one that stopped partway. */}
       <section
-        className="s-card mt-6 flex flex-col gap-2 p-3"
+        className="s-panel mt-6 flex flex-col gap-2"
         aria-labelledby="activity-feed-title"
       >
         <h2 id="activity-feed-title" className="s-eyebrow" style={{ margin: 0 }}>

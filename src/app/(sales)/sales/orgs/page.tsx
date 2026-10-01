@@ -36,8 +36,8 @@ function OrgsScreen() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-3">
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+      <header className="s-opening s-opening-compact flex flex-col gap-3">
+        <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
           {UI.orgsTitle}
         </h1>
         <input

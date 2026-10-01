@@ -15,12 +15,12 @@ export function OrgList({ rows, onOpen }: { rows: OrgRow[]; onOpen: (org: OrgRow
   return (
     <ul className="flex flex-col gap-2">
       {rows.map((org) => (
-        <li key={org.id}>
+        <li key={org.id} className="s-enter">
           <button
             type="button"
             data-testid={`org-row-${org.id}`}
             onClick={() => onOpen(org)}
-            className="s-card w-full p-3 text-start"
+            className="s-card w-full p-4 text-start"
           >
             <span className="flex items-start justify-between gap-2">
               <span className="min-w-0 flex-1">
