@@ -317,27 +317,6 @@ export function LeadDrawer({
           </div>
         ) : null}
 
-        {/* details */}
-        <section className="s-panel mt-4">
-          <h3 className="s-eyebrow">{UI.detailsTitle}</h3>
-          <dl className="mt-1">
-            <Field label={UI.contactName} value={lead.contact_name ?? "—"} />
-            <Field label={UI.colPhone} value={fmtPhone(lead.phone_e164)} isolate />
-            <Field label={UI.email} value={lead.email ?? "—"} isolate />
-            <Field label={UI.colCampaign} value={lead.campaign_name ?? lead.platform ?? "—"} />
-            <Field label={UI.colAge} value={UI.ageDays(lead.age_days)} />
-            <Field
-              label={UI.colNextTouch}
-              value={lead.next_touch_at ? fmtDate(lead.next_touch_at) : UI.notSet}
-            />
-            {lead.first_touch_at ? (
-              <Field label={UI.timelineTitle} value={fmtDateTime(lead.first_touch_at)} />
-            ) : null}
-            {lead.lost_reason ? (
-              <Field label={UI.lostReasonLabel} value={lead.lost_reason} />
-            ) : null}
-          </dl>
-        </section>
 
         {/* actions — absent entirely on a won lead: that status is evidence */}
         {won || !canEdit ? null : (
@@ -390,6 +369,7 @@ export function LeadDrawer({
                 <button
                   type="button"
                   data-testid="drawer-working-confirm"
+                  aria-busy={savingStatus || undefined}
                   disabled={savingStatus || !workingDate}
                   className="s-btn s-btn-ghost"
                   onClick={() =>
@@ -454,6 +434,7 @@ export function LeadDrawer({
                 <button
                   type="button"
                   data-testid="drawer-lost-confirm"
+                  aria-busy={savingStatus || undefined}
                   disabled={savingStatus || !chosenLostReason}
                   className="s-btn s-btn-danger-quiet"
                   onClick={() => onStatus("lost", chosenLostReason)}
@@ -478,6 +459,7 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-note-save"
+                  aria-busy={savingNote || undefined}
                 disabled={savingNote || !note.trim()}
                 className="s-btn s-btn-ghost"
                 // Clears only once the write lands. Clearing on click looks
@@ -508,6 +490,7 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-next-touch-save"
+                  aria-busy={savingNextTouch || undefined}
                 disabled={savingNextTouch || !date}
                 className="s-btn s-btn-ghost"
                 onClick={() => onNextTouch(israelNineAM(date))}
@@ -548,6 +531,7 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-assign-save"
+                  aria-busy={savingAssignee || undefined}
                 // Nothing changed, nothing to save — otherwise an idle tap
                 // writes the value back to itself and reports success.
                 disabled={
@@ -568,6 +552,28 @@ export function LeadDrawer({
             </div> : null}
           </section>
         )}
+
+        {/* details — reference, so below what a rep does mid-call (UX gate FLOW-002) */}
+        <section className="s-panel mt-4">
+          <h3 className="s-eyebrow">{UI.detailsTitle}</h3>
+          <dl className="mt-1">
+            <Field label={UI.contactName} value={lead.contact_name ?? "—"} />
+            <Field label={UI.colPhone} value={fmtPhone(lead.phone_e164)} isolate />
+            <Field label={UI.email} value={lead.email ?? "—"} isolate />
+            <Field label={UI.colCampaign} value={lead.campaign_name ?? lead.platform ?? "—"} />
+            <Field label={UI.colAge} value={UI.ageDays(lead.age_days)} />
+            <Field
+              label={UI.colNextTouch}
+              value={lead.next_touch_at ? fmtDate(lead.next_touch_at) : UI.notSet}
+            />
+            {lead.first_touch_at ? (
+              <Field label={UI.timelineTitle} value={fmtDateTime(lead.first_touch_at)} />
+            ) : null}
+            {lead.lost_reason ? (
+              <Field label={UI.lostReasonLabel} value={lead.lost_reason} />
+            ) : null}
+          </dl>
+        </section>
 
         {!eventsLoading ? <LeadJourneyRail events={events} /> : null}
 

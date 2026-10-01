@@ -18,6 +18,7 @@ manifest:
   - src/app/(sales)/_components/LeadJourneyRail.tsx
   - src/app/(sales)/_components/LeadDrawer.tsx
   - src/app/(sales)/_components/EventTimeline.tsx
+  - src/app/(sales)/_components/LeadsTable.tsx
   - src/app/(sales)/_components/TaskCard.tsx
   - src/app/(sales)/_components/TodayCard.tsx
   - src/app/(sales)/sales/today/page.tsx

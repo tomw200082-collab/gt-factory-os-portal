@@ -273,7 +273,8 @@ export function LeadsTable({
                     className="flex items-center gap-1.5 text-start font-semibold"
                     style={{ color: "hsl(var(--s-fg))" }}
                   >
-                    {row.org_name}
+                    {/* Two lines at most: one long name made a 9-line row (UX gate). */}
+                    <span className="line-clamp-2 [overflow-wrap:anywhere]" title={row.org_name}>{row.org_name}</span>
                     <Badges row={row} />
                   </button>
                 </th>
@@ -289,7 +290,9 @@ export function LeadsTable({
                   </td>
                 ) : null}
                 <td className="px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
-                  {row.campaign_name ?? row.platform ?? "—"}
+                  <span className="line-clamp-2 [overflow-wrap:anywhere]" title={row.campaign_name ?? undefined}>
+                    {row.campaign_name ?? row.platform ?? "—"}
+                  </span>
                 </td>
                 {/* Ownership was delivered in every payload and rendered on no
                     list at all, so "who has what" was answerable only by

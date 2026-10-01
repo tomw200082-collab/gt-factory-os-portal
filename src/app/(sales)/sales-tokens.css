@@ -641,14 +641,12 @@
    other, so a list reads as a sequence rather than a flash. */
 [data-app="sales"] .s-enter {
   /* backwards, not both: after arriving the card must let :hover move it. */
-  animation: s-fade-up 620ms var(--s-settle) backwards;
+  animation: s-fade-up 480ms var(--s-settle) backwards;
 }
 [data-app="sales"] .s-enter:nth-child(2) { animation-delay: 50ms; }
 [data-app="sales"] .s-enter:nth-child(3) { animation-delay: 100ms; }
 [data-app="sales"] .s-enter:nth-child(4) { animation-delay: 150ms; }
-[data-app="sales"] .s-enter:nth-child(5) { animation-delay: 200ms; }
-[data-app="sales"] .s-enter:nth-child(6) { animation-delay: 250ms; }
-[data-app="sales"] .s-enter:nth-child(n + 7) { animation-delay: 300ms; }
+[data-app="sales"] .s-enter:nth-child(n + 5) { animation-delay: 200ms; }
 
 @keyframes s-fade-up {
   from {
@@ -702,8 +700,12 @@
   [data-app="sales"] .s-enter {
     animation: none;
   }
-  [data-app="sales"] .s-btn {
+  [data-app="sales"] .s-btn,
+  [data-app="sales"] .s-tab {
     transition: none;
+  }
+  [data-app="sales"] .s-btn[aria-busy="true"]::after {
+    animation: none;
   }
   /* The loading skeleton uses Tailwind's animate-pulse. This portal has no
      global reduced-motion rule — it disables motion class by class — so
@@ -1147,6 +1149,9 @@
   background: hsl(0 0% 100% / 0.08);
   box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.14);
 }
+[data-app="sales"] .s-glass-btn:hover {
+  background: hsl(0 0% 100% / 0.16);
+}
 [data-app="sales"] .s-glass-btn:focus-visible {
   outline: 2px solid hsl(var(--s-action));
   outline-offset: 2px;
@@ -1186,4 +1191,27 @@
 }
 [data-app="sales"] .s-timeline-item:first-child .s-timeline-dot {
   background: hsl(var(--s-accent));
+}
+[data-app="sales"] .s-timeline-item:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+
+/* A save in flight reads as working, not as unavailable: a turning ring and
+   less fade than a plain disabled button (UX gate INTER-001). */
+[data-app="sales"] .s-btn[aria-busy="true"]:disabled {
+  opacity: 0.8;
+}
+[data-app="sales"] .s-btn[aria-busy="true"]::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  animation: s-spin 700ms linear infinite;
+}
+@keyframes s-spin {
+  to { transform: rotate(360deg); }
 }

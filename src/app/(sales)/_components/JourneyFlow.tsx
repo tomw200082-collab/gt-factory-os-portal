@@ -62,7 +62,14 @@ function Count({ value }: { value: number | null }) {
       el.textContent = String(value);
     };
   }, [value]);
-  return <span ref={ref} className="s-flow-count s-nums" />;
+  // The rolling digits are for the eye; assistive technology reads the final
+  // value only, never an intermediate frame (UX gate COPY-001).
+  return (
+    <>
+      <span ref={ref} className="s-flow-count s-nums" aria-hidden="true" />
+      <span className="sr-only">{value ?? ""}</span>
+    </>
+  );
 }
 
 function Stage({ kind, name, count, index }: { kind: RailKind; name: string; count: number | null; index: number }) {
