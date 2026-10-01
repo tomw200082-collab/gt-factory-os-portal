@@ -440,6 +440,16 @@ describe("source-backed task card", () => {
     fireEvent.click(within(screen.getByTestId("task-card")).getByRole("link", { name: UI.call }));
     expect(armed).toHaveBeenCalledWith("L1", "call", "T1");
   });
+  it("lets the owning rep resolve a contact gap (D8)", () => {
+    render(<TaskCard task={{ ...task, kind: "contact_resolution", title: "בירור פרטי קשר" }}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(screen.getByText(UI.taskContactSave)).toBeTruthy();
+  });
+  it("keeps an unassigned contact gap with the manager (D8)", () => {
+    render(<TaskCard task={{ ...task, kind: "contact_resolution", owner_email: null, needs_assignment: true }}
+      manager={false} onArm={vi.fn()} onComplete={vi.fn()} onResolveContact={vi.fn()} />);
+    expect(screen.queryByText(UI.taskContactSave)).toBeNull();
+  });
   it("links to its lead and requires a note before completion", async () => {
     const completed = vi.fn(async () => undefined);
     render(<TaskCard task={task} manager={false} onArm={noop} onComplete={completed} onResolveContact={vi.fn()} />);

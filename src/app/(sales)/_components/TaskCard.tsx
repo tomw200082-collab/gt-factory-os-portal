@@ -73,7 +73,8 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
         </p>
       ) : null}
 
-      {contactGap && manager && task.lead_id ? (
+      {/* The owner resolves its own contact gap; unowned ones stay with a manager (D8). */}
+      {contactGap && task.lead_id && (manager || !task.needs_assignment) ? (
         <form className="mt-2 grid gap-2" onSubmit={(event) => {
           event.preventDefault();
           if ((!phone.trim() && !email.trim()) || !provenance.trim()) return;

@@ -98,6 +98,12 @@ describe("sales shell", () => {
     expect(screen.getAllByText(NAV_LABELS.settings).length).toBeGreaterThan(0);
   });
 
+  it("does not send a sales rep to a factory they cannot use (D11)", () => {
+    currentRole.value = "sales_rep";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.queryByTestId("sales-switch-factory")).toBeNull();
+  });
+
   it("does not offer team settings to a sales rep", () => {
     currentRole.value = "sales_rep";
     render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));

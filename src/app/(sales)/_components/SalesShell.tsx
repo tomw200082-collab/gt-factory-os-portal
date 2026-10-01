@@ -125,8 +125,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
           {/* The phone is the primary device, and it had no way back to the
               factory at all — the bottom bar holds the three sales
               destinations, so leaving meant typing a URL. Icon-only here,
-              labelled from sm up, one control either way. */}
-          <Link
+              labelled from sm up, one control either way. A sales rep has no
+              factory surface, so the link would be a dead end (D11). */}
+          {session?.role !== "sales_rep" ? <Link
             href="/home"
             aria-label={UI.switchToFactory}
             title={UI.switchToFactory}
@@ -136,7 +137,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
           >
             <ArrowLeftRight size={15} aria-hidden />
             <span className="hidden sm:inline">{UI.switchToFactory}</span>
-          </Link>
+          </Link> : null}
         </div>
       </header>
 
