@@ -20,6 +20,12 @@ on:
     branches: [main]
     types: [labeled, synchronize, reopened]
 
+# Per-PR door: only the newest commit's verdict can gate a merge, so a new
+# push cancels the superseded run rather than paying for both.
+concurrency:
+  group: portal-ux-gate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ux-gate:
     # Runs ONLY when the PR carries the 'ux-gate' label → off the hot path.

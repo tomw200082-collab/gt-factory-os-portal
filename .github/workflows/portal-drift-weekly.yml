@@ -10,6 +10,13 @@ on:
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
+# Weekly cron plus manual dispatch. Grouped so a hand-triggered run cannot
+# overlap the scheduled one, but NOT cancel-in-progress: this job opens
+# issues and writes snapshots, and killing it mid-write leaves partial state.
+concurrency:
+  group: portal-drift-weekly
+  cancel-in-progress: false
+
 jobs:
   drift:
     runs-on: ubuntu-latest
