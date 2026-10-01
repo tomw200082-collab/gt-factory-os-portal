@@ -10,6 +10,9 @@ const touched = { ...base, status: "working", first_touch_at: "2026-09-30T09:00:
 const planned = { ...touched, next_touch_at: "2026-10-02T06:00:00Z" };
 const won = { ...planned, status: "won", converted_order_ref: "#1001" };
 const lost = { ...planned, status: "lost" };
+/** What assistive technology reads for a stage: the settled count, then the name. */
+const spoken = (stage: HTMLElement) =>
+  `${stage.querySelector(".sr-only")?.textContent ?? ""}${stage.querySelector(".s-flow-label")?.textContent ?? ""}`;
 
 describe("Today journey flow (D1 hero)", () => {
   it("counts each open lead once at its furthest node and every verified order", () => {
@@ -28,7 +31,7 @@ describe("Today journey flow (D1 hero)", () => {
     render(<JourneyFlow rows={[base, touched, planned, planned, won]} />);
     const flow = screen.getByRole("list", { name: UI.railTitle });
     const stages = within(flow).getAllByRole("listitem");
-    expect(stages.map((stage) => stage.textContent)).toEqual([
+    expect(stages.map(spoken)).toEqual([
       `1${UI.railCreated}`, `1${UI.railOutreach}`, `2${UI.railNextAction}`, `1${UI.railConverted}`,
     ]);
   });
@@ -36,7 +39,7 @@ describe("Today journey flow (D1 hero)", () => {
   it("holds its shape without numbers until the rows arrive", () => {
     render(<JourneyFlow rows={undefined} />);
     expect(screen.getByTestId("journey-flow").getAttribute("data-ready")).toBe("false");
-    expect(screen.getByTestId("flow-created").textContent).toBe(UI.railCreated);
+    expect(spoken(screen.getByTestId("flow-created"))).toBe(UI.railCreated);
   });
 
   it("marks a stage that grew on a real change, never on first load", () => {
@@ -45,6 +48,6 @@ describe("Today journey flow (D1 hero)", () => {
     rerender(<JourneyFlow rows={[base, touched, touched]} />);
     expect(screen.getByTestId("flow-outreach").hasAttribute("data-bump")).toBe(true);
     expect(screen.getByTestId("flow-created").hasAttribute("data-bump")).toBe(false);
-    expect(screen.getByTestId("flow-outreach").textContent).toBe(`2${UI.railOutreach}`);
+    expect(spoken(screen.getByTestId("flow-outreach"))).toBe(`2${UI.railOutreach}`);
   });
 });

@@ -83,6 +83,25 @@ test("the Unit A corridor fits 320, 390 and 430px without horizontal page scroll
   }
 });
 
+test("the lead card never scrolls sideways, even with long email and campaign values @mocked", async ({ page }) => {
+  await stub(page);
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [{
+    ...lead, id: "V1", source: "import", lost_reason: null, assignee: null,
+    possible_duplicate_of: null, shopify_customer_id: null, shopify_snapshot_at: null,
+    email: "alexandra.bendavid.rosenblum.purchasing@verylongrestaurantgroupdomain-example.invalid",
+    campaign_name: "Summer_2026_HoReCa_Leads_Form_Variant_B_TelAviv_Center_Retargeting_Lookalike_3pct",
+  }] } }));
+  await page.route("**/api/sales/leads/*/events**", (r) => r.fulfill({ json: { rows: [] } }));
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 740 });
+    await page.goto("/sales/leads?lead=V1");
+    const drawer = page.getByTestId("lead-drawer");
+    await expect(drawer).toBeVisible();
+    const overflow = await drawer.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow, `lead card at ${width}px`).toBeLessThanOrEqual(0);
+  }
+});
+
 test("a saved-event rail names and opens its source without promoting a draft @mocked", async ({ page }) => {
   await stub(page);
   await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [{

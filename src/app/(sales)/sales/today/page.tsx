@@ -23,6 +23,7 @@ import { clearActivityDraft } from "../../_lib/activityDraft";
 import { useQueueScope } from "../../_lib/useQueueScope";
 import { useSession } from "@/lib/auth/session-provider";
 import { UI } from "../../_lib/labels";
+import { fmtDayLong } from "../../_lib/format";
 import type { TodayRow, UndoTarget } from "../../_lib/types";
 import { QueueDone, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { StatsStrip } from "../../_components/StatsStrip";
@@ -63,13 +64,12 @@ export default function TodayPage() {
   // The flow in the band follows the same scope as the queue under it.
   const flowRows = useMemo(() => {
     if (!leads.data) return undefined;
-    if (isRep || scope === "mine") return leads.data.filter((lead) => lead.assignee === session?.email);
-    if (scope === "unassigned") return leads.data.filter((lead) => !lead.assignee);
+    if (taskScope === "mine") return leads.data.filter((lead) => lead.assignee === session?.email);
+    if (taskScope === "unassigned") return leads.data.filter((lead) => !lead.assignee);
     return leads.data;
-  }, [leads.data, isRep, scope, session?.email]);
-  const todayLabel = useMemo(() => new Intl.DateTimeFormat("he-IL", {
-    weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem",
-  }).format(new Date()), []);
+  }, [leads.data, taskScope, session?.email]);
+  // Every render, not memoised: an app left open overnight must not show yesterday.
+  const todayLabel = fmtDayLong();
   const allTaskRows = useMemo(() => tasks.data ?? [], [tasks.data]);
   const [taskClock, setTaskClock] = useState(() => Date.now());
   useEffect(() => {
@@ -239,7 +239,7 @@ export default function TodayPage() {
                 what is on me". It persists, because the answer should survive
                 closing the app. The group is named for what it controls — it
                 used to be labelled with the page's own title. */}
-            <div className="flex gap-1" role="group" aria-label={UI.queueScopeGroupLabel}>
+            <div className="s-segmented flex gap-1" role="group" aria-label={UI.queueScopeGroupLabel}>
               {(isRep ? (["mine"] as const) : (["all", "mine", "unassigned"] as const)).map((option) => (
                 <button
                   key={option}
