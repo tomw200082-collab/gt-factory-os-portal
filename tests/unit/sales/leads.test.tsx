@@ -135,6 +135,17 @@ describe("lead drawer", () => {
       expect(input.value).toBe("2026-10-02");
     } finally { vi.useRealTimers(); }
   });
+  it("says why the note cannot be saved yet, and stops saying it once there is a note", () => {
+    render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+      templates={null} onClose={noop} onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    const save = screen.getByTestId("drawer-note-save");
+    expect(save.getAttribute("aria-describedby")).toBe("drawer-note-hint");
+    expect(screen.getByText(UI.noteNeeded)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(UI.addNote), { target: { value: "דיברנו" } });
+    expect(screen.queryByText(UI.noteNeeded)).toBeNull();
+    expect(save.hasAttribute("aria-describedby")).toBe(false);
+  });
+
   it("confirms a note only after the write lands, then lets the message go", () => {
     vi.useFakeTimers();
     try {

@@ -1385,3 +1385,9 @@
     margin-inline-start: -6px;
   }
 }
+
+/* Not (yet) a customer: the customer badge's outline, without its fill. */
+[data-app="sales"] .s-badge-prospect {
+  color: hsl(var(--s-fg-muted));
+  border: 1px dashed hsl(var(--s-border-strong));
+}

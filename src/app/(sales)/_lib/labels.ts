@@ -357,9 +357,16 @@ export const UI = {
   railSource: "הצג מקור",
   // Tom 2026-10-01 (tranche 187): the flow is the whole visible pipeline, the
   // triage counts are the team's, and a note save confirms itself.
-  flowScope: "כל הלידים הפתוחים",
+  flowScope: "כל הלידים",
   noteSaved: "נשמר ✓",
   teamCounts: "כל הצוות",
+  // Tom 2026-10-01 ("מאשר הכל", tranche 188).
+  orgNotCustomer: "טרם לקוח",
+  noteNeeded: "כתבו הערה כדי לשמור",
+  customerStatusActive: "פעיל",
+  customerStatusDisabled: "לא פעיל",
+  navMain: "ניווט ראשי",
+  navBar: "סרגל ניווט",
   nextTouchSaved: "נקבע ✓",
   lostReasonTitle: "למה אבוד?",
   lostReasonOther: "פרט…",

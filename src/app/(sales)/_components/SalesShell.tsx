@@ -139,7 +139,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
       <div className="mx-auto flex max-w-5xl gap-6 px-4 pt-4">
         {/* Desktop rail. Hidden on phones, where the tab bar takes over. */}
         <nav
-          aria-label={UI.appName}
+          aria-label={UI.navMain}
           className="hidden w-44 shrink-0 flex-col gap-1 md:flex"
         >
           {DESTINATIONS.map((d) => {
@@ -235,7 +235,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
 
       {/* Phone tab bar. Three destinations, thumb-height, safe-area aware. */}
       <nav
-        aria-label={UI.appName}
+        aria-label={UI.navBar}
         className="s-tabbar fixed inset-x-0 bottom-0 z-30 md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
