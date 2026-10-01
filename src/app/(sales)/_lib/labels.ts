@@ -346,6 +346,8 @@ export const UI = {
   activityWaitReview: "ממתין ללקוח — בדיקה",
   activityOther: "פעולה אחרת",
   activityChooseAction: "בחר פעולה",
+  // Tom approved this exact string 2026-10-01 (UX gate B-FLOW-04).
+  activitySaveNeeds: "כדי לשמור צריך: מה קרה (5 תווים לפחות), מה הפעולה הבאה ומתי לבצע.",
   railTitle: "מסלול הליד",
   railCreated: "פנייה נקלטה",
   railOutreach: "ניסיון קשר תועד",

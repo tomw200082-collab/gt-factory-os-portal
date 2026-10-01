@@ -399,9 +399,15 @@ export function OutcomeSheet({
                 value={draft.due_at} onChange={(e) => updateDraft({ due_at: floorDate(e.target.value) })} />
             </label>
             <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"
-              disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}>
+              disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}
+              aria-describedby={activityReady ? undefined : "activity-save-needs"}>
               {busy ? UI.saving : UI.save}
             </button>
+            {activityReady ? null : (
+              <p id="activity-save-needs" className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                {UI.activitySaveNeeds}
+              </p>
+            )}
           </div>
         ) : null}
 

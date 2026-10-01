@@ -8,6 +8,19 @@ import { toDateInputValue } from "@/app/(sales)/_lib/format";
 afterEach(cleanup);
 
 describe("outcome sheet", () => {
+  it("says what Save still needs while it is disabled, and stops once it is ready", () => {
+    render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    const save = screen.getByTestId("activity-save");
+    const hint = screen.getByText(UI.activitySaveNeeds);
+    expect(save.getAttribute("aria-describedby")).toBe(hint.id);
+    const sheet = screen.getByTestId("outcome-sheet");
+    fireEvent.change(sheet.querySelector("textarea")!, { target: { value: "שיחה טובה" } });
+    fireEvent.change(sheet.querySelector("select")!, { target: { value: "call" } });
+    fireEvent.change(sheet.querySelector('input[type="date"]')!, { target: { value: "2099-01-01" } });
+    expect(screen.queryByText(UI.activitySaveNeeds)).toBeNull();
+    expect(save.hasAttribute("aria-describedby")).toBe(false);
+  });
   it("defaults and floors the other-date step after 09:00 Israel", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-01T11:00:00Z"));

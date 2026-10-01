@@ -122,6 +122,14 @@ The prior contextual assent did not cover these later strings. Tom approved all 
 | `task.reason.contact_resolution` | חסרים פרטי קשר מאומתים |
 | `task.reason.fallback` | פעולה שנקבעה לליד |
 
+## Exact copy approved 2026-10-01 (UX gate B-FLOW-04)
+
+Tom answered "אני מאשר" on 2026-10-01 to this exact string, quoted to him in the session's final report.
+
+| Source/key | Exact text |
+|---|---|
+| `UI.activitySaveNeeds` | כדי לשמור צריך: מה קרה (5 תווים לפחות), מה הפעולה הבאה ומתי לבצע. |
+
 ## Gates and rollback
 
 Tasks 2, 7–9 use RED→GREEN tests and separate commits. Before release: typecheck, build, lint, unit and sales browser tests, role matrix, fresh five-lens sales UX gate, simplification and whole-branch review. Backend schema/API deploy first; portal second; `activity_required` only after exact runtime proof. A portal rollback restores the previous deployment and disables the internal gate without deleting task history. Production backlog insertion needs a separate count-specific written go/no-go.
