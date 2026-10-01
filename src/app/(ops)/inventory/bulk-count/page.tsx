@@ -48,7 +48,7 @@ import {
   useGroups,
   type GroupLike,
 } from "@/lib/taxonomy/groups";
-import { friendlyCountError } from "@/lib/copy/physical-count-errors";
+import { friendlyCountError, pendingApprovalHref } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
 import {
   EMPTY_FILTERS,
@@ -245,7 +245,7 @@ function CountRow({
   row: BulkCountRow;
   counted: CountedEntry | undefined;
   phase: RowPhase;
-  error: string | undefined;
+  error: React.ReactNode;
   /** True when the session role may open the planner approval surface. */
   canReview: boolean;
   /** This component carries an open manual count mark. Shown on every view,
@@ -782,7 +782,7 @@ export default function BulkCountPage() {
 
   // --- per-row submission --------------------------------------------------------------
   const [rowPhase, setRowPhase] = useState<Record<string, RowPhase>>({});
-  const [rowError, setRowError] = useState<Record<string, string | undefined>>({});
+  const [rowError, setRowError] = useState<Record<string, React.ReactNode>>({});
   const inputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const registerInput = useCallback((rowKey: string, el: HTMLInputElement | null) => {
     inputRefs.current.set(rowKey, el);
@@ -866,9 +866,22 @@ export default function BulkCountPage() {
           | PhysicalCountOpenResponse
           | null;
         if (!openRes.ok || !openBody?.snapshot_id) {
+          // A count held for approval never opens on retry — link the row
+          // straight to the approval that is blocking this item.
+          const approvalHref = pendingApprovalHref(openBody);
+          const message = `Could not start the count. ${friendlyCountError(openBody, openRes.status)}`;
           setRowError((e) => ({
             ...e,
-            [row.key]: `Could not start the count. ${friendlyCountError(openBody, openRes.status)}`,
+            [row.key]: approvalHref ? (
+              <>
+                {message}{" "}
+                <Link href={approvalHref} className="underline">
+                  Open the approval
+                </Link>
+              </>
+            ) : (
+              message
+            ),
           }));
           return;
         }

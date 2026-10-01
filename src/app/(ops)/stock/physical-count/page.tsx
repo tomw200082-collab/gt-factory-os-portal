@@ -25,7 +25,7 @@ import { fetchJson } from "@/lib/http/fetchJson";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
-import { friendlyCountError } from "@/lib/copy/physical-count-errors";
+import { friendlyCountError, pendingApprovalHref } from "@/lib/copy/physical-count-errors";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { cn } from "@/lib/cn";
 
@@ -558,10 +558,16 @@ export default function PhysicalCountPage() {
         setUnit(toUom(snap.unit_default));
         setPhase("counting");
       } else {
+        // A count held for approval cannot be retried into existence — send the
+        // operator to the approval that is blocking the item instead.
+        const approvalHref = pendingApprovalHref(body);
         setDone({
           kind: "error",
           message: "Could not start the count.",
           detail: friendlyCountError(body, res.status),
+          ...(approvalHref
+            ? { href: approvalHref, hrefLabel: "Open the approval" }
+            : {}),
         });
         setPhase("pick");
       }

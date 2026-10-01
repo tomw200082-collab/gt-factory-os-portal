@@ -20,6 +20,8 @@ const REASON_COPY: Record<string, string> = {
     "Item type mismatch. Refresh the page and try again.",
   COUNT_ALREADY_OPEN:
     "A count for this item is already open. Try saving again — the open count will be reused.",
+  COUNT_PENDING_APPROVAL:
+    "The last count for this item is still awaiting planner approval — approve or reject it in the approvals inbox, then count again. If you are not a planner, ask one to review it.",
   COUNT_FREEZE_ACTIVE:
     "A previous count for this item is still awaiting planner approval — it must be approved or rejected in the approvals inbox before a new count can start. If you are not a planner, ask one to review it.",
   SNAPSHOT_NOT_FOUND:
@@ -56,6 +58,21 @@ export function friendlyCountError(
     return "You do not have permission for this action.";
   }
   return `The count could not be submitted${reason ? ` (code: ${reason})` : ""}. Try again, or contact an admin if it keeps failing.`;
+}
+
+/**
+ * Deep link to the approval that is blocking a COUNT_PENDING_APPROVAL error,
+ * so the operator (or the planner reading over their shoulder) can resolve it
+ * instead of retrying a count that can never open. Null for every other error.
+ */
+export function pendingApprovalHref(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as { reason_code?: unknown; pending_submission_id?: unknown };
+  if (b.reason_code !== "COUNT_PENDING_APPROVAL") return null;
+  if (typeof b.pending_submission_id !== "string" || !b.pending_submission_id) {
+    return null;
+  }
+  return `/inbox/approvals/physical-count/${encodeURIComponent(b.pending_submission_id)}`;
 }
 
 /**
