@@ -35,6 +35,20 @@ export function israelNineAM(date: string): string {
   return new Date(instant).toISOString();
 }
 
+/** The first date whose 09:00 Israel is still ahead: today before 09:00, else
+ *  tomorrow. A next touch saves at 09:00, so an earlier date is overdue work
+ *  the moment it is written (UX gate and portal review, 2026-10-01). */
+export function israelFirstSchedulableDate(now: Date = new Date()): string {
+  const today = israelDate(now);
+  return Date.parse(israelNineAM(today)) > now.getTime() ? today : addIsraelDays(today, 1);
+}
+
+/** Lift a date below the first schedulable one up to it; "" stays "". */
+export function atLeastSchedulable(date: string): string {
+  const floor = israelFirstSchedulableDate();
+  return date && date < floor ? floor : date;
+}
+
 export function israelNineAMAfter(days: number, from: Date = new Date()): string {
   return israelNineAM(addIsraelDays(israelDate(from), days));
 }

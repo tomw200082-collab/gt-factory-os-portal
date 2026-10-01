@@ -1,12 +1,40 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OutcomeSheet } from "@/app/(sales)/_components/OutcomeSheet";
+import { israelFirstSchedulableDate } from "@/app/(sales)/_lib/israelTime";
 import { OUTCOME_LABELS, OUTCOME_TITLES, STATUS_LABELS, UI } from "@/app/(sales)/_lib/labels";
 import { toDateInputValue } from "@/app/(sales)/_lib/format";
 
 afterEach(cleanup);
 
 describe("outcome sheet", () => {
+  it("defaults and floors the other-date step after 09:00 Israel", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T11:00:00Z"));
+    try {
+      render(<OutcomeSheet leadName="דנה" mode="next-touch" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+      const date = screen.getByTestId("outcome-sheet").querySelector('input[type="date"]') as HTMLInputElement;
+      expect(date.min).toBe("2026-10-02");
+      expect(date.value).toBe("2026-10-02");
+    } finally { vi.useRealTimers(); }
+  });
+  it("lifts a restored past date to the floor, so Save never dies silently", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T11:00:00Z")); // 14:00 in Israel
+    try {
+      sessionStorage.setItem("gt.sales.activity:rep%40synthetic.invalid:L1", JSON.stringify({
+        request_id: "r1", note: "שיחה טובה", kind: "call", due_at: "2026-09-30",
+        result: "answered_progressing", channel: "call" }));
+      render(<OutcomeSheet leadName="דנה" draftIdentity={{ email: "rep@synthetic.invalid", leadId: "L1" }}
+        onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+      fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+      const date = screen.getByTestId("outcome-sheet").querySelector('input[type="date"]') as HTMLInputElement;
+      expect(date.value).toBe("2026-10-02");
+      // A typed date below min is exercised in real Chromium (connected proof):
+      // jsdom sanitises it to "" before React sees it.
+      expect((screen.getByTestId("activity-save") as HTMLButtonElement).disabled).toBe(false);
+    } finally { vi.useRealTimers(); sessionStorage.clear(); }
+  });
   it("does not offer today once 09:00 Israel has passed (the saved time would be in the past)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-01T11:00:00Z")); // 14:00 in Israel
@@ -315,11 +343,8 @@ describe("outcome sheet", () => {
   it("will not let the next touch be scheduled in the past", () => {
     render(<OutcomeSheet mode="next-touch" leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
     const input = screen.getByLabelText(UI.pickDate) as HTMLInputElement;
-    const today = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    expect(input.getAttribute("min")).toBe(
-      `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`,
-    );
+    // The floor is the first date whose 09:00 Israel is still ahead (2026-10-01).
+    expect(input.getAttribute("min")).toBe(israelFirstSchedulableDate());
   });
 
   it("presents the lost reasons as one choice, not five toggles", () => {

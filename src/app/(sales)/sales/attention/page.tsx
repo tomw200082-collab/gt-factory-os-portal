@@ -202,6 +202,8 @@ export default function AttentionPage() {
 
       {answerSheetOpen && capture.pending ? (
         <OutcomeSheet
+          // One sheet per lead: a re-arm on another lead never inherits this draft.
+          key={capture.pending.leadId}
           leadName={
             pendingLead
               ? (pendingLead.contact_name ?? pendingLead.org_name)

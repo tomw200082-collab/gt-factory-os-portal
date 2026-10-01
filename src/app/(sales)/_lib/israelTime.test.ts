@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addIsraelDays, israelDate, israelNineAM, israelNineAMAfter } from "./israelTime";
+import { addIsraelDays, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter } from "./israelTime";
 
 describe("Israel next touches", () => {
+  it("schedules today only while 09:00 Israel is still ahead", () => {
+    expect(israelFirstSchedulableDate(new Date("2026-10-01T05:59:00Z"))).toBe("2026-10-01"); // 08:59
+    expect(israelFirstSchedulableDate(new Date("2026-10-01T06:00:00Z"))).toBe("2026-10-02"); // 09:00
+  });
+
   it("keeps 09:00 in Israel through both daylight saving offsets", () => {
     expect(israelNineAM("2026-01-15")).toBe("2026-01-15T07:00:00.000Z");
     expect(israelNineAM("2026-09-30")).toBe("2026-09-30T06:00:00.000Z");

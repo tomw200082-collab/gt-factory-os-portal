@@ -450,6 +450,12 @@
   resize: vertical;
 }
 
+/* A required field left empty or out of range shows it once touched, so a
+   disabled Save always has a visible cause (UX gate 2026-10-01). */
+[data-app="sales"] .s-input:user-invalid {
+  border-color: hsl(var(--s-sla-overdue));
+}
+
 [data-app="sales"] .s-input::placeholder {
   color: hsl(var(--s-fg-faint));
 }

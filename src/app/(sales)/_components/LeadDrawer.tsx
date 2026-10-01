@@ -18,7 +18,7 @@ import { LeadJourneyRail } from "./LeadJourneyRail";
 import { SlaBadge } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 import { useReturnFocus } from "../_lib/useReturnFocus";
-import { israelDate, israelNineAM } from "../_lib/israelTime";
+import { atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM } from "../_lib/israelTime";
 
 export interface LeadDrawerProps {
   lead: SalesLeadRow;
@@ -105,19 +105,21 @@ export function LeadDrawer({
   useReturnFocus();
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState<string | null>(lead.assignee);
-  const [assignDate, setAssignDate] = useState(
-    lead.next_touch_at ? israelDate(new Date(lead.next_touch_at)) : israelDate(),
+  // Every date here saves at 09:00 Israel, so none may start or land before
+  // the first date whose 09:00 is still ahead (review 2026-10-01).
+  const scheduleFloor = israelFirstSchedulableDate();
+  const startDate = atLeastSchedulable(
+    lead.next_touch_at ? israelDate(new Date(lead.next_touch_at)) : scheduleFloor,
   );
-  const [date, setDate] = useState(
-    lead.next_touch_at ? israelDate(new Date(lead.next_touch_at)) : israelDate(),
-  );
+  const [assignDate, setAssignDate] = useState(startDate);
+  const [date, setDate] = useState(startDate);
   const [losing, setLosing] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [otherReason, setOtherReason] = useState("");
   // 0324 refuses to move a lead to working without a next touch, so the button
   // collects one instead of failing after the tap.
   const [working, setWorking] = useState(false);
-  const [workingDate, setWorkingDate] = useState(israelDate());
+  const [workingDate, setWorkingDate] = useState(scheduleFloor);
 
   const reasons = lostReasons?.length ? lostReasons : LOST_REASONS;
   // Positional, not a literal: the list is Tom's to rename (0326), and keying
@@ -370,8 +372,9 @@ export function LeadDrawer({
                   id="drawer-working-date"
                   type="date"
                   className="s-input"
+                  min={scheduleFloor}
                   value={workingDate}
-                  onChange={(e) => setWorkingDate(e.target.value)}
+                  onChange={(e) => setWorkingDate(atLeastSchedulable(e.target.value))}
                 />
                 <button
                   type="button"
@@ -487,9 +490,9 @@ export function LeadDrawer({
                 // Same floor the outcome sheet enforces: a next touch in the
                 // past lands the lead straight back in the queue as overdue
                 // work that was already done.
-                min={israelDate()}
+                min={scheduleFloor}
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => setDate(atLeastSchedulable(e.target.value))}
               />
               <button
                 type="button"
@@ -525,8 +528,9 @@ export function LeadDrawer({
                     id="drawer-assign-date"
                     type="date"
                     className="s-input"
+                    min={scheduleFloor}
                     value={assignDate}
-                    onChange={(e) => setAssignDate(e.target.value)}
+                    onChange={(e) => setAssignDate(atLeastSchedulable(e.target.value))}
                   />
                 </>
               ) : null}

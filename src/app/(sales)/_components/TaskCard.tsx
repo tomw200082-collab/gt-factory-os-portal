@@ -87,8 +87,8 @@ export function TaskCard({ task, lead, manager, onArm, onComplete, onResolveCont
           }));
         }}>
           <strong className="text-sm">{UI.taskContactGap}</strong>
-          <label className="text-sm">{UI.phone}<input className="s-input mt-1 w-full" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
-          <label className="text-sm">{UI.email}<input className="s-input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="text-sm">{UI.phone}<input className="s-input mt-1 w-full" type="tel" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
+          <label className="text-sm">{UI.email}<input className="s-input mt-1 w-full" type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           <label className="text-sm">{UI.taskContactSource}<input className="s-input mt-1 w-full" value={provenance} onChange={(e) => setProvenance(e.target.value)} /></label>
           <button className="s-btn s-btn-primary" disabled={busy || (!phone.trim() && !email.trim()) || !provenance.trim()}>{UI.taskContactSave}</button>
         </form>

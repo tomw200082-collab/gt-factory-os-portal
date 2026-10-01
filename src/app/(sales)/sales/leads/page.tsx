@@ -428,6 +428,8 @@ function LeadsScreen() {
 
       {answerSheetOpen && capture.pending ? (
         <OutcomeSheet
+          // One sheet per lead: a re-arm on another lead never inherits this draft.
+          key={capture.pending.leadId}
           leadName={
             pendingRow
               ? (pendingRow.contact_name ?? pendingRow.org_name)

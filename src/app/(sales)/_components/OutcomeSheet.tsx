@@ -15,7 +15,7 @@ import { fmtDate } from "../_lib/format";
 import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 import { markActivityAttempt, readActivityDraft, saveActivityDraft, type ActivityDraft } from "../_lib/activityDraft";
-import { addIsraelDays, israelDate, israelNineAM, israelNineAMAfter } from "../_lib/israelTime";
+import { addIsraelDays, atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter } from "../_lib/israelTime";
 
 /**
  * `won` is not an OutcomeResult and cannot be: sales_core.record_outcome
@@ -110,7 +110,7 @@ export function OutcomeSheet({
   const [dateFor, setDateFor] = useState<"no_answer" | "whatsapp_sent" | "email_sent" | null>(null);
   const [reason, setReason] = useState<string>("");
   const [otherReason, setOtherReason] = useState<string>("");
-  const [customDate, setCustomDate] = useState<string>(israelDate());
+  const [customDate, setCustomDate] = useState<string>(israelFirstSchedulableDate);
   const [documentNumber, setDocumentNumber] = useState<string>("");
   const [draft, setDraft] = useState<ActivityDraft>(() =>
     readActivityDraft(draftIdentity?.email ?? "", draftIdentity?.leadId ?? ""));
@@ -162,9 +162,11 @@ export function OutcomeSheet({
   const activityDueAt = /^\d{4}-\d{2}-\d{2}$/.test(draft.due_at)
     ? new Date(israelNineAM(draft.due_at)).getTime() : 0;
   const activityReady = draft.note.trim().length >= 5 && Boolean(draft.kind) && activityDueAt > Date.now();
-  // A date saves as 09:00 Israel; once that has passed today, today cannot be saved (UX gate 2026-10-01).
-  const activityDateFloor = new Date(israelNineAM(israelDate())).getTime() > Date.now()
-    ? israelDate() : addIsraelDays(israelDate(), 1);
+  // A date saves as 09:00 Israel; once that has passed today, today cannot be
+  // saved. Typed or restored dates below the floor are lifted to it. An
+  // attempted draft keeps its date: changing it would rotate the request ID.
+  const activityDateFloor = israelFirstSchedulableDate();
+  const floorDate = atLeastSchedulable;
 
   // Focus trap + Escape, mirroring MobileNav's dialog handling.
   //
@@ -272,7 +274,8 @@ export function OutcomeSheet({
               disabled={busy}
               className="s-btn s-btn-primary min-h-[56px] text-base"
               onClick={() => {
-                updateDraft({ result: "answered_progressing", due_at: draft.due_at.includes("T") ? "" : draft.due_at });
+                updateDraft({ result: "answered_progressing",
+                  due_at: draft.due_at.includes("T") ? "" : draft.attempted ? draft.due_at : floorDate(draft.due_at) });
                 setStep("activity");
               }}
             >
@@ -393,7 +396,7 @@ export function OutcomeSheet({
             <label className="flex flex-col gap-1 text-[13px]">
               {UI.activityDateLabel}
               <input type="date" className="s-input" required min={activityDateFloor}
-                value={draft.due_at} onChange={(e) => updateDraft({ due_at: e.target.value })} />
+                value={draft.due_at} onChange={(e) => updateDraft({ due_at: floorDate(e.target.value) })} />
             </label>
             <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"
               disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}>
@@ -463,9 +466,9 @@ export function OutcomeSheet({
                 className="s-input"
                 // A next touch in the past would land the lead straight back in
                 // the queue as overdue work that was already done.
-                min={israelDate()}
+                min={activityDateFloor}
                 value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
+                onChange={(e) => setCustomDate(atLeastSchedulable(e.target.value))}
               />
             </label>
             <button
