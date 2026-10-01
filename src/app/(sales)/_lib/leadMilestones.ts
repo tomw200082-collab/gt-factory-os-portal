@@ -20,7 +20,25 @@ export function railFromRow(row: RailRow): { kind: RailKind; reached: boolean }[
   ];
 }
 
-export type MilestoneKind = "created" | "outreach" | "answered" | "next_action" | "converted";
+export interface FlowRow extends RailRow {
+  status: string;
+}
+
+/** The Today flow (D1 hero): each open lead once, at its furthest node; a
+ *  verified order lands in the last node whatever its status says. Lost and
+ *  closed-without-order leads have left the path and are not counted. */
+export function flowCounts(rows: FlowRow[]): Record<RailKind, number> {
+  const counts: Record<RailKind, number> = { created: 0, outreach: 0, next_action: 0, converted: 0 };
+  for (const row of rows) {
+    if (row.converted_order_ref) counts.converted += 1;
+    else if (row.status === "new" || row.status === "working") {
+      counts[railFromRow(row).filter((node) => node.reached).at(-1)!.kind] += 1;
+    }
+  }
+  return counts;
+}
+
+export type MilestoneKind ="created" | "outreach" | "answered" | "next_action" | "converted";
 export interface LeadMilestone {
   kind: MilestoneKind;
   sourceEventId: string;

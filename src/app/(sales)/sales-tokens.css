@@ -87,8 +87,12 @@
   --s-overlay: 220 15% 10% / 0.35;
 
   /* form */
-  --s-radius: 8px;
-  --s-radius-sm: 6px;
+  /* Shape lock (D1 V8): controls are pills, fields 14px, cards 22px, bands
+     and sheets 28px. Nothing on this corridor is square. */
+  --s-radius: 14px;
+  --s-radius-sm: 10px;
+  --s-radius-card: 22px;
+  --s-radius-band: 28px;
   --s-radius-pill: 999px;
   /* 4% was a shadow in the source and nothing on the screen. Cards read as
      flat panels in daylight, which is where this product is used. */
@@ -97,15 +101,30 @@
      blurred drop is what "flat panel with a smudge" looks like -- the pair is
      what reads as a lit surface, which is the whole of the depth budget on a
      screen where colour is spent on meaning instead. */
+  /* D1: the pair became three, tinted to the petrol hue so depth reads as
+     light on a surface rather than grey smudge (soft structuralism). */
   --s-shadow-card:
-    0 1px 2px hsl(220 15% 16% / 0.06),
-    0 2px 6px -1px hsl(220 15% 16% / 0.06);
-  --s-shadow-sheet: 0 -8px 32px hsl(220 15% 16% / 0.12);
+    0 1px 2px hsl(195 40% 18% / 0.05),
+    0 6px 18px -8px hsl(195 45% 18% / 0.14),
+    0 22px 44px -28px hsl(190 55% 18% / 0.22);
+  --s-shadow-lift:
+    0 2px 4px hsl(195 40% 18% / 0.06),
+    0 14px 30px -12px hsl(195 45% 18% / 0.22),
+    0 34px 60px -34px hsl(190 55% 18% / 0.3);
+  --s-shadow-sheet: 0 -12px 40px hsl(195 45% 14% / 0.18);
   /* The 1px of light along a surface's top edge. Cheap, and it is most of the
      difference between "a rectangle" and "a thing sitting under a light". */
   --s-sheen: inset 0 1px 0 hsl(0 0% 100% / 0.7);
   --s-motion: 170ms;
   --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* D1 motion: a spring that overshoots once for things that arrive, an
+     expo-out for things that settle. Neither is linear or ease-in-out. */
+  --s-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --s-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  /* the journey flow's stage inks (fills and strokes on petrol, never text) */
+  --s-flow-created: 217 88% 66%;
+  --s-flow-outreach: 199 88% 62%;
+  --s-flow-converted: 152 62% 52%;
 
   /* Rubik arrives from next/font in the (sales) layout. */
   --s-font: var(--font-rubik), system-ui, sans-serif;
@@ -156,8 +175,11 @@
   --s-overlay: 0 0% 0% / 0.6;
   --s-shadow-card:
     0 1px 2px hsl(0 0% 0% / 0.35),
-    0 2px 6px -1px hsl(0 0% 0% / 0.3);
-  --s-shadow-sheet: 0 -8px 32px hsl(0 0% 0% / 0.5);
+    0 8px 22px -10px hsl(0 0% 0% / 0.55);
+  --s-shadow-lift:
+    0 2px 4px hsl(0 0% 0% / 0.4),
+    0 18px 36px -14px hsl(0 0% 0% / 0.65);
+  --s-shadow-sheet: 0 -12px 40px hsl(0 0% 0% / 0.55);
   /* In the dark the light comes from above as a lighter hairline, not white. */
   --s-sheen: inset 0 1px 0 hsl(0 0% 100% / 0.06);
 }
@@ -205,14 +227,19 @@
 [data-app="sales"] .s-card {
   background: hsl(var(--s-surface));
   border: 1px solid hsl(var(--s-border));
-  border-radius: var(--s-radius);
+  border-radius: var(--s-radius-card);
   box-shadow: var(--s-shadow-card), var(--s-sheen);
+}
+/* The inline-start accent of a task or a returning customer: an inset edge
+   follows the 22px curve where a side border would square it off. */
+[data-app="sales"] .s-card-accent {
+  box-shadow: inset -3px 0 0 hsl(var(--s-accent)), var(--s-shadow-card), var(--s-sheen);
 }
 
 [data-app="sales"] .s-sheet {
   background: hsl(var(--s-surface));
-  border-start-start-radius: 16px;
-  border-start-end-radius: 16px;
+  border-start-start-radius: var(--s-radius-band);
+  border-start-end-radius: var(--s-radius-band);
   box-shadow: var(--s-shadow-sheet);
   max-height: var(--s-sheet-viewport-height, 100dvh);
   max-width: 100%;
@@ -235,7 +262,7 @@
   margin-top: 20px;
   padding: 16px;
   min-width: 0;
-  border-radius: 16px;
+  border-radius: var(--s-radius-card);
   background: linear-gradient(145deg, hsl(197 54% 13%), hsl(204 55% 19%));
   color: hsl(0 0% 100%);
   box-shadow: 0 10px 24px hsl(204 55% 12% / 0.16);
@@ -379,8 +406,8 @@
   gap: 8px;
   min-height: 44px;
   padding-block: 10px;
-  padding-inline: 16px;
-  border-radius: var(--s-radius);
+  padding-inline: 18px;
+  border-radius: var(--s-radius-pill);
   border: 1px solid transparent;
   font-family: inherit;
   font-size: 15px;
@@ -393,7 +420,7 @@
 }
 
 [data-app="sales"] .s-btn:active {
-  transform: scale(0.985);
+  transform: scale(0.97);
 }
 
 /* A save in flight must look unavailable. Browser defaults for :disabled are
@@ -407,6 +434,21 @@
 [data-app="sales"] .s-btn-primary {
   background: hsl(var(--s-action));
   color: hsl(var(--s-action-fg));
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.35), 0 10px 22px -12px hsl(var(--s-action) / 0.9);
+}
+/* Button-in-button: the leading icon sits in its own round well and leans
+   forward on hover, so the one action on a card reads as a physical key. */
+[data-app="sales"] .s-btn-primary > svg {
+  box-sizing: content-box;
+  flex: none;
+  padding: 6px;
+  margin-inline-start: -10px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-action-fg) / 0.12);
+  transition: transform 420ms var(--s-spring);
+}
+[data-app="sales"] .s-btn-primary:hover > svg {
+  transform: translateX(-3px) scale(1.06);
 }
 [data-app="sales"] .s-btn-primary:hover {
   background: hsl(var(--s-action-hover));
@@ -588,19 +630,67 @@
 
 /* --- motion --------------------------------------------------------------- */
 
+/* D1: cards arrive with weight — a 14px rise on a spring, one after the
+   other, so a list reads as a sequence rather than a flash. */
 [data-app="sales"] .s-enter {
-  animation: s-fade-up var(--s-motion) var(--s-ease) both;
+  animation: s-fade-up 620ms var(--s-settle) both;
 }
+[data-app="sales"] .s-enter:nth-child(2) { animation-delay: 50ms; }
+[data-app="sales"] .s-enter:nth-child(3) { animation-delay: 100ms; }
+[data-app="sales"] .s-enter:nth-child(4) { animation-delay: 150ms; }
+[data-app="sales"] .s-enter:nth-child(5) { animation-delay: 200ms; }
+[data-app="sales"] .s-enter:nth-child(6) { animation-delay: 250ms; }
+[data-app="sales"] .s-enter:nth-child(n + 7) { animation-delay: 300ms; }
 
 @keyframes s-fade-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(14px) scale(0.985);
   }
   to {
     opacity: 1;
     transform: none;
   }
+}
+
+/* A card under a pointer lifts toward it; touch screens skip this. */
+@media (hover: hover) {
+  [data-app="sales"] article.s-card {
+    transition: transform 420ms var(--s-settle), box-shadow 420ms var(--s-settle);
+  }
+  [data-app="sales"] article.s-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--s-shadow-lift), var(--s-sheen);
+  }
+  [data-app="sales"] article.s-card.s-card-accent:hover {
+    box-shadow: inset -3px 0 0 hsl(var(--s-accent)), var(--s-shadow-lift), var(--s-sheen);
+  }
+}
+
+/* A verified order is the one piece of news on Today: light crosses it once. */
+[data-app="sales"] .s-card-won {
+  position: relative;
+  overflow: hidden;
+}
+[data-app="sales"] .s-card-won::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, hsl(var(--s-status-won) / 0.18) 50%, transparent 70%);
+  transform: translateX(110%);
+  animation: s-sweep 1600ms var(--s-settle) 500ms both;
+}
+@keyframes s-sweep {
+  to { transform: translateX(-110%); }
+}
+
+[data-app="sales"] .s-sheet {
+  animation: s-sheet-rise 520ms var(--s-settle) both;
+}
+@keyframes s-sheet-rise {
+  from { transform: translateY(24px); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -617,27 +707,301 @@
   [data-app="sales"] .animate-pulse {
     animation: none;
   }
+  /* D1: every arrival, sweep, flow, ping and drift stops; the final picture
+     stays, so nothing is hidden from someone who asked for stillness. */
+  [data-app="sales"] .s-sheet,
+  [data-app="sales"] .s-card-won::after,
+  [data-app="sales"] .s-opening::before,
+  [data-app="sales"] .s-live-dot::after,
+  [data-app="sales"] .s-flow *,
+  [data-app="sales"] .s-flow *::before,
+  [data-app="sales"] .s-flow *::after,
+  [data-app="sales"] .s-mini-rail *,
+  [data-app="sales"] .s-mini-rail *::before,
+  [data-app="sales"] .s-mini-rail *::after,
+  [data-app="sales"] .s-lead-rail *,
+  [data-app="sales"] .s-lead-rail *::before,
+  [data-app="sales"] .s-lead-rail *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  [data-app="sales"] .s-card-won::after,
+  [data-app="sales"] .s-flow-comet {
+    display: none;
+  }
+  [data-app="sales"] article.s-card:hover,
+  [data-app="sales"] .s-btn-primary:hover > svg {
+    transform: none;
+  }
 }
 
 /* --- GT Pulse D1: opening band ------------------------------------------ */
 /* The screen opens on petrol: where am I and whose work is this, apart from
    the work itself. Inside it the text tokens are remapped, so every child
-   (title, scope switch, triage counts) stays readable without its own rule. */
+   (title, scope switch, triage counts) stays readable without its own rule.
+   Behind the text an aurora of the two action inks drifts slowly: the band
+   is alive before anything is pressed. Its peak tint is asserted against the
+   band's text in sales-tokens-contrast.test. */
 [data-app="sales"] .s-opening {
   --s-fg: var(--s-opening-fg);
   --s-fg-muted: var(--s-opening-fg-muted);
   --s-fg-faint: var(--s-opening-fg-muted);
-  background: hsl(var(--s-petrol));
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 100% 0%, hsl(189 62% 19%) 0%, transparent 60%),
+    hsl(var(--s-petrol));
   color: hsl(var(--s-opening-fg));
-  border-radius: var(--s-radius);
-  padding: 16px;
+  border-radius: var(--s-radius-band);
+  padding: 20px;
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.1), 0 24px 48px -28px hsl(189 65% 12% / 0.7);
+}
+[data-app="sales"] .s-opening::before {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 32% 38%, hsl(var(--s-action) / 0.12), transparent),
+    radial-gradient(closest-side at 72% 68%, hsl(var(--s-flow-created) / 0.08), transparent);
+  animation: s-aurora 22s ease-in-out infinite alternate;
+}
+@keyframes s-aurora {
+  from { transform: translate3d(-8%, -5%, 0) rotate(0deg); }
+  to { transform: translate3d(8%, 6%, 0) rotate(28deg); }
+}
+[data-app="sales"] .s-opening h1 {
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+/* Today's date with a breathing dot: the queue below is live, not a report. */
+[data-app="sales"] .s-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 4px 12px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(0 0% 100% / 0.07);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.1);
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--s-opening-fg-muted));
+}
+[data-app="sales"] .s-live-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--s-action));
+}
+[data-app="sales"] .s-live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: hsl(var(--s-action));
+  animation: s-ping 2400ms var(--s-settle) infinite;
+}
+@keyframes s-ping {
+  from { transform: scale(1); opacity: 0.7; }
+  70%, to { transform: scale(2.8); opacity: 0; }
+}
+/* The scope switch is a glass track with a turquoise thumb. */
+[data-app="sales"] .s-opening [role="group"] {
+  width: fit-content;
+  padding: 4px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(0 0% 100% / 0.07);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.1);
+}
+[data-app="sales"] .s-opening .s-tab {
+  transition: background 360ms var(--s-settle), color 360ms var(--s-settle), transform 360ms var(--s-spring);
 }
 [data-app="sales"] .s-opening .s-tab:hover { background: hsl(0 0% 100% / 0.08); }
 [data-app="sales"] .s-opening .s-tab-active {
   background: hsl(var(--s-action));
   color: hsl(var(--s-action-fg));
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.35), 0 6px 16px -8px hsl(var(--s-action) / 0.9);
 }
+[data-app="sales"] .s-opening .s-tab-active:hover { background: hsl(var(--s-action-hover)); }
 [data-app="sales"] .s-opening .s-tab:focus-visible { outline-color: hsl(var(--s-action)); }
+/* Triage counts as glass chips. */
+/* Two chips a row at every width: in the desktop band's start column four
+   across squeezed each label onto three lines. */
+[data-app="sales"] .s-opening [data-testid="stats-strip"] {
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: 6px;
+}
+[data-app="sales"] .s-opening [data-testid="stats-strip"] > div {
+  white-space: nowrap;
+}
+[data-app="sales"] .s-opening [data-testid="stats-strip"] > div {
+  padding: 5px 12px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(0 0% 100% / 0.06);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.08);
+}
+
+/* --- GT Pulse D1: the journey flow (hero) -------------------------------- */
+/* Four orbs on one river: received, contacted, next action set, verified
+   order. The river draws itself in, then two points of light keep travelling
+   it toward the order, where a slow ring turns: the business circle. A count
+   that grows on a real change pings once. */
+[data-app="sales"] .s-flow {
+  position: relative;
+  min-width: 0;
+  max-width: 560px;
+  margin-top: 4px;
+}
+[data-app="sales"] .s-flow-river {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+[data-app="sales"] .s-flow-river path {
+  fill: none;
+  stroke-linecap: round;
+}
+[data-app="sales"] .s-flow-track {
+  stroke: hsl(0 0% 100% / 0.12);
+  stroke-width: 2;
+}
+[data-app="sales"] .s-flow-lit {
+  stroke-width: 2.5;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: 0;
+  opacity: 0.85;
+  animation: s-draw 1400ms var(--s-settle) 250ms both;
+}
+@keyframes s-draw {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+[data-app="sales"] .s-flow-comet {
+  stroke: hsl(var(--s-opening-fg));
+  stroke-width: 3.5;
+  stroke-dasharray: 3 97;
+  stroke-dashoffset: 3;
+  filter: drop-shadow(0 0 4px hsl(var(--s-action)));
+  animation: s-comet 4200ms cubic-bezier(0.45, 0.05, 0.35, 1) 1500ms infinite both;
+}
+[data-app="sales"] .s-flow-comet-late { animation-delay: 3600ms; }
+@keyframes s-comet {
+  from { stroke-dashoffset: 3; opacity: 0; }
+  10% { opacity: 1; }
+  88% { opacity: 1; }
+  to { stroke-dashoffset: -100; opacity: 0; }
+}
+[data-app="sales"] .s-flow-stages {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+[data-app="sales"] .s-flow-stage {
+  --s-orb: var(--s-flow-created);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  text-align: center;
+}
+[data-app="sales"] .s-flow-outreach { --s-orb: var(--s-flow-outreach); }
+[data-app="sales"] .s-flow-next_action { --s-orb: var(--s-action); }
+[data-app="sales"] .s-flow-converted { --s-orb: var(--s-flow-converted); }
+[data-app="sales"] .s-flow-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 26%, hsl(0 0% 100% / 0.2), transparent 58%),
+    hsl(var(--s-petrol));
+  box-shadow:
+    inset 0 0 0 1.5px hsl(var(--s-orb) / 0.85),
+    0 0 0 5px hsl(var(--s-orb) / 0.12),
+    0 10px 24px -10px hsl(var(--s-orb) / 0.8);
+  animation: s-orb-in 720ms var(--s-spring) calc(200ms + var(--i, 0) * 130ms) both;
+}
+/* scale, not transform: the next-action marker keeps its own rotation. */
+@keyframes s-orb-in {
+  from { scale: 0.5; opacity: 0; }
+  to { scale: 1; opacity: 1; }
+}
+[data-app="sales"] .s-flow-count {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: hsl(var(--s-opening-fg));
+}
+/* Loading: the orb holds its place and breathes; no number is claimed. */
+[data-app="sales"] .s-flow[data-ready="false"] .s-flow-orb {
+  animation: s-orb-wait 1600ms ease-in-out infinite alternate;
+}
+@keyframes s-orb-wait {
+  from { opacity: 0.45; }
+  to { opacity: 0.9; }
+}
+[data-app="sales"] .s-flow-label {
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 500;
+  color: hsl(var(--s-opening-fg-muted));
+  overflow-wrap: anywhere;
+  animation: s-fade-up 620ms var(--s-settle) calc(380ms + var(--i, 0) * 130ms) both;
+}
+/* The business circle: a dashed ring that keeps turning around the order. */
+[data-app="sales"] .s-flow-converted .s-flow-orb::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 1.5px dashed hsl(var(--s-flow-converted) / 0.7);
+  animation: s-orbit 16s linear infinite;
+}
+@keyframes s-orbit {
+  to { transform: rotate(-360deg); }
+}
+/* A real arrival: the orb rings once and swells. */
+[data-app="sales"] .s-flow-stage[data-bump] .s-flow-count {
+  display: inline-block;
+  animation: s-bump 900ms var(--s-spring);
+}
+[data-app="sales"] .s-flow-stage[data-bump] .s-flow-orb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px hsl(var(--s-orb));
+  animation: s-ring 1000ms var(--s-settle) both;
+}
+@keyframes s-bump {
+  40% { transform: scale(1.14); }
+  to { transform: none; }
+}
+@keyframes s-ring {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(1.9); opacity: 0; }
+}
+@media (min-width: 640px) {
+  [data-app="sales"] .s-flow-orb { width: 64px; height: 64px; }
+  /* the river is drawn for a 56px row; centre it on the larger orb */
+  [data-app="sales"] .s-flow-river { top: 4px; }
+  [data-app="sales"] .s-flow-count { font-size: 22px; }
+  [data-app="sales"] .s-flow-label { font-size: 13px; }
+}
 
 /* --- GT Pulse D1: mini journey rail (signature) -------------------------- */
 /* Four nodes on every Today card: received, contacted, next action set,
@@ -691,4 +1055,58 @@
 [data-app="sales"] .s-mini-rail-converted.s-mini-rail-reached .s-mini-rail-dot {
   border-color: hsl(var(--s-status-won));
   background: hsl(var(--s-status-won));
+}
+
+/* Motion: the lit segments draw in from the start node one after another,
+   and the current node rings twice when the card arrives, then rests. */
+[data-app="sales"] .s-mini-rail-reached:has(+ .s-mini-rail-reached)::after {
+  transform-origin: right;
+  animation: s-segment 640ms var(--s-settle) both;
+}
+[data-app="sales"] .s-mini-rail-node:nth-child(2)::after { animation-delay: 120ms; }
+[data-app="sales"] .s-mini-rail-node:nth-child(3)::after { animation-delay: 240ms; }
+@keyframes s-segment {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+[data-app="sales"] .s-mini-rail-dot {
+  position: relative;
+}
+[data-app="sales"] .s-mini-rail-current .s-mini-rail-dot::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px hsl(var(--s-action));
+  animation: s-ping 1800ms var(--s-settle) 500ms 2 both;
+}
+[data-app="sales"] .s-mini-rail-converted.s-mini-rail-reached .s-mini-rail-dot::after {
+  box-shadow: 0 0 0 2px hsl(var(--s-status-won));
+}
+
+/* --- GT Pulse D1: the lead drawer's rail, in motion ----------------------- */
+/* Each recorded milestone rises in turn and its connector grows down to the
+   next; the latest one keeps a slow glow because it is where the lead is. */
+[data-app="sales"] .s-lead-rail-node {
+  animation: s-fade-up 560ms var(--s-settle) calc(var(--i, 0) * 110ms) both;
+}
+[data-app="sales"] .s-lead-rail-node:not(:last-child)::before {
+  transform-origin: top;
+  animation: s-grow-down 520ms var(--s-settle) calc(120ms + var(--i, 0) * 110ms) both;
+}
+@keyframes s-grow-down {
+  from { transform: scaleY(0); }
+  to { transform: none; }
+}
+[data-app="sales"] .s-lead-rail-marker {
+  animation: s-orb-in 620ms var(--s-spring) calc(80ms + var(--i, 0) * 110ms) both;
+}
+[data-app="sales"] .s-lead-rail-node:last-child .s-lead-rail-marker {
+  animation:
+    s-orb-in 620ms var(--s-spring) calc(80ms + var(--i, 0) * 110ms) both,
+    s-glow 2600ms ease-in-out calc(700ms + var(--i, 0) * 110ms) infinite alternate;
+}
+@keyframes s-glow {
+  from { box-shadow: 0 0 0 3px hsl(var(--s-rail-accent) / 0.16); }
+  to { box-shadow: 0 0 0 7px hsl(var(--s-rail-accent) / 0.28); }
 }

@@ -35,7 +35,7 @@ function ConversionCard({ row }: { row: TodayRow }) {
   return (
     <article
       data-testid={`today-card-${row.lead_id}`}
-      className="s-card s-enter flex items-start gap-3 p-4"
+      className="s-card s-card-won s-enter flex items-start gap-3 p-4"
       // A 35%-opacity hairline was the only thing separating the best news in
       // the product from an ordinary card. The tint does the work the border
       // was being asked to do alone.
@@ -93,20 +93,12 @@ export function TodayCard({
   return (
     <article
       data-testid={`today-card-${row.lead_id}`}
-      className="s-card s-enter p-4"
+      className={`s-card s-enter p-4${returning ? " s-card-accent" : ""}`}
       // A returning customer is the most urgent card in the queue and has to
       // read as different before anything is read at all. A 3px edge alone
       // does not carry that across a scroll — and when no Shopify snapshot
       // exists there is nothing else distinguishing it from a new lead.
-      style={
-        returning
-          ? {
-              borderInlineStartWidth: 3,
-              borderInlineStartColor: "hsl(var(--s-accent))",
-              background: "hsl(var(--s-accent-soft))",
-            }
-          : undefined
-      }
+      style={returning ? { background: "hsl(var(--s-accent-soft))" } : undefined}
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
