@@ -399,7 +399,7 @@ export function OutcomeSheet({
                 value={draft.due_at} onChange={(e) => updateDraft({ due_at: floorDate(e.target.value) })} />
             </label>
             <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"
-              disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}
+              aria-busy={busy || undefined} disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}
               aria-describedby={activityReady ? undefined : "activity-save-needs"}>
               {busy ? UI.saving : UI.save}
             </button>
@@ -480,7 +480,7 @@ export function OutcomeSheet({
             <button
               type="button"
               data-testid="next-touch-custom"
-              disabled={busy || !customDate}
+              aria-busy={busy || undefined} disabled={busy || !customDate}
               className="s-btn s-btn-primary"
               onClick={() => {
                 const dueAt = israelNineAM(customDate);
@@ -550,7 +550,7 @@ export function OutcomeSheet({
             <button
               type="button"
               data-testid="lost-confirm"
-              disabled={busy || !chosenReason}
+              aria-busy={busy || undefined} disabled={busy || !chosenReason}
               className="s-btn s-btn-danger-quiet"
               onClick={() =>
                 onSubmit(
@@ -604,7 +604,7 @@ export function OutcomeSheet({
             <button
               type="button"
               data-testid="won-confirm"
-              disabled={busy || !documentNumber.trim()}
+              aria-busy={busy || undefined} disabled={busy || !documentNumber.trim()}
               className="s-btn s-btn-primary"
               onClick={() =>
                 onSubmit({ result: "won", document_number: documentNumber.trim() })

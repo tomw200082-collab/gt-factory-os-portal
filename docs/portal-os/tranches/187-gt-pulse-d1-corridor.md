@@ -44,6 +44,8 @@ manifest:
   - src/app/(sales)/_components/SettingsForm.tsx
   - src/app/(sales)/_components/EmptyStates.tsx
   - src/app/(sales)/_components/Toast.tsx
+  - src/app/(sales)/_components/QuickAddSheet.tsx
+  - src/app/(sales)/_components/OutcomeSheet.tsx
   - src/app/(sales)/sales/today/page.tsx
   - src/app/(sales)/sales/leads/page.tsx
   - src/app/(sales)/sales/attention/page.tsx

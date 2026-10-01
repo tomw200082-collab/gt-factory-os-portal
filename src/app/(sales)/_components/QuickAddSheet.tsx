@@ -174,7 +174,7 @@ export function QuickAddSheet({ busy = false, error = null, onSubmit, onDismiss 
         <div className="mt-4 flex gap-2">
           <button
             type="submit"
-            disabled={busy}
+            aria-busy={busy || undefined} disabled={busy}
             data-testid="quick-add-save"
             className="s-btn s-btn-primary flex-1"
           >

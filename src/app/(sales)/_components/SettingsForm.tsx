@@ -343,7 +343,7 @@ export function SettingsForm({
       <div>
         <button
           type="submit"
-          disabled={busy || !hoursValid || !capValid}
+          aria-busy={busy || undefined} disabled={busy || !hoursValid || !capValid}
           data-testid="settings-save"
           className="s-btn s-btn-primary"
         >
