@@ -115,11 +115,9 @@ export function JourneyFlow({ rows }: { rows: FlowRow[] | undefined }) {
 
   return (
     <div ref={wrap} className="s-flow" data-testid="journey-flow" data-ready={counts ? "true" : "false"}>
-      {/* "כל הלידים הפתוחים" was approved for this caption, but the last node
-          counts verified orders, which are not open (UX gate COPY-T187-001).
-          The approved section name stands in until Tom approves a corrected
-          caption. */}
-      <p className="s-flow-caption">{UI.leadsTitle}</p>
+      {/* All leads, not only open ones: the last node counts verified orders
+          (Tom 2026-10-01, UX gate COPY-T187-001). */}
+      <p className="s-flow-caption">{UI.flowScope}</p>
       <div className="s-flow-body">
       <svg className="s-flow-river" width={width} height={RIVER_H} viewBox={`0 0 ${width} ${RIVER_H}`}
         aria-hidden="true" focusable="false">

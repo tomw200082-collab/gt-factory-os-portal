@@ -25,8 +25,8 @@ const FACT_LABELS: Record<string, string> = {
  *  straight onto a Hebrew card — "active" beside "לקוח קיים" — which is the
  *  raw-enum failure the portal UX standard forbids. */
 const SNAPSHOT_STATUS: Record<string, string> = {
-  active: "פעיל",
-  disabled: "לא פעיל",
+  active: UI.customerStatusActive,
+  disabled: UI.customerStatusDisabled,
 };
 
 function renderValue(key: string, value: string): string {

@@ -465,6 +465,7 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-note-save"
+                aria-describedby={note.trim() ? undefined : "drawer-note-hint"}
                   aria-busy={savingNote || undefined}
                 disabled={savingNote || !note.trim()}
                 className="s-btn s-btn-ghost"
@@ -479,6 +480,12 @@ export function LeadDrawer({
               >
                 {UI.saveNote}
               </button>
+              {/* Why Save is unavailable, said once, quietly (UX gate INTER-187-005). */}
+              {!note.trim() && !noteSaved ? (
+                <p id="drawer-note-hint" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+                  {UI.noteNeeded}
+                </p>
+              ) : null}
               {/* The write landed: say so, briefly (UX gate FLOW-003). */}
               <p role="status" className="s-saved text-[13px]" data-testid="drawer-note-saved">
                 {noteSaved ? UI.noteSaved : ""}

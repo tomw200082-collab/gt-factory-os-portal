@@ -34,7 +34,12 @@ export function OrgList({ rows, onOpen }: { rows: OrgRow[]; onOpen: (org: OrgRow
                   <bdi dir="ltr">{fmtPhone(org.phone_e164)}</bdi>
                 </span>
               </span>
-              {org.is_existing_customer ? <CustomerBadge /> : null}
+              {/* Every row says which side of the line it is on (UX gate VISUAL-187-002). */}
+              {org.is_existing_customer ? (
+                <CustomerBadge />
+              ) : (
+                <span className="s-badge s-badge-prospect">{UI.orgNotCustomer}</span>
+              )}
             </span>
             <span
               className="mt-2 flex flex-wrap items-center gap-2 text-[12px]"
