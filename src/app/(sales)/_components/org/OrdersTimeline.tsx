@@ -1,31 +1,35 @@
 "use client";
 
-// The business circle's two years on a time axis (Tom, 2026-10-02).
+// The business circle's two years on a time axis (Tom, 2026-10-02; redesigned
+// the same day at his word: "elegant, glowing, inviting, and clear").
 //
-// One column per month, the newest at the left. Inside a column the orders
-// stack in the circle's language: filled for an order, hollow for a
-// cancellation, an amber outline for an open draft. Zoomed in far enough, each
-// order is its own block, so a month reads as "these three orders" rather than
-// a bar height. The line is the trend: a trailing three-month average of clean
-// orders. The scale zooms on the order count; a month taller than the zoomed
-// scale is cut at the top and says its true count.
+// It reads top down. First comes a headline: the orders of the two years, and
+// which way the last three full months lean against the three before. Below it
+// is the instrument, one column per month with the newest at the left. Zoomed
+// in far enough, each order is a bead, as in the circle: filled for an order,
+// hollow for a cancellation, amber for an open draft. At fit, a month is a slim
+// glowing capsule. The trend is a smooth curve with light under it, and it
+// stops at the last full month: the month in progress is drawn as such and
+// never counts, because a partial month is not a drop.
 //
-// A month column is narrower than a fingertip on a phone, so a tap selects it
-// and says what it holds; a 44px button below opens its orders. The keyboard
-// opens a month directly, and the arrows walk through time.
+// A tap lights a month like a beam, dims the rest, and says what it holds; a
+// 44px button opens its orders. The keyboard opens a month directly, and the
+// arrows walk through time.
 
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Maximize2, Minus, MoveHorizontal, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { UI } from "../../_lib/labels";
 import { monthLabel, monthShort, type RingMonth } from "../../_lib/ring";
-import { barPath, columnX, timelineMonths, yTicks, zoomLevels, type TimelineMonth } from "../../_lib/timeline";
+import { barPath, columnX, smoothPath, timelineMonths, trendSummary, yTicks, zoomLevels, type TimelineMonth } from "../../_lib/timeline";
 
-const PAD_TOP = 24;
-const PAD_BOTTOM = 30;
-const PLOT_H = 180;
-const AXIS_W = 30;
-const PAD_LEFT = 6;
+const PAD_TOP = 34;
+const PLOT_H = 172;
+const PAD_BOTTOM = 46;
+const AXIS_W = 26;
+const PAD_LEFT = 4;
 const GAP = 2;
+/** a bead needs this much height per order before it reads as a bead */
+const BEAD_UNIT = 10;
 
 function useWidth<T extends HTMLElement>(fallback: number) {
   const ref = useRef<T>(null);
@@ -45,7 +49,7 @@ function useWidth<T extends HTMLElement>(fallback: number) {
 
 type Kind = "filled" | "hollow" | "open";
 
-/** The stack of one month, bottom to top, cut at the scale. */
+/** The stack of one month, bottom to top. */
 function stackOf(m: TimelineMonth): Kind[] {
   return [
     ...Array<Kind>(m.filled).fill("filled"),
@@ -54,16 +58,23 @@ function stackOf(m: TimelineMonth): Kind[] {
   ];
 }
 
-export function OrdersTimeline({ months, onMonth }: { months: RingMonth[]; onMonth: (ym: string) => void }) {
+const fmtAvg = (n: number) => (Math.round(n * 10) / 10).toLocaleString("he-IL");
+
+export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[]; onMonth: (ym: string) => void; meta?: ReactNode }) {
   const data = useMemo(() => timelineMonths(months), [months]);
+  const summary = useMemo(() => trendSummary(data), [data]);
   const dataMax = Math.max(1, ...data.map((m) => m.total));
   const levels = useMemo(() => zoomLevels(dataMax), [dataMax]);
   const [zoom, setZoom] = useState(0);
   useEffect(() => setZoom((z) => Math.min(z, levels.length - 1)), [levels.length]);
   const yMax = levels[Math.min(zoom, levels.length - 1)];
 
+  // selected: chosen by tap, click or keyboard, and said in words below the chart.
+  // hovered: a mouse passing over, lit for the eye only; it never speaks (A11Y NEW-001).
   const [selected, setSelected] = useState<string | null>(null);
-  const clipId = `tl-clip-${useId().replace(/:/g, "")}`;
+  const [hovered, setHovered] = useState<string | null>(null);
+  const lit = hovered ?? selected;
+  const uid = useId().replace(/:/g, "");
   const [wrapRef, width] = useWidth<HTMLDivElement>(640);
   const targets = useRef<Array<SVGRectElement | null>>([]);
 
@@ -73,12 +84,17 @@ export function OrdersTimeline({ months, onMonth }: { months: RingMonth[]; onMon
   const H = PAD_TOP + PLOT_H + PAD_BOTTOM;
   const base = PAD_TOP + PLOT_H;
   const unit = PLOT_H / yMax;
-  const blocks = unit >= 7;
+  const colW = (right - left) / n;
+  // beads when there is room and few enough of them to read as orders, not as a wall
+  const beads = unit >= BEAD_UNIT && (zoom > 0 || yMax <= 4);
   const y = (v: number) => base - Math.min(v, yMax) * unit;
-  const labelEvery = ((right - left) / n) * 3 >= 36 ? 3 : 6;
-  const current = data[n - 1]?.ym;
+  const labelEvery = colW * 3 >= 36 ? 3 : 6;
   const sel = data.find((m) => m.ym === selected) ?? null;
+  const litMonth = data.find((m) => m.ym === lit) ?? null;
+  // one tab stop for the whole chart; the arrows move within it (roving tabindex)
+  const tabStop = sel ? data.indexOf(sel) : n - 1;
 
+  // the trend: a smooth curve through the full months, with light under it
   const trendPts = data
     .map((m, i) => {
       if (m.trend === null) return null;
@@ -86,9 +102,27 @@ export function OrdersTimeline({ months, onMonth }: { months: RingMonth[]; onMon
       // not clamped: above the zoomed scale the line leaves the plot (clipped), it never flattens into a false trend
       return [x + w / 2, base - m.trend * unit] as const;
     })
-    .filter((p): p is readonly [number, number] => p !== null);
-  const trendPath = trendPts.map(([px, py], k) => `${k === 0 ? "M" : "L"} ${px.toFixed(1)} ${py.toFixed(1)}`).join(" ");
-  const last = trendPts[trendPts.length - 1];
+    .filter((p): p is readonly [number, number] => p !== null)
+    .sort((a, b) => a[0] - b[0]);
+  const trendLine = smoothPath(trendPts);
+  const trendArea =
+    trendPts.length > 1
+      ? `${trendLine} L ${trendPts[trendPts.length - 1][0].toFixed(1)} ${base} L ${trendPts[0][0].toFixed(1)} ${base} Z`
+      : "";
+  const newest = [...data].reverse().find((m) => m.trend !== null) ?? null;
+  const end = trendPts[0];
+
+  // the year row under the months
+  const years = useMemo(() => {
+    const out: Array<{ year: string; from: number; to: number }> = [];
+    data.forEach((m, i) => {
+      const yr = m.ym.slice(0, 4);
+      const last = out[out.length - 1];
+      if (last && last.year === yr) last.to = i;
+      else out.push({ year: yr, from: i, to: i });
+    });
+    return out;
+  }, [data]);
 
   function onKey(e: KeyboardEvent, i: number) {
     const move = (to: number) => {
@@ -106,89 +140,157 @@ export function OrdersTimeline({ months, onMonth }: { months: RingMonth[]; onMon
     else if (e.key === "End") move(n - 1);
   }
 
+  const TrendIcon = summary.direction === "up" ? TrendingUp : summary.direction === "down" ? TrendingDown : MoveHorizontal;
+
   return (
     <div data-testid="orders-timeline" className="s-tl">
+      <div className="s-tl-head">
+        <p className="s-tl-total">
+          <span className="s-tl-total-n s-nums">{summary.total.toLocaleString("he-IL")}</span>
+          <span className="s-tl-total-l">{summary.total === 1 ? UI.timelineTotalOne : UI.timelineTotal}</span>
+        </p>
+        {summary.direction ? (
+          <span className="s-tl-trendpill s-nums" data-dir={summary.direction} data-testid="timeline-trend">
+            <TrendIcon size={15} aria-hidden />
+            {UI.timelineTrendWord(summary.direction, summary.pct)}
+            <span className="sr-only"> · {UI.timelineTrendBasis}</span>
+          </span>
+        ) : null}
+      </div>
+      {summary.direction ? <p className="s-tl-basis" aria-hidden>{UI.timelineTrendBasis}</p> : null}
+      {meta ? <div className="s-tl-meta">{meta}</div> : null}
+
       <div className="s-tl-toolbar">
-        <span data-testid="timeline-scale" className="s-nums text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-          {UI.timelineScale(yMax)}
-        </span>
-        <div className="flex items-center gap-1">
-          <button type="button" className="s-icon-btn s-tl-zoom" aria-label={UI.timelineZoomOut} disabled={zoom === 0} onClick={() => setZoom((z) => Math.max(0, z - 1))}>
-            <ZoomOut size={18} aria-hidden />
+        <span data-testid="timeline-scale" className="s-tl-scale s-nums">{UI.timelineScale(yMax)}</span>
+        <div className="s-tl-zoombar" role="group" aria-label={UI.timelineZoomLabel}>
+          <button type="button" className="s-tl-zoom" aria-label={UI.timelineZoomOut} title={zoom === 0 ? UI.timelineZoomAtFit : undefined} disabled={zoom === 0} onClick={() => setZoom((z) => Math.max(0, z - 1))}>
+            <Minus size={16} aria-hidden />
           </button>
-          <button type="button" className="s-icon-btn s-tl-zoom" aria-label={UI.timelineZoomIn} disabled={zoom >= levels.length - 1} onClick={() => setZoom((z) => Math.min(levels.length - 1, z + 1))}>
-            <ZoomIn size={18} aria-hidden />
+          <button type="button" className="s-tl-zoom" aria-label={UI.timelineZoomIn} title={zoom >= levels.length - 1 ? UI.timelineZoomAtMax : undefined} disabled={zoom >= levels.length - 1} onClick={() => setZoom((z) => Math.min(levels.length - 1, z + 1))}>
+            <Plus size={16} aria-hidden />
           </button>
-          <button type="button" className="s-btn s-btn-ghost s-btn-compact" aria-label={UI.timelineZoomFit} disabled={zoom === 0} onClick={() => setZoom(0)}>
-            <Maximize2 size={15} aria-hidden />
+          <button type="button" className="s-tl-zoom s-tl-zoom-fit" aria-label={UI.timelineZoomFit} title={zoom === 0 ? UI.timelineZoomAtFit : undefined} disabled={zoom === 0} onClick={() => setZoom(0)}>
+            <Maximize2 size={14} aria-hidden />
             {UI.timelineZoomFitShort}
           </button>
         </div>
       </div>
 
-      <div ref={wrapRef} className="s-tl-plot">
+      <div ref={wrapRef} className="s-tl-plot" data-selecting={litMonth ? "" : undefined} onPointerLeave={() => setHovered(null)}>
         <svg width={width} height={H} viewBox={`0 0 ${width} ${H}`} className="s-tl-svg" role="group" aria-label={UI.timelineChartLabel}>
-          {/* gridlines and the count axis, on the right: the start side */}
+          <defs>
+            <linearGradient id={`${uid}-area`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" className="s-tl-stop-area-top" />
+              <stop offset="1" className="s-tl-stop-area-bottom" />
+            </linearGradient>
+            <linearGradient id={`${uid}-bar`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" className="s-tl-stop-bar-top" />
+              <stop offset="1" className="s-tl-stop-bar-bottom" />
+            </linearGradient>
+            <linearGradient id={`${uid}-beam`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" className="s-tl-stop-beam-top" />
+              <stop offset="1" className="s-tl-stop-beam-bottom" />
+            </linearGradient>
+            <clipPath id={`${uid}-clip`}>
+              <rect x={left} y={PAD_TOP - 2} width={right - left} height={PLOT_H + 2} />
+            </clipPath>
+          </defs>
+
+          <rect x={left} y={PAD_TOP - 8} width={right - left} height={PLOT_H + 8} rx={14} className="s-tl-stage" aria-hidden />
+
+          {/* faint dotted gridlines; the count axis on the right, the start side */}
           {yTicks(yMax).map((t) => (
             <g key={t} aria-hidden>
-              <line x1={left} x2={right} y1={y(t)} y2={y(t)} className="s-tl-grid" />
-              <text x={right + 6} y={y(t)} dy="0.35em" className="s-tl-tick s-nums" textAnchor="start">{t}</text>
+              {t > 0 ? <line x1={left + 6} x2={right - 6} y1={y(t)} y2={y(t)} className="s-tl-grid" /> : null}
+              <text x={right + 7} y={y(t)} dy="0.35em" className="s-tl-tick s-nums" textAnchor="start">{t}</text>
             </g>
           ))}
 
+          {litMonth ? (() => {
+            const i = data.indexOf(litMonth);
+            const { x, w } = columnX(i, n, left, right);
+            return <rect x={x + 1} y={PAD_TOP - 8} width={Math.max(2, w - 2)} height={PLOT_H + 8} rx={Math.min(10, w / 2)} fill={`url(#${uid}-beam)`} className="s-tl-beam" aria-hidden />;
+          })() : null}
+
+          {/* the light under the trend, behind the months */}
+          {trendArea ? <path d={trendArea} fill={`url(#${uid}-area)`} clipPath={`url(#${uid}-clip)`} className="s-tl-area" aria-hidden /> : null}
+
           {data.map((m, i) => {
             const { x, w } = columnX(i, n, left, right);
-            const bw = Math.min(24, Math.max(4, w * 0.64));
+            const bw = Math.min(18, Math.max(5, w * 0.56));
             const bx = x + (w - bw) / 2;
+            const cx = x + w / 2;
             const stack = stackOf(m);
             const shown = stack.slice(0, Math.ceil(yMax));
             const over = m.total > yMax;
-            const isSel = m.ym === selected;
+            const isSel = m.ym === lit;
             const year = m.ym.endsWith("-01");
             const labelled = (n - 1 - i) % labelEvery === 0;
             const s = monthShort(m.ym);
 
-            // segments: in block mode one per order, otherwise one per kind
-            const segs: Array<{ kind: Kind; y0: number; y1: number }> = [];
-            if (blocks) {
-              shown.forEach((k, j) => segs.push({ kind: k, y0: j, y1: j + 1 }));
+            let marks: ReactNode[];
+            if (beads) {
+              const r = Math.max(2.5, Math.min((w - 3) / 2, (unit - 3) / 2, 7));
+              marks = shown.map((k, j) => (
+                <circle key={j} cx={cx} cy={base - (j + 0.5) * unit} r={k === "filled" ? r : r - 0.8} className={`s-tl-bead s-tl-bead-${k}`} data-mark={k} aria-hidden />
+              ));
             } else {
+              const segs: Array<{ kind: Kind; y0: number; y1: number }> = [];
               let at = 0;
               for (const k of ["filled", "hollow", "open"] as Kind[]) {
                 const c = shown.filter((v) => v === k).length;
                 if (c > 0) segs.push({ kind: k, y0: at, y1: Math.min(at + c, yMax) });
                 at += c;
               }
+              marks = segs.map((sg, k) => {
+                const top = y(sg.y1);
+                const isTop = k === segs.length - 1;
+                const h = Math.max(0, y(sg.y0) - top - (isTop ? 0 : GAP));
+                return (
+                  <path
+                    key={k}
+                    d={barPath(bx, top, bw, h, isTop ? bw / 2 : 1.5)}
+                    fill={sg.kind === "filled" ? `url(#${uid}-bar)` : undefined}
+                    className={`s-tl-seg s-tl-seg-${sg.kind}`}
+                    data-mark={sg.kind}
+                    aria-hidden
+                  />
+                );
+              });
             }
 
+            const colTop = y(Math.min(m.total, yMax));
             return (
-              <g key={m.ym} className="s-tl-col" data-selected={isSel || undefined}>
-                {isSel ? <rect x={x} y={PAD_TOP - 6} width={w} height={PLOT_H + 6} className="s-tl-sel" aria-hidden /> : null}
-                {year && i > 0 ? <line x1={x + w} x2={x + w} y1={PAD_TOP} y2={base + 8} className="s-tl-year" aria-hidden /> : null}
-                {segs.map((sg, k) => {
-                  const top = y(sg.y1);
-                  const h = Math.max(0, y(sg.y0) - top - (k < segs.length - 1 || blocks ? GAP : 0));
-                  const isTop = k === segs.length - 1;
-                  return (
-                    <path
-                      key={k}
-                      d={barPath(bx, top + (blocks ? GAP / 2 : 0), bw, blocks ? Math.max(1, unit - GAP) : h, isTop ? 4 : blocks ? 2 : 0)}
-                      className={`s-tl-seg s-tl-seg-${sg.kind}`}
-                      data-mark={sg.kind}
-                      aria-hidden
-                    />
-                  );
-                })}
+              <g key={m.ym} className="s-tl-col" data-selected={isSel || undefined} data-partial={m.partial || undefined}>
+                {/* dimmed on the wrapper: the arrival animation owns the bars' own opacity */}
+                <g className="s-tl-dim">
+                  <g className="s-tl-bars" style={{ ["--i" as string]: i }}>{marks}</g>
+                </g>
                 {over ? (
                   <g data-testid="timeline-overflow" aria-hidden>
-                    <path d={`M ${bx + bw / 2 - 4} ${PAD_TOP - 4} L ${bx + bw / 2} ${PAD_TOP - 9} L ${bx + bw / 2 + 4} ${PAD_TOP - 4} Z`} className="s-tl-over-mark" />
-                    {w >= 22 ? <text x={bx + bw / 2} y={PAD_TOP - 12} textAnchor="middle" className="s-tl-over s-nums">{m.total}</text> : null}
+                    {w >= 22 ? (
+                      <>
+                        <rect x={cx - 13} y={PAD_TOP - 28} width={26} height={17} rx={8.5} className="s-tl-over-chip" />
+                        <text x={cx} y={PAD_TOP - 19.5} dy="0.35em" textAnchor="middle" className="s-tl-over s-nums">{m.total}</text>
+                      </>
+                    ) : (
+                      <path d={`M ${cx - 3.5} ${PAD_TOP - 6} L ${cx} ${PAD_TOP - 11} L ${cx + 3.5} ${PAD_TOP - 6}`} className="s-tl-over-mark" />
+                    )}
                   </g>
                 ) : null}
-                {labelled || year ? (
-                  <text x={x + w / 2} y={base + 18} textAnchor="middle" className={`s-tl-label${m.ym === current ? " s-tl-label-now" : ""}`} aria-hidden>
-                    {year ? `${s.month} ${s.year}` : s.month}
-                  </text>
+                {isSel && m.total > 0 && !over ? (
+                  <g aria-hidden className="s-tl-bubble">
+                    <rect x={cx - 13} y={colTop - 27} width={26} height={19} rx={9.5} />
+                    <text x={cx} y={colTop - 17.5} dy="0.35em" textAnchor="middle" className="s-nums">{m.total}</text>
+                  </g>
+                ) : null}
+                {m.partial ? (
+                  <g aria-hidden>
+                    <rect x={Math.max(0, cx - 17)} y={base + 6} width={34} height={18} rx={9} className="s-tl-now-chip" />
+                    <text x={Math.max(17, cx)} y={base + 15} dy="0.35em" textAnchor="middle" className="s-tl-label s-tl-label-now">{s.month}</text>
+                  </g>
+                ) : labelled || year ? (
+                  <text x={cx} y={base + 15} dy="0.35em" textAnchor="middle" className="s-tl-label" aria-hidden>{s.month}</text>
                 ) : null}
                 <rect
                   ref={(el) => { targets.current[i] = el; }}
@@ -198,11 +300,11 @@ export function OrdersTimeline({ months, onMonth }: { months: RingMonth[]; onMon
                   height={PLOT_H + 8}
                   className="s-tl-hit"
                   role="button"
-                  tabIndex={0}
-                  aria-label={`${monthLabel(m.ym)}: ${UI.monthCounts(m.filled, m.refunded, m.hollow, m.open)}`}
-                  aria-pressed={isSel}
+                  tabIndex={i === tabStop ? 0 : -1}
+                  aria-label={`${monthLabel(m.ym)}: ${UI.monthCounts(m.filled, m.refunded, m.hollow, m.open)}${m.partial ? ` (${UI.timelineInProgress})` : ""}`}
+                  aria-pressed={m.ym === selected}
                   onClick={() => setSelected(m.ym)}
-                  onPointerEnter={(e) => { if (e.pointerType === "mouse") setSelected(m.ym); }}
+                  onPointerEnter={(e) => { if (e.pointerType === "mouse") setHovered(m.ym); }}
                   onFocus={() => setSelected(m.ym)}
                   onKeyDown={(e) => onKey(e, i)}
                 />
@@ -210,44 +312,65 @@ export function OrdersTimeline({ months, onMonth }: { months: RingMonth[]; onMon
             );
           })}
 
-          <defs>
-            <clipPath id={clipId}>
-              <rect x={left} y={PAD_TOP - 2} width={right - left} height={PLOT_H + 2} />
-            </clipPath>
-          </defs>
           {trendPts.length > 1 ? (
-            <g aria-hidden className="s-tl-trend" clipPath={`url(#${clipId})`}>
-              <path d={trendPath} className="s-tl-trend-line" />
-              {last ? <circle cx={last[0]} cy={last[1]} r={4} className="s-tl-trend-end" /> : null}
+            <g aria-hidden className="s-tl-trend" clipPath={`url(#${uid}-clip)`}>
+              <path d={trendLine} className="s-tl-trend-glow" />
+              <path d={trendLine} pathLength={1} className="s-tl-trend-line" />
+              {end ? (
+                <>
+                  <circle cx={end[0]} cy={end[1]} r={9} className="s-tl-trend-halo" />
+                  <circle cx={end[0]} cy={end[1]} r={4} className="s-tl-trend-end" />
+                </>
+              ) : null}
             </g>
           ) : null}
 
-          <line x1={left} x2={right} y1={base} y2={base} className="s-tl-base" aria-hidden />
+          {/* the year row: each year named under its months */}
+          {years.map((yr, k) => {
+            const a = columnX(yr.to, n, left, right).x;
+            const b = columnX(yr.from, n, left, right);
+            const mid = (a + b.x + b.w) / 2;
+            const span = b.x + b.w - a;
+            return (
+              <g key={yr.year} aria-hidden>
+                {k > 0 ? <line x1={b.x + b.w} x2={b.x + b.w} y1={base + 28} y2={base + 42} className="s-tl-yearsep" /> : null}
+                {span >= 34 ? <text x={mid} y={base + 36} dy="0.35em" textAnchor="middle" className="s-tl-year s-nums">{yr.year}</text> : null}
+              </g>
+            );
+          })}
         </svg>
       </div>
 
-      <div data-testid="timeline-callout" className="s-tl-callout" aria-live="polite">
+      {/* not a live region: each month's own name already says what it holds, so this would say it twice (A11Y NEW-003) */}
+      <div data-testid="timeline-callout" className="s-tl-callout" data-on={sel ? "" : undefined}>
         {sel ? (
           <>
             <div className="min-w-0">
-              <p className="text-[15px] font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{monthLabel(sel.ym)}</p>
-              <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.monthCounts(sel.filled, sel.refunded, sel.hollow, sel.open)}</p>
+              <p className="s-tl-callout-title">
+                {monthLabel(sel.ym)}
+                {sel.partial ? <span className="s-tl-callout-tag">{UI.timelineInProgress}</span> : null}
+              </p>
+              <p className="s-tl-callout-sub">{UI.monthCounts(sel.filled, sel.refunded, sel.hollow, sel.open)}</p>
             </div>
             <button type="button" className="s-btn s-btn-primary s-btn-compact shrink-0" onClick={() => onMonth(sel.ym)}>
               {UI.timelineOpenMonth}
             </button>
           </>
         ) : (
-          <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.timelinePick}</p>
+          <p className="s-tl-callout-sub">{UI.timelinePick}</p>
         )}
       </div>
 
-      <ul className="s-circle-legend" data-testid="timeline-legend">
+      <ul className="s-tl-legend" data-testid="timeline-legend">
         <li><span className="s-dot s-dot-filled" aria-hidden />{UI.circleLegendOrder}</li>
         <li><span className="s-dot s-dot-hollow" aria-hidden />{UI.circleLegendCancelled}</li>
         <li><span className="s-dot s-dot-open" aria-hidden />{UI.circleLegendDraft}</li>
-        <li><span className="s-line-key" aria-hidden />{UI.timelineTrend}</li>
-        <li className="s-circle-legend-rings">{UI.timelineAxisHint}</li>
+        <li>
+          <span className="s-line-key" aria-hidden />
+          {UI.timelineTrend}
+          {newest?.trend != null ? <span className="s-tl-legend-now s-nums">{UI.timelineAvgNow(fmtAvg(newest.trend))}</span> : null}
+        </li>
+        <li className="s-tl-legend-hint">{UI.timelineAxisHint}</li>
       </ul>
     </div>
   );

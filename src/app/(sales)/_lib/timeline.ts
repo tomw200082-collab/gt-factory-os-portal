@@ -10,16 +10,85 @@ import type { RingMonth } from "./ring";
 
 export interface TimelineMonth extends RingMonth {
   total: number;
-  /** trailing three-month average of clean orders; null for the first two months */
+  /** the current month: still filling up, so it is drawn as such and kept out of every average */
+  partial: boolean;
+  /** trailing three-month average of clean orders; null for the first two months and the month in progress */
   trend: number | null;
 }
 
 export function timelineMonths(months: RingMonth[]): TimelineMonth[] {
+  const last = months.length - 1;
   return months.map((m, i) => ({
     ...m,
     total: m.filled + m.hollow + m.open,
-    trend: i >= 2 ? (months[i - 2].filled + months[i - 1].filled + m.filled) / 3 : null,
+    partial: i === last,
+    trend: i >= 2 && i !== last ? (months[i - 2].filled + months[i - 1].filled + m.filled) / 3 : null,
   }));
+}
+
+export interface TrendSummary {
+  /** clean orders over the whole span */
+  total: number;
+  /** average clean orders a month: the last three full months, and the three before them */
+  recent: number | null;
+  prior: number | null;
+  direction: "up" | "down" | "flat" | null;
+  /** the change in whole percent; null when the months before had no orders */
+  pct: number | null;
+}
+
+/** The headline: how many orders, and which way the last three full months lean against the three before.
+ *  A change under ten percent is steady. The month in progress never counts: a partial month is not a drop. */
+export function trendSummary(months: TimelineMonth[]): TrendSummary {
+  const total = months.reduce((n, m) => n + m.filled, 0);
+  const full = months.filter((m) => !m.partial);
+  if (full.length < 6) return { total, recent: null, prior: null, direction: null, pct: null };
+  const avg = (xs: TimelineMonth[]) => xs.reduce((n, m) => n + m.filled, 0) / xs.length;
+  const recent = avg(full.slice(-3));
+  const prior = avg(full.slice(-6, -3));
+  if (recent === 0 && prior === 0) return { total, recent, prior, direction: null, pct: null };
+  if (prior === 0) return { total, recent, prior, direction: "up", pct: null };
+  const change = (recent - prior) / prior;
+  const pct = Math.round(Math.abs(change) * 100);
+  return { total, recent, prior, direction: Math.abs(change) < 0.1 ? "flat" : change > 0 ? "up" : "down", pct };
+}
+
+const num = (n: number) => String(Number(n.toFixed(1)));
+
+/** A smooth curve through the points that never overshoots them (monotone cubic, Fritsch and Carlson):
+ *  a flat stretch stays flat and the curve never dips below zero orders. Points run left to right. */
+export function smoothPath(points: ReadonlyArray<readonly [number, number]>): string {
+  const n = points.length;
+  if (n === 0) return "";
+  if (n === 1) return `M ${num(points[0][0])} ${num(points[0][1])}`;
+  const d: number[] = [];
+  for (let i = 0; i < n - 1; i++) d.push((points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0]));
+  const m: number[] = [d[0]];
+  for (let i = 1; i < n - 1; i++) m.push(d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2);
+  m.push(d[n - 2]);
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) {
+      m[i] = 0;
+      m[i + 1] = 0;
+      continue;
+    }
+    const a = m[i] / d[i];
+    const b = m[i + 1] / d[i];
+    const h = a * a + b * b;
+    if (h > 9) {
+      const t = 3 / Math.sqrt(h);
+      m[i] = t * a * d[i];
+      m[i + 1] = t * b * d[i];
+    }
+  }
+  let path = `M ${num(points[0][0])} ${num(points[0][1])}`;
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[i + 1];
+    const h = (x1 - x0) / 3;
+    path += ` C ${num(x0 + h)} ${num(y0 + m[i] * h)}, ${num(x1 - h)} ${num(y1 - m[i + 1] * h)}, ${num(x1)} ${num(y1)}`;
+  }
+  return path;
 }
 
 const SMALL = [1, 2, 3, 4, 5, 6, 8, 10];

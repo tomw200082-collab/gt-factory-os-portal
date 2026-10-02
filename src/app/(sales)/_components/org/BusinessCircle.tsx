@@ -166,10 +166,7 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
 
       {view === "timeline" ? (
         <>
-          <div className="s-circle-grid-centre s-tl-summary">
-            <CentreText moved={moved} last={last} asOf={data.as_of} quiet={quiet} now={now} />
-          </div>
-          <OrdersTimeline months={all} onMonth={onMonth} />
+          <OrdersTimeline months={all} onMonth={onMonth} meta={<TimelineMeta moved={moved} last={last} asOf={data.as_of} now={now} />} />
         </>
       ) : (
       <>
@@ -225,6 +222,27 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
       </>
       )}
     </section>
+  );
+}
+
+/** The timeline's one quiet line: the last order (or the move), and where the numbers come from. */
+function TimelineMeta({ moved, last, asOf, now }: { moved: { to: string; on: string } | null; last: string | null; asOf: string | null; now?: Date }) {
+  return (
+    <>
+      {moved ? (
+        <span>
+          {UI.circleMovedTitle(moved.to)} · <bdi>{UI.circleMovedSince(fmtDate(moved.on))}</bdi>
+        </span>
+      ) : last ? (
+        <span>
+          {UI.lastOrder} <bdi className="s-nums">{fmtDate(last)}</bdi> · {UI.daysSince(daysSinceIsrael(last, now))}
+        </span>
+      ) : null}
+      <span className="s-tl-meta-source">
+        {UI.circleSource}
+        {asOf ? <> · <bdi className="s-nums">{fmtDateTime(asOf)}</bdi></> : null}
+      </span>
+    </>
   );
 }
 

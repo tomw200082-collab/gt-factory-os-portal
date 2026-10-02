@@ -80,4 +80,42 @@ describe("orders timeline", () => {
       expect(legend.textContent).toContain(word);
     }
   });
+
+  it("opens on a headline: the orders of the two years, and the trend of the full months", () => {
+    const m = months();
+    render(<OrdersTimeline months={m} onMonth={() => {}} />);
+    const total = m.reduce((n, x) => n + x.filled, 0);
+    const head = screen.getByTestId("orders-timeline").querySelector(".s-tl-total")!;
+    expect(head.textContent).toBe(`${total}${UI.timelineTotal}`);
+    expect(screen.getByTestId("timeline-trend").textContent).toContain(UI.timelineTrendBasis);
+  });
+
+  it("says the current month is still in progress", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const now = screen.getByRole("button", { name: /אוקטובר 2026/ });
+    expect(now.getAttribute("aria-label")).toContain(UI.timelineInProgress);
+    fireEvent.click(now);
+    expect(screen.getByTestId("timeline-callout").textContent).toContain(UI.timelineInProgress);
+  });
+
+  it("lights a month under a passing mouse without saying anything", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const callout = screen.getByTestId("timeline-callout");
+    const before = callout.textContent;
+    fireEvent.pointerEnter(screen.getByRole("button", { name: /ספטמבר 2026/ }), { pointerType: "mouse" });
+    expect(callout.textContent).toBe(before);
+    expect(callout.hasAttribute("aria-live")).toBe(false);
+    expect(document.querySelector(".s-tl-col[data-selected]")).toBeTruthy();
+  });
+
+  it("is one tab stop, and the arrows move it", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const targets = within(screen.getByTestId("orders-timeline")).getAllByRole("button", { name: /20\d\d:/ });
+    expect(targets.filter((t) => t.getAttribute("tabindex") === "0")).toHaveLength(1);
+    expect(targets[23].getAttribute("tabindex")).toBe("0");
+    targets[23].focus();
+    fireEvent.keyDown(targets[23], { key: "ArrowRight" });
+    expect(targets[22].getAttribute("tabindex")).toBe("0");
+    expect(targets[23].getAttribute("tabindex")).toBe("-1");
+  });
 });
