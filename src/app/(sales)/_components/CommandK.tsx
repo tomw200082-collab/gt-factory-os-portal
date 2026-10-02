@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { useOrgSearch } from "../_lib/api";
 import { fmtPhone, phoneSearchKey } from "../_lib/format";
 import { UI } from "../_lib/labels";
@@ -166,6 +167,13 @@ export function CommandK({ leads, onClose }: CommandKProps) {
           </p>
         ) : null}
 
+        {orgsPending ? (
+          <p data-testid="command-searching" className="flex items-center gap-2 px-3 py-3 text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+            <Loader2 size={14} aria-hidden className="motion-safe:animate-spin" />
+            {UI.commandSearching}
+          </p>
+        ) : null}
+
         <ul className="max-h-[50vh] overflow-y-auto">
           {hits.map((hit) => (
             <li key={`${hit.kind}-${hit.id}`}>
@@ -177,7 +185,7 @@ export function CommandK({ leads, onClose }: CommandKProps) {
                 style={{ borderColor: "hsl(var(--s-border))" }}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px]" style={{ color: "hsl(var(--s-fg))" }}>
+                  <span className="block text-[14px] line-clamp-2 [overflow-wrap:anywhere]" title={hit.title} style={{ color: "hsl(var(--s-fg))" }}>
                     {hit.title}
                   </span>
                   <span

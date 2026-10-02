@@ -84,13 +84,15 @@ function activate(e: KeyboardEvent, go: () => void) {
 
 type Mark = { kind: "filled" | "hollow" | "open"; x: number; y: number };
 
-function marksOf(m: RingMonth, cap: number): Array<Mark["kind"]> {
+/** The marks a month has room for; past the cap the last slot says how many more. */
+function marksOf(m: RingMonth, cap: number): { kinds: Array<Mark["kind"]>; more: number } {
   const kinds: Array<Mark["kind"]> = [
     ...Array<Mark["kind"]>(m.open).fill("open"),
     ...Array<Mark["kind"]>(m.filled).fill("filled"),
     ...Array<Mark["kind"]>(m.hollow).fill("hollow"),
   ];
-  return kinds.slice(0, cap);
+  if (kinds.length <= cap) return { kinds, more: 0 };
+  return { kinds: kinds.slice(0, cap - 1), more: kinds.length - (cap - 1) };
 }
 
 export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessCircleProps) {
@@ -105,8 +107,8 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
   function segments(months: RingMonth[], geo: typeof OUTER, ringName: "outer" | "inner") {
     return months.map((m, i) => {
       const { start, end } = monthAngles(i);
-      const marks = marksOf(m, geo.cap);
-      const points = markPoints(C, C, geo.rMark, start, end, marks.length);
+      const { kinds: marks, more } = marksOf(m, geo.cap);
+      const points = markPoints(C, C, geo.rMark, start, end, marks.length + (more > 0 ? 1 : 0));
       const has = m.filled + m.hollow + m.open > 0;
       return (
         <g key={m.ym} className="s-ring-month" style={{ ["--i" as string]: ringName === "inner" ? i : i + 12 }}>
@@ -122,7 +124,12 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
             onClick={() => onMonth(m.ym)}
             onKeyDown={(e) => activate(e, () => onMonth(m.ym))}
           />
-          {points.map(([x, y], k) => (
+          {points.map(([x, y], k) =>
+            k === marks.length ? (
+              <text key="more" x={x} y={y} dy="0.35em" textAnchor="middle" direction="ltr" className="s-ring-more s-nums" data-testid="ring-more" aria-hidden>
+                +{more}
+              </text>
+            ) : (
             <circle
               key={k}
               cx={x}
@@ -132,7 +139,8 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
               className={`s-ring-mark s-ring-mark-${marks[k]}`}
               aria-hidden
             />
-          ))}
+            ),
+          )}
         </g>
       );
     });
@@ -182,7 +190,7 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
         <div className="s-circle-cells">
           {newestFirst.map((m) => {
             const s = monthShort(m.ym);
-            const marks = marksOf(m, 4);
+            const { kinds: marks, more } = marksOf(m, 4);
             return (
               <button
                 key={m.ym}
@@ -199,6 +207,7 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
                   {marks.map((k, i) => (
                     <span key={i} data-mark={k} className={`s-dot s-dot-${k}`} />
                   ))}
+                  {more > 0 ? <span dir="ltr" className="s-circle-cell-more s-nums">+{more}</span> : null}
                 </span>
               </button>
             );
@@ -236,6 +245,7 @@ function CentreText({ moved, last, asOf, quiet, now }: { moved: { to: string; on
       ) : (
         <span className="s-ring-centre-label">{quiet ? UI.circleNoOrders : UI.noOrdersYet}</span>
       )}
+      {/* two lines on purpose: one line wraps mid-date inside the ring's centre (rendered at 390px) */}
       <span className="s-ring-centre-source">{UI.circleSource}</span>
       {asOf ? (
         <span className="s-ring-centre-source s-nums">

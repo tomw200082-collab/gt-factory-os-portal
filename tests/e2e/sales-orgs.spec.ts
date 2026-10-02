@@ -106,8 +106,8 @@ test.describe("GT Pulse Unit B journeys @mocked", () => {
           org_id: IDS.disputed, name: "סניף במחלוקת לדוגמה", link_status: "disputed", reason: "phone_shared", reasons: ["phone_shared"],
           task_id: "t1", task_ids: ["t1"], created_at: "2026-10-02T07:44:00Z",
           candidates: [
-            { customer_gid: "gid://shopify/Customer/91", name: "לקוח מועמד א", order_count: 14, last_order_at: "2026-09-01T08:00:00Z", basis: "held", evidence: "candidate" },
-            { customer_gid: "gid://shopify/Customer/92", name: "לקוח מועמד ב", order_count: 2, last_order_at: "2025-03-01T08:00:00Z", basis: "phone", evidence: "candidate" },
+            { customer_gid: "gid://shopify/Customer/91", name: "לקוח מועמד א", order_count: 14, last_order_at: "2026-09-01T08:00:00Z", basis: "held", held_by: null, evidence: "candidate" },
+            { customer_gid: "gid://shopify/Customer/92", name: "לקוח מועמד ב", order_count: 2, last_order_at: "2025-03-01T08:00:00Z", basis: "phone", held_by: { org_id: IDS.one, name: "קפה היעד לדוגמה" }, evidence: "candidate" },
           ],
         }],
         exceptions: [], coverage: { verified_active: 570, census_active: 588, source: "shopifyql", as_of: "2026-10-02T07:47:20Z" },
@@ -119,6 +119,10 @@ test.describe("GT Pulse Unit B journeys @mocked", () => {
     await card.getByTestId("candidate").nth(1).getByRole("button", { name: "זה העסק" }).click();
     const dialog = page.getByRole("alertdialog");
     await expect(dialog).toContainText("לקוח מועמד ב");
+    // the business it would merge into is named before the irreversible step (INTER-B-001)
+    await expect(card.getByTestId("candidate-held-by")).toContainText("קפה היעד לדוגמה");
+    await expect(dialog).toContainText("קפה היעד לדוגמה");
+    await expect(dialog.getByRole("button", { name: "כן, לאחד" })).toBeVisible();
     expect(posts).toEqual([]);
     await dialog.getByRole("button", { name: "ביטול" }).click();
     await expect(dialog).toHaveCount(0);

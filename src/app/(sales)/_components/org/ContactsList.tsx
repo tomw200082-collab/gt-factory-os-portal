@@ -95,7 +95,7 @@ export function ContactsList({ contacts, loading, error, onRetry, manager, busyI
                 <li key={c.id} className="s-field s-contact-row">
                   <ContactText contact={c} onSource={() => onSource(c)} />
                   {manager ? (
-                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
                       <button
                         type="button"
                         className="s-btn s-btn-ghost s-btn-compact"

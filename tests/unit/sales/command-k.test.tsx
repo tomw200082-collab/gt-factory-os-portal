@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { CommandK } from "@/app/(sales)/_components/CommandK";
+import { UI } from "@/app/(sales)/_lib/labels";
 
 const calls: string[] = [];
 beforeEach(() => {
@@ -47,5 +48,14 @@ describe("command palette", () => {
     expect(calls).toEqual([`/api/sales/orgs/search?q=${encodeURIComponent("בית קפה")}`]);
     fireEvent.click(hit);
     await waitFor(() => expect(push).toHaveBeenCalledWith("/sales/orgs/00000000-0000-4000-8000-0000000000aa"));
+  });
+
+  it("says it is still looking while the server answers, and keeps a long name whole on hover", async () => {
+    render(withQuery(<CommandK leads={[]} onClose={() => {}} />));
+    fireEvent.change(screen.getByTestId("command-input"), { target: { value: "בית קפה" } });
+    expect(screen.getByTestId("command-searching").textContent).toContain(UI.commandSearching);
+    const hit = await screen.findByTestId("command-hit-00000000-0000-4000-8000-0000000000aa");
+    expect(screen.queryByTestId("command-searching")).toBeNull();
+    expect(hit.querySelector("[title='בית קפה לדוגמה']")).toBeTruthy();
   });
 });

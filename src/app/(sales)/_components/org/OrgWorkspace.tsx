@@ -175,7 +175,10 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
             decide.mutate(
               { contactId, action },
               {
-                onSuccess: () => setToast(UI.contactDone),
+                onSuccess: () => {
+                  const c = [...(contacts.data?.review ?? []), ...(contacts.data?.verified ?? [])].find((x) => x.id === contactId);
+                  setToast(UI.contactDecided(action, c?.name ?? UI.contactUnnamed));
+                },
                 onError: (err) => setToast(err.message),
               },
             )

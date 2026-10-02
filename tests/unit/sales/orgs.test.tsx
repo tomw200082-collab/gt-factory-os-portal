@@ -140,6 +140,33 @@ describe("business list: three different kinds of nothing", () => {
   });
 });
 
+describe("business list: what a screen reader hears", () => {
+  it("announces how many businesses the filter holds, and how many a search found", async () => {
+    respond = (url) => url.startsWith("/api/sales/orgs/search") ? [{ id: "x", name: "קפה", phone: null }] : { rows: [row()], next: null, total: 31 };
+    render(withQuery(<OrgsPage />));
+    const live = screen.getByTestId("orgs-live");
+    expect(live.getAttribute("role")).toBe("status");
+    await waitFor(() => expect(live.textContent).toBe(UI.orgsCount(31)));
+    fireEvent.change(screen.getByTestId("orgs-search"), { target: { value: "קפה" } });
+    await waitFor(() => expect(live.textContent).toBe(UI.searchResults(1)));
+  });
+
+  it("says a single letter is not yet a search", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    fireEvent.change(screen.getByTestId("orgs-search"), { target: { value: "ק" } });
+    expect((await screen.findByTestId("orgs-search-hint")).textContent).toBe(UI.searchMinHint);
+  });
+
+  it("names the select toggle by what it does, without a second pressed state", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    const toggle = screen.getByRole("button", { name: UI.orgsSelect });
+    expect(toggle.hasAttribute("aria-pressed")).toBe(false);
+  });
+});
+
 describe("business list rows", () => {
   it("links each business to its workspace", () => {
     render(<OrgList rows={[row()]} manager={false} />);
@@ -214,6 +241,20 @@ describe("bulk owner assignment", () => {
       url: "/api/sales/orgs/owner",
       body: { org_ids: ["00000000-0000-4000-8000-000000000001"], owner_email: "rep@synthetic.invalid" },
     });
+  });
+
+  it("says why assigning is not possible yet, and steps aside while searching", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    fireEvent.click(screen.getByRole("button", { name: UI.orgsSelect }));
+    fireEvent.click(screen.getByRole("checkbox", { name: UI.selectOrgNamed("קפה הדגמה רמת השרון") }));
+    const assign = within(screen.getByTestId("bulk-owner-bar")).getByRole("button", { name: UI.ownerAssign }) as HTMLButtonElement;
+    expect(assign.disabled).toBe(true);
+    expect(assign.getAttribute("title")).toBe(UI.ownerAssignNeedsOwner);
+    expect(assign.hasAttribute("aria-busy")).toBe(false);
+    fireEvent.change(screen.getByTestId("orgs-search"), { target: { value: "קפה" } });
+    await waitFor(() => expect(screen.queryByTestId("bulk-owner-bar")).toBeNull());
   });
 
   it("is not offered to a rep", async () => {

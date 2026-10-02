@@ -4,10 +4,12 @@
 // distributor it moved to, one state in words, the owner, and how current the
 // Shopify numbers below are (tap for the source).
 
-import Link from "next/link";
-import { ChevronRight, Info, Network, Truck, UserRound } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Info, Network, Truck, UserRound } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtPhone } from "../../_lib/format";
 import { UI } from "../../_lib/labels";
+import { cameFromSalesScreen } from "../../_lib/salesHistory";
+import { BackLink } from "../BackLink";
 import { historyShown, type HistoryView } from "../../_lib/orgTruth";
 import type { OrgDetail } from "../../_lib/types";
 import { OrgStateBadge, orgStateKey } from "../OrgStateBadge";
@@ -20,15 +22,26 @@ export interface OrgHeaderProps {
 }
 
 export function OrgHeader({ org, view, ownerName, onSource }: OrgHeaderProps) {
+  const title = useRef<HTMLHeadingElement>(null);
+  const name = org.header.name;
+  // A tab says which business it holds (A11Y-B-004); arriving from another sales
+  // screen, focus lands on the name so a screen reader announces where it is (A11Y-B-011).
+  useEffect(() => {
+    const before = document.title;
+    document.title = UI.orgPageTitle(name);
+    return () => {
+      document.title = before;
+    };
+  }, [name]);
+  useEffect(() => {
+    if (cameFromSalesScreen(window.location.pathname)) title.current?.focus({ preventScroll: true });
+  }, [org.header.id]);
   return (
     <header data-testid="org-header" className="s-opening s-org-band flex flex-col gap-3">
-      <Link href="/sales/orgs" className="s-org-back" data-testid="org-back">
-        <ChevronRight size={16} aria-hidden />
-        {UI.backToOrgs}
-      </Link>
+      <BackLink fallbackHref="/sales/orgs" fallbackLabel={UI.backToOrgs} testId="org-back" />
 
       <div className="flex flex-col gap-1.5">
-        <h1 className="s-org-title">{org.header.name}</h1>
+        <h1 ref={title} tabIndex={-1} className="s-org-title">{org.header.name}</h1>
         {org.chain ? (
           <p className="s-org-line">
             <Network size={14} aria-hidden />

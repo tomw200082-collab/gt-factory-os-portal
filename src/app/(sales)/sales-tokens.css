@@ -1512,8 +1512,9 @@
     max-width: 640px;
   }
 }
-/* The list's filters: a 2 × 2 (or 1 × 3) block on a phone, where four pills
-   would wrap into a lopsided pill, and one row once they fit. */
+/* The list's filters: a 2 × 2 (or 1 × 3) block on the narrowest phones, where
+   four pills would wrap into a lopsided pill, and one row once they fit
+   (measured: the four need 308px, a 390px phone gives 322px). */
 [data-app="sales"] .s-opening .s-org-filters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1529,7 +1530,7 @@
   padding-inline: 10px;
   white-space: nowrap;
 }
-@media (min-width: 440px) {
+@media (min-width: 385px) {
   [data-app="sales"] .s-opening .s-org-filters,
   [data-app="sales"] .s-opening .s-org-filters[data-count="3"] {
     display: flex;
@@ -1949,12 +1950,29 @@
 [data-app="sales"] .s-ring-seg:focus {
   outline: none;
 }
+/* Focus is ink and dashed, so it never reads as the current month's solid
+   turquoise edge (A11Y-B-009). */
 [data-app="sales"] .s-ring-seg:focus-visible {
-  stroke: hsl(var(--s-accent));
-  stroke-width: 4;
+  stroke: hsl(var(--s-fg));
+  stroke-width: 3;
+  stroke-dasharray: 5 3;
 }
 [data-app="sales"] .s-ring-mark {
   pointer-events: none;
+}
+[data-app="sales"] .s-circle-cell-more {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-ring-more {
+  pointer-events: none;
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-size: 9.5px;
+  font-weight: 600;
+  fill: hsl(var(--s-fg-muted));
 }
 [data-app="sales"] .s-ring-mark-filled {
   fill: hsl(var(--s-status-won));
@@ -1972,8 +1990,9 @@
 /* Arrival: the months settle in once, oldest first. Nothing loops. */
 @media (prefers-reduced-motion: no-preference) {
   [data-app="sales"] .s-ring-wrap[data-motion="on"] .s-ring-month {
+    transform-box: view-box;
     transform-origin: 170px 170px;
-    animation: s-ring-in 520ms var(--s-settle) both;
+    animation: s-ring-in 520ms var(--s-spring) both;
     animation-delay: calc(var(--i, 0) * 18ms);
   }
 }
@@ -2281,8 +2300,9 @@
   outline: none;
 }
 [data-app="sales"] .s-tl-hit:focus-visible {
-  stroke: hsl(var(--s-accent));
+  stroke: hsl(var(--s-fg));
   stroke-width: 2;
+  stroke-dasharray: 5 3;
 }
 [data-app="sales"] .s-tl-callout {
   display: flex;

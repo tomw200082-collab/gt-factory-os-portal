@@ -49,6 +49,15 @@ describe("business circle", () => {
     expect(centre.textContent).not.toMatch(/לפני \d+ ימים|לפני יום/);
   });
 
+  it("says how many more orders a crowded month holds than it can draw", () => {
+    const data = circle();
+    data.months[23] = { ...data.months[23], completed: 9, refunded: 0, cancelled: 0 };
+    render(<BusinessCircle data={data} pending={[]} moved={null} onMonth={() => {}} now={NOW} />);
+    const more = within(screen.getByTestId("circle-ring")).getAllByTestId("ring-more");
+    expect(more).toHaveLength(1);
+    expect(more[0].textContent).toBe("+4");
+  });
+
   it("explains its marks in a visible legend", () => {
     render(<BusinessCircle data={circle()} pending={[]} moved={null} onMonth={() => {}} now={NOW} />);
     const legend = screen.getByTestId("circle-legend");

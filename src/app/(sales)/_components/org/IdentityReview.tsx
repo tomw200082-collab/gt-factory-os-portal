@@ -12,13 +12,15 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronRight, Lock, ShieldAlert, ShieldQuestion } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Link2, Loader2, Lock, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { useSession } from "@/lib/auth/session-provider";
 import { useIdentityReview, useResolveIdentity } from "../../_lib/api";
 import { fmtDate, fmtDateTime } from "../../_lib/format";
 import { UI, exceptionLabel, identityReasonLabel } from "../../_lib/labels";
 import { useAutoClear } from "../../_lib/useAutoClear";
 import type { Candidate, IdentityAction, IdentityOrg } from "../../_lib/types";
+import { BackLink } from "../BackLink";
 import { ListEmpty, QueueError } from "../EmptyStates";
 import { Toast } from "../Toast";
 import { Sheet } from "./Sheet";
@@ -47,17 +49,24 @@ export function IdentityReview() {
   const resolve = useResolveIdentity();
   const [pending, setPending] = useState<Pending | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [toast, setToast] = useState<string | null>(null);
+  const router = useRouter();
+  const [toast, setToast] = useState<{ message: string; href?: string } | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
   useAutoClear(toast, clearToast);
 
   if (!manager) {
     return (
-      <div data-testid="review-forbidden" role="alert" className="s-card flex flex-col items-center gap-3 px-6 py-12 text-center">
-        <span className="s-empty-icon" aria-hidden><Lock size={26} /></span>
-        <p className="text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{UI.reviewForbiddenTitle}</p>
-        <p className="text-[14px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.reviewForbiddenHint}</p>
-        <Link href="/sales/orgs" className="s-btn s-btn-ghost">{UI.backToOrgs}</Link>
+      <div className="flex flex-col gap-4">
+        <header className="s-opening s-opening-compact flex flex-col gap-2">
+          <BackLink fallbackHref="/sales/orgs" fallbackLabel={UI.backToOrgs} />
+          <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{UI.reviewTitle}</h1>
+        </header>
+        <div data-testid="review-forbidden" className="s-card flex flex-col items-center gap-3 px-6 py-12 text-center">
+          <span className="s-empty-icon" aria-hidden><Lock size={26} /></span>
+          <p className="text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{UI.reviewForbiddenTitle}</p>
+          <p className="text-[14px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.reviewForbiddenHint}</p>
+          <Link href="/sales/orgs" className="s-btn s-btn-ghost">{UI.backToOrgs}</Link>
+        </div>
       </div>
     );
   }
@@ -72,12 +81,15 @@ export function IdentityReview() {
     resolve.mutate(vars, {
       onSuccess: (result) => {
         const name = p.org.name;
-        setToast(
-          p.kind === "reject" ? UI.reviewRejected(name)
-            : p.kind === "chain" ? UI.reviewChained(name)
-            : result.merged_into ? UI.reviewMerged(name)
-            : UI.reviewLinked(name),
-        );
+        if (result.merged_into) {
+          // the record just closed for good: say where it went, and offer the way there
+          const holder = (p.kind === "link" && p.candidate.held_by?.name) || UI.mergeTargetUnknown;
+          setToast({ message: UI.reviewMerged(name, holder), href: `/sales/orgs/${encodeURIComponent(result.merged_into)}` });
+          return;
+        }
+        setToast({
+          message: p.kind === "reject" ? UI.reviewRejected(name) : p.kind === "chain" ? UI.reviewChained(name) : UI.reviewLinked(name),
+        });
       },
       onError: (err) => setErrors((e) => ({ ...e, [orgId]: err.message })),
     });
@@ -88,10 +100,7 @@ export function IdentityReview() {
   return (
     <div className="flex flex-col gap-4">
       <header className="s-opening s-opening-compact flex flex-col gap-2">
-        <Link href="/sales/orgs" className="s-org-back">
-          <ChevronRight size={16} aria-hidden />
-          {UI.backToOrgs}
-        </Link>
+        <BackLink fallbackHref="/sales/orgs" fallbackLabel={UI.backToOrgs} />
         <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{UI.reviewTitle}</h1>
         <p className="text-[14px] leading-relaxed" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.reviewIntro}</p>
         {data?.coverage ? (
@@ -125,7 +134,8 @@ export function IdentityReview() {
         <ReviewCard
           key={org.org_id}
           org={org}
-          busy={resolve.isPending && resolve.variables?.orgId === org.org_id}
+          saving={resolve.isPending && resolve.variables?.orgId === org.org_id}
+          busy={resolve.isPending}
           error={errors[org.org_id] ?? ""}
           onAsk={setPending}
         />
@@ -152,12 +162,15 @@ export function IdentityReview() {
         </section>
       ) : null}
 
-      {pending ? (
+      {pending ? (() => {
+        const holder = pending.kind === "link" ? pending.candidate.held_by : null;
+        return (
         <Sheet
           alert
           testId="review-confirm"
           title={
-            pending.kind === "link" ? UI.linkTitle(pending.org.name, pending.candidate.name ?? UI.candidateUnnamed)
+            holder ? UI.mergeTitle(pending.org.name, holder.name)
+              : pending.kind === "link" ? UI.linkTitle(pending.org.name, pending.candidate.name ?? UI.candidateUnnamed)
               : pending.kind === "reject" ? UI.rejectTitle(pending.org.name)
               : UI.chainTitle(pending.org.name)
           }
@@ -172,30 +185,43 @@ export function IdentityReview() {
                   setPending(null);
                 }}
               >
-                {pending.kind === "link" ? UI.linkConfirm : pending.kind === "reject" ? UI.rejectConfirm : UI.chainConfirm}
+                {holder ? UI.mergeConfirm : pending.kind === "link" ? UI.linkConfirm : pending.kind === "reject" ? UI.rejectConfirm : UI.chainConfirm}
               </button>
               <button type="button" className="s-btn s-btn-ghost" onClick={() => setPending(null)}>{UI.cancel}</button>
             </>
           }
         >
           <p className="text-[15px] leading-relaxed" style={{ color: "hsl(var(--s-fg))" }}>
-            {pending.kind === "link" ? UI.linkConsequence : pending.kind === "reject" ? UI.rejectConsequence : UI.chainConsequence}
+            {holder ? UI.mergeConsequence(pending.org.name, holder.name)
+              : pending.kind === "link" ? UI.linkConsequence
+              : pending.kind === "reject" ? UI.rejectConsequence
+              : UI.chainConsequence}
           </p>
+          {pending.kind === "link" && pending.candidate.held_by === undefined ? (
+            <p className="text-[14px] leading-relaxed" style={{ color: "hsl(var(--s-review))" }}>{UI.linkMaybeMerge}</p>
+          ) : null}
           {pending.kind === "link" ? <CandidateFacts candidate={pending.candidate} /> : null}
         </Sheet>
-      ) : null}
+        );
+      })() : null}
 
-      {toast ? <Toast message={toast} onClose={clearToast} /> : null}
+      {toast ? (
+        <Toast
+          message={toast.message}
+          action={toast.href ? { label: UI.reviewMergedOpen, onAction: () => router.push(toast.href!) } : undefined}
+          onClose={clearToast}
+        />
+      ) : null}
     </div>
   );
 }
 
-function ReviewCard({ org, busy, error, onAsk }: { org: IdentityOrg; busy: boolean; error: string; onAsk: (p: Pending) => void }) {
+function ReviewCard({ org, busy, saving, error, onAsk }: { org: IdentityOrg; busy: boolean; saving: boolean; error: string; onAsk: (p: Pending) => void }) {
   const a = actionsFor(org);
   const disputed = org.link_status === "disputed";
   const Icon = disputed ? ShieldAlert : ShieldQuestion;
   return (
-    <article data-testid={`review-${org.org_id}`} aria-labelledby={`review-${org.org_id}-name`} className="s-panel s-review-card" aria-busy={busy || undefined}>
+    <article data-testid={`review-${org.org_id}`} aria-labelledby={`review-${org.org_id}-name`} className="s-panel s-review-card" aria-busy={saving || undefined}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id={`review-${org.org_id}-name`} className="text-[17px] font-semibold leading-snug [overflow-wrap:anywhere]">
@@ -263,6 +289,13 @@ function ReviewCard({ org, busy, error, onAsk }: { org: IdentityOrg; busy: boole
         </div>
       ) : null}
 
+      {saving ? (
+        <p role="status" className="mt-3 flex items-center gap-2 text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }}>
+          <Loader2 size={14} aria-hidden className="motion-safe:animate-spin" />
+          {UI.reviewSaving}
+        </p>
+      ) : null}
+
       {error ? (
         <p role="alert" className="mt-3 text-[13px]" style={{ color: "hsl(var(--s-danger-quiet))" }}>{error}</p>
       ) : null}
@@ -279,6 +312,12 @@ function CandidateFacts({ candidate }: { candidate: Candidate }) {
       <p className="mt-0.5 text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
         {candidate.basis === "held" ? UI.candidateHeld : UI.candidatePhone}
       </p>
+      {candidate.held_by ? (
+        <p data-testid="candidate-held-by" className="mt-1 flex items-center gap-1 text-[12px] font-medium [overflow-wrap:anywhere]" style={{ color: "hsl(var(--s-review))" }}>
+          <Link2 size={13} aria-hidden className="shrink-0" />
+          {UI.candidateHeldBy(candidate.held_by.name)}
+        </p>
+      ) : null}
       <p className="s-nums mt-1 text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>
         {candidate.order_count > 0 ? UI.candidateOrders(candidate.order_count) : UI.candidateNoOrders}
         {candidate.last_order_at ? ` · ${UI.candidateLast(fmtDate(candidate.last_order_at))}` : ""}

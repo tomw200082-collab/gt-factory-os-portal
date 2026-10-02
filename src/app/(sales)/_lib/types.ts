@@ -270,6 +270,8 @@ export interface Candidate {
   order_count: number;
   last_order_at: string | null;
   basis: "held" | "phone";
+  /** another live org that already holds this customer: picking it merges into that org (absent from older APIs) */
+  held_by?: { org_id: string; name: string } | null;
   evidence: "candidate";
 }
 

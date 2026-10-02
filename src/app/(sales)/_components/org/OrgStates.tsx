@@ -14,7 +14,7 @@ import type { OrgDetail } from "../../_lib/types";
 
 function PageState({ testId, icon, title, hint }: { testId: string; icon: React.ReactNode; title: string; hint: string }) {
   return (
-    <div data-testid={testId} role="alert" className="s-card flex flex-col items-center gap-3 px-6 py-12 text-center">
+    <div data-testid={testId} className="s-card flex flex-col items-center gap-3 px-6 py-12 text-center">
       <span className="s-empty-icon" aria-hidden>{icon}</span>
       <div>
         <p className="text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{title}</p>

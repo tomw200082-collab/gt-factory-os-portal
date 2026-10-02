@@ -62,7 +62,9 @@ export function OrgSummary({ org, view, onSource, onOpenOrder }: OrgSummaryProps
                 <button type="button" className="s-stat-link" onClick={() => onOpenOrder(last)} aria-haspopup="dialog">
                   <span className="s-nums">{fmtDate(last.created_at)}</span>
                   <span className="s-stat-sub s-nums">
-                    {UI.daysSince(daysSinceIsrael(last.created_at))} · {last.name ?? UI.orderNameless} · {UI.lastOrderLines(last.line_count)}
+                    {/* a business that moved to a distributor is not silent: no day count for it (T5) */}
+                    {org.moved ? null : <>{UI.daysSince(daysSinceIsrael(last.created_at))} · </>}
+                    {last.name ?? UI.orderNameless} · {UI.lastOrderLines(last.line_count)}
                   </span>
                 </button>
               ) : (

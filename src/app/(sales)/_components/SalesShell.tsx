@@ -13,6 +13,7 @@ import { Activity, ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Setti
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
 import { useLeads, useQuickAdd } from "../_lib/api";
+import { noteSalesPath } from "../_lib/salesHistory";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
 import { Toast } from "./Toast";
@@ -38,6 +39,18 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** The sales pages are Hebrew; the root layout says English for the rest of the portal (A11Y-B-003). */
+export function useSalesDocumentLang() {
+  useEffect(() => {
+    const el = document.documentElement;
+    const before = el.lang;
+    el.lang = "he";
+    return () => {
+      el.lang = before;
+    };
+  }, []);
+}
+
 export function SalesShell({ children }: { children: ReactNode }) {
   const { session } = useSession();
   const canManageSales = session?.role === "admin" || session?.role === "planner";
@@ -45,6 +58,8 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  useSalesDocumentLang();
+  useEffect(() => noteSalesPath(pathname), [pathname]);
 
   // Confirmation should not outstay its welcome above the tab bar. Without
   // this the quick-add toast sits there for the rest of the session, still

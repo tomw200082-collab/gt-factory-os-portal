@@ -27,6 +27,7 @@ export function Sheet({ title, onClose, children, testId, alert = false, footer 
   useReturnFocus();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const bodyId = useId();
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -68,6 +69,7 @@ export function Sheet({ title, onClose, children, testId, alert = false, footer 
         role={alert ? "alertdialog" : "dialog"}
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={alert ? bodyId : undefined}
         dir="rtl"
         data-testid={testId}
         className="s-sheet s-org-sheet flex w-full max-w-lg flex-col"
@@ -86,7 +88,7 @@ export function Sheet({ title, onClose, children, testId, alert = false, footer 
             <X size={18} aria-hidden />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
+        <div id={bodyId} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
         {footer ? <div className="s-sheet-footer flex flex-wrap gap-2 px-4 pt-3">{footer}</div> : null}
       </div>
     </div>

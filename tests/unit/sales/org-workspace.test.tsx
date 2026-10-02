@@ -117,8 +117,13 @@ describe("workspace: a verified customer with published history", () => {
     const review = await screen.findByTestId("contacts-review");
     fireEvent.click(within(review).getByRole("button", { name: UI.contactVerifyNamed("נועה לדוגמה") }));
     const confirm = await screen.findByRole("alertdialog", { name: UI.contactVerifyTitle });
+    // the question's body is tied to the dialog, so it is read with its title (A11Y-B-005)
+    const desc = document.getElementById(confirm.getAttribute("aria-describedby") ?? "");
+    expect(desc?.textContent).toContain("נועה לדוגמה");
     fireEvent.click(within(confirm).getByRole("button", { name: UI.contactVerifyConfirm }));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url === "/api/sales/contacts/00000000-0000-4000-8000-0000000000c1/verify")).toBe(true));
+    // the confirmation says who and what (INTER-B-005)
+    expect((await screen.findByTestId("sales-toast")).textContent).toContain(UI.contactDecided("verify", "נועה לדוגמה"));
   });
 
   it("does not offer contact decisions to a rep", async () => {
@@ -196,6 +201,14 @@ describe("workspace: honest history states", () => {
     expect(header.textContent).toContain("מפיץ הדגמה");
     expect(header.textContent).toContain("רשת הדגמה · 4 סניפים");
   });
+
+  it("never counts days of silence for a business that moved to a distributor (T5)", async () => {
+    routes[`/api/sales/orgs/${ORG_ID}`] = { body: detail({ chain: { name: "הדגמה", kind: "רשת", branch_count: 4 }, moved: { to: "מפיץ הדגמה", on: "2026-03-01" } }) };
+    view(<OrgWorkspace orgId={ORG_ID} />);
+    const summary = await screen.findByTestId("org-summary");
+    expect(summary.textContent).not.toMatch(/לפני \d+ ימים|לפני יום|היום/);
+    expect(summary.textContent).toContain(UI.lastOrder);
+  });
 });
 
 describe("workspace: access and closed records", () => {
@@ -204,6 +217,7 @@ describe("workspace: access and closed records", () => {
     view(<OrgWorkspace orgId={ORG_ID} />);
     const state = await screen.findByTestId("org-forbidden");
     expect(state.textContent).toContain(UI.orgForbiddenTitle);
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByTestId("org-header")).toBeNull();
     // nothing else about the business is asked for
     expect(calls.filter((c) => c.url.startsWith(`/api/sales/orgs/${ORG_ID}/`))).toHaveLength(0);

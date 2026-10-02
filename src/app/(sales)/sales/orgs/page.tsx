@@ -108,6 +108,11 @@ function OrgsScreen() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {query.trim().length === 1 ? (
+          <p data-testid="orgs-search-hint" className="-mt-1 text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+            {UI.searchMinHint}
+          </p>
+        ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="s-segmented s-org-filters" data-count={filters.length} role="group" aria-label={UI.filterLabel}>
@@ -156,7 +161,6 @@ function OrgsScreen() {
               <button
                 type="button"
                 className="s-btn s-btn-ghost s-glass-btn"
-                aria-pressed={selecting}
                 onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
               >
                 {selecting ? UI.orgsSelectDone : UI.orgsSelect}
@@ -224,7 +228,14 @@ function OrgsScreen() {
         </>
       )}
 
-      {selecting && selected.size > 0 ? (
+      {/* how many the screen holds, said once to a screen reader (A11Y-B-001) */}
+      <p data-testid="orgs-live" role="status" aria-live="polite" className="sr-only">
+        {searching
+          ? search.isSuccess ? (search.data.length > 0 ? UI.searchResults(search.data.length) : UI.searchEmpty) : ""
+          : page.isSuccess ? UI.orgsCount(total) : ""}
+      </p>
+
+      {selecting && selected.size > 0 && !searching ? (
         <BulkOwnerBar
           count={selected.size}
           roster={roster}

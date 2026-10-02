@@ -6,11 +6,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const role = vi.hoisted(() => ({ value: "admin" as string }));
+const push = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/session-provider", () => ({
   useSession: () => ({ session: { role: role.value, email: "manager@synthetic.invalid" } }),
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
   usePathname: () => "/sales/orgs/review",
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -35,6 +36,8 @@ beforeEach(() => {
   role.value = "admin";
   posts.length = 0;
   postStatus = 200;
+  push.mockClear();
+  postBody = { org_id: "x", action: "pick", link_status: "verified", customer_gid: "gid://shopify/Customer/9002", merged_into: null };
   payload = {
     orgs: [
       org(ID(1), ["phone_shared"], [cand({ basis: "held" }), cand({ customer_gid: "gid://shopify/Customer/9002", name: "לקוח מועמד ב", order_count: 2 })], { link_status: "disputed" }),
@@ -89,6 +92,8 @@ describe("identity review", () => {
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog.textContent).toContain("לקוח מועמד ב");
     expect(dialog.textContent).toContain(UI.linkConsequence);
+    // an API that does not say who holds the customer: the merge is still named as possible
+    expect(dialog.textContent).toContain(UI.linkMaybeMerge);
     expect(posts).toHaveLength(0);
     fireEvent.click(within(dialog).getByRole("button", { name: UI.linkConfirm }));
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -137,6 +142,54 @@ describe("identity review", () => {
     expect(alert.textContent).not.toContain("SALES_");
   });
 
+  it("names the business a candidate already belongs to, and says the merge closes this record for good", async () => {
+    const HOLDER = "00000000-0000-4000-8000-0000000000b2";
+    payload.orgs[0].candidates[1] = cand({ customer_gid: "gid://shopify/Customer/9002", name: "לקוח מועמד ב", held_by: { org_id: HOLDER, name: "קפה היעד" } });
+    postBody = { org_id: ID(1), action: "pick", link_status: "retired", customer_gid: "gid://shopify/Customer/9002", merged_into: HOLDER };
+    view(<IdentityReview />);
+    const card = await screen.findByTestId(`review-${ID(1)}`);
+    const second = within(card).getAllByTestId("candidate")[1];
+    expect(second.textContent).toContain(UI.candidateHeldBy("קפה היעד"));
+    fireEvent.click(within(second).getByRole("button", { name: UI.chooseCandidate }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("קפה היעד");
+    expect(dialog.textContent).toContain(UI.mergeConsequence("עסק 01", "קפה היעד"));
+    fireEvent.click(within(dialog).getByRole("button", { name: UI.mergeConfirm }));
+    const toast = await screen.findByTestId("sales-toast");
+    expect(toast.textContent).toContain(UI.reviewMerged("עסק 01", "קפה היעד"));
+    fireEvent.click(within(toast).getByTestId("sales-toast-action"));
+    expect(push).toHaveBeenCalledWith(`/sales/orgs/${HOLDER}`);
+  });
+
+  it("says plainly that a link to a customer no one holds is only a link", async () => {
+    payload.orgs[0].candidates[1] = cand({ customer_gid: "gid://shopify/Customer/9002", name: "לקוח מועמד ב", held_by: null });
+    view(<IdentityReview />);
+    const card = await screen.findByTestId(`review-${ID(1)}`);
+    fireEvent.click(within(within(card).getAllByTestId("candidate")[1]).getByRole("button", { name: UI.chooseCandidate }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(UI.linkConsequence);
+    expect(dialog.textContent).not.toContain(UI.linkMaybeMerge);
+  });
+
+  it("holds every card still while one decision is saving", async () => {
+    let release: () => void = () => {};
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        await new Promise<void>((r) => { release = r; });
+        return new Response(JSON.stringify(postBody), { status: 200 });
+      }
+      return new Response(JSON.stringify(payload), { status: 200 });
+    }));
+    view(<IdentityReview />);
+    const card = await screen.findByTestId(`review-${ID(2)}`);
+    fireEvent.click(within(card).getByRole("button", { name: UI.confirmCustomer }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: UI.linkConfirm }));
+    await waitFor(() => expect(within(card).getByRole("status").textContent).toContain(UI.reviewSaving));
+    const other = screen.getByTestId(`review-${ID(1)}`);
+    for (const b of within(other).getAllByRole("button")) expect((b as HTMLButtonElement).disabled).toBe(true);
+    release();
+  });
+
   it("lists open mirror exceptions in words", async () => {
     view(<IdentityReview />);
     expect((await screen.findByTestId("review-exceptions")).textContent).toContain("הנתונים לא רועננו בזמן");
@@ -147,6 +200,9 @@ describe("identity review", () => {
     view(<IdentityReview />);
     expect(await screen.findByTestId("review-forbidden")).toBeTruthy();
     expect((fetch as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0);
+    // the same band as every sales screen, and a page state rather than an alarm
+    expect(screen.getByRole("heading", { level: 1 }).closest(".s-opening")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("says when nothing waits for a decision", async () => {
