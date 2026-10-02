@@ -52,7 +52,8 @@ export function IdentityReview() {
   const router = useRouter();
   const [toast, setToast] = useState<{ message: string; href?: string } | null>(null);
   const clearToast = useCallback(() => setToast(null), []);
-  useAutoClear(toast, clearToast);
+  // a toast that carries the way to the merged business stays until it is closed (WCAG 2.2.1)
+  useAutoClear(toast && !toast.href ? toast : null, clearToast);
 
   if (!manager) {
     return (
@@ -169,7 +170,7 @@ export function IdentityReview() {
           alert
           testId="review-confirm"
           title={
-            holder ? UI.mergeTitle(pending.org.name, holder.name)
+            holder ? UI.mergeTitle(pending.org.name, holder.name || UI.mergeTargetUnknown)
               : pending.kind === "link" ? UI.linkTitle(pending.org.name, pending.candidate.name ?? UI.candidateUnnamed)
               : pending.kind === "reject" ? UI.rejectTitle(pending.org.name)
               : UI.chainTitle(pending.org.name)
@@ -192,7 +193,7 @@ export function IdentityReview() {
           }
         >
           <p className="text-[15px] leading-relaxed" style={{ color: "hsl(var(--s-fg))" }}>
-            {holder ? UI.mergeConsequence(pending.org.name, holder.name)
+            {holder ? UI.mergeConsequence(pending.org.name, holder.name || UI.mergeTargetUnknown)
               : pending.kind === "link" ? UI.linkConsequence
               : pending.kind === "reject" ? UI.rejectConsequence
               : UI.chainConsequence}
@@ -315,7 +316,7 @@ function CandidateFacts({ candidate }: { candidate: Candidate }) {
       {candidate.held_by ? (
         <p data-testid="candidate-held-by" className="mt-1 flex items-center gap-1 text-[12px] font-medium [overflow-wrap:anywhere]" style={{ color: "hsl(var(--s-review))" }}>
           <Link2 size={13} aria-hidden className="shrink-0" />
-          {UI.candidateHeldBy(candidate.held_by.name)}
+          {UI.candidateHeldBy(candidate.held_by.name || UI.mergeTargetUnknown)}
         </p>
       ) : null}
       <p className="s-nums mt-1 text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>

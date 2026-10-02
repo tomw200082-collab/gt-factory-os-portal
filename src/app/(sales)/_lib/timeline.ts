@@ -6,7 +6,7 @@
 // open = open drafts from the river (F1). Time runs right to left, the newest
 // month at the left, as a time axis does in a right-to-left interface.
 
-import type { RingMonth } from "./ring";
+import { ymOf, type RingMonth } from "./ring";
 
 export interface TimelineMonth extends RingMonth {
   total: number;
@@ -16,14 +16,20 @@ export interface TimelineMonth extends RingMonth {
   trend: number | null;
 }
 
-export function timelineMonths(months: RingMonth[]): TimelineMonth[] {
+/** `asOf` is the mirror's last good read: a month it did not see to the end is partial too, so a stale
+ *  mirror never shows a drop it did not see (code review I-2). */
+export function timelineMonths(months: RingMonth[], asOf?: string | null): TimelineMonth[] {
   const last = months.length - 1;
-  return months.map((m, i) => ({
-    ...m,
-    total: m.filled + m.hollow + m.open,
-    partial: i === last,
-    trend: i >= 2 && i !== last ? (months[i - 2].filled + months[i - 1].filled + m.filled) / 3 : null,
-  }));
+  const seenUpTo = asOf ? ymOf(asOf) : null;
+  return months.map((m, i) => {
+    const partial = i === last || (seenUpTo !== null && m.ym >= seenUpTo);
+    return {
+      ...m,
+      total: m.filled + m.hollow + m.open,
+      partial,
+      trend: i >= 2 && !partial ? (months[i - 2].filled + months[i - 1].filled + m.filled) / 3 : null,
+    };
+  });
 }
 
 export interface TrendSummary {

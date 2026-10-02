@@ -99,3 +99,14 @@ export function OrgsLoading() {
     </div>
   );
 }
+
+/** A panel whose data could not be read says so, never "there is nothing": a
+ *  failed read is not an empty one (code review I-1). */
+export function PanelError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div data-testid="panel-error" role="status" className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.panelUnavailable(what)}</p>
+      <button type="button" className="s-btn s-btn-ghost s-btn-compact" onClick={onRetry}>{UI.retry}</button>
+    </div>
+  );
+}

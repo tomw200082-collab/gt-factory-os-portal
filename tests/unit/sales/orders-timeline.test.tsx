@@ -118,4 +118,49 @@ describe("orders timeline", () => {
     expect(targets[22].getAttribute("tabindex")).toBe("0");
     expect(targets[23].getAttribute("tabindex")).toBe("-1");
   });
+
+  it("does not zoom past the height of a typical month, where every column would only say it is cut", () => {
+    const busy = months().map((m) => ({ ...m, completed: 7, filled: 7 }));
+    render(<OrdersTimeline months={busy} onMonth={() => {}} />);
+    expect((screen.getByRole("button", { name: UI.timelineZoomIn }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("steps to the month before and after from full-size buttons, whatever the column width", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /ספטמבר 2026/ }));
+    const callout = screen.getByTestId("timeline-callout");
+    fireEvent.click(within(callout).getByRole("button", { name: UI.timelineMonthPrev }));
+    expect(callout.textContent).toContain("אוגוסט 2026");
+    fireEvent.click(within(callout).getByRole("button", { name: UI.timelineMonthNext }));
+    fireEvent.click(within(callout).getByRole("button", { name: UI.timelineMonthNext }));
+    expect(callout.textContent).toContain("אוקטובר 2026");
+    expect((within(callout).getByRole("button", { name: UI.timelineMonthNext }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("lets go of a month tapped a second time", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const sep = screen.getByRole("button", { name: /ספטמבר 2026/ });
+    fireEvent.click(sep);
+    fireEvent.click(sep);
+    expect(screen.getByTestId("timeline-callout").textContent).toContain(UI.timelinePick);
+  });
+
+  it("offers no way into a month that holds nothing", () => {
+    const m = months();
+    m[10] = { ...m[10], filled: 0, refunded: 0, hollow: 0, open: 0, completed: 0, cancelled: 0 } as typeof m[number];
+    render(<OrdersTimeline months={m} onMonth={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /אין הזמנות/ }));
+    const open = within(screen.getByTestId("timeline-callout")).getByRole("button", { name: UI.timelineOpenMonth }) as HTMLButtonElement;
+    expect(open.disabled).toBe(true);
+  });
+
+  it("keeps a month chosen by a press that also focused it", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const sep = screen.getByRole("button", { name: /ספטמבר 2026/ });
+    // a real press: pointer down, focus, click
+    fireEvent.pointerDown(sep, { pointerType: "mouse" });
+    fireEvent.focus(sep);
+    fireEvent.click(sep);
+    expect(screen.getByTestId("timeline-callout").textContent).toContain("ספטמבר 2026");
+  });
 });

@@ -6,13 +6,16 @@ import Link from "next/link";
 import { fmtDate } from "../../_lib/format";
 import { UI } from "../../_lib/labels";
 import type { SalesLeadRow } from "../../_lib/types";
+import { PanelError } from "../EmptyStates";
 import { StatusPill } from "../StatusPill";
 
-export function OrgLeads({ leads }: { leads: SalesLeadRow[] }) {
+export function OrgLeads({ leads, error = false, onRetry }: { leads: SalesLeadRow[]; error?: boolean; onRetry?: () => void }) {
   return (
     <section data-testid="org-leads" aria-labelledby="org-leads-title" className="s-panel s-org-block">
       <h2 id="org-leads-title" className="s-section-heading">{UI.leadsTitle}</h2>
-      {leads.length === 0 ? (
+      {error ? (
+        <PanelError what={UI.panelWhatLeads} onRetry={() => onRetry?.()} />
+      ) : leads.length === 0 ? (
         <p className="mt-2 text-[14px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.leadsEmpty}</p>
       ) : (
         <ul className="mt-2 flex flex-col gap-1">

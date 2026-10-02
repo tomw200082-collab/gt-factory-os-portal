@@ -166,7 +166,7 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
 
       {view === "timeline" ? (
         <>
-          <OrdersTimeline months={all} onMonth={onMonth} meta={<TimelineMeta moved={moved} last={last} asOf={data.as_of} now={now} />} />
+          <OrdersTimeline months={all} onMonth={onMonth} asOf={data.as_of} meta={<TimelineMeta moved={moved} last={last} asOf={data.as_of} now={now} />} />
         </>
       ) : (
       <>

@@ -8,15 +8,20 @@ import { Mail, MessageCircle, Phone, UserRoundCheck } from "lucide-react";
 import { fmtPhone } from "../../_lib/format";
 import { CONTACT_KIND_LABELS, UI } from "../../_lib/labels";
 import type { ContactRow } from "../../_lib/types";
+import { PanelError } from "../EmptyStates";
 
 export function PrimaryContact({
   contact,
   awaiting,
   loading,
+  error = false,
+  onRetry,
 }: {
   contact: ContactRow | null;
   awaiting: number;
   loading: boolean;
+  error?: boolean;
+  onRetry?: () => void;
 }) {
   const name = contact?.name ?? UI.contactUnnamed;
   return (
@@ -29,6 +34,8 @@ export function PrimaryContact({
         <div className="mt-3 h-16 animate-pulse rounded-[var(--s-radius)]" aria-busy="true" style={{ background: "hsl(var(--s-surface-sunken))" }}>
           <span className="sr-only">{UI.loading}</span>
         </div>
+      ) : error ? (
+        <PanelError what={UI.panelWhatContact} onRetry={() => onRetry?.()} />
       ) : contact ? (
         <div className="mt-2 flex flex-col gap-3">
           <div className="min-w-0">

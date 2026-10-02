@@ -211,6 +211,40 @@ describe("workspace: honest history states", () => {
   });
 });
 
+describe("workspace: a failed panel says it failed, never that there is nothing", () => {
+  it("does not say there is no next action when tasks could not be read", async () => {
+    routes["/api/sales/tasks"] = { status: 500, body: { error: "boom" } };
+    view(<OrgWorkspace orgId={ORG_ID} />);
+    const panel = await screen.findByTestId("next-action");
+    await waitFor(() => expect(within(panel).getByTestId("panel-error")).toBeTruthy());
+    expect(panel.textContent).not.toContain(UI.nextActionNone);
+  });
+
+  it("does not say there is no contact when contacts could not be read", { timeout: 12000 }, async () => {
+    routes[`/api/sales/orgs/${ORG_ID}/contacts`] = { status: 500, body: { error: "boom" } };
+    view(<OrgWorkspace orgId={ORG_ID} />);
+    const panel = await screen.findByTestId("primary-contact");
+    // a 5xx on the contacts is retried twice before it counts as failed
+    await waitFor(() => expect(within(panel).getByTestId("panel-error")).toBeTruthy(), { timeout: 8000 });
+  });
+
+  it("keeps the two years' place and says they could not be read, with a retry", { timeout: 12000 }, async () => {
+    routes[`/api/sales/orgs/${ORG_ID}/circle`] = { status: 500, body: { error: "boom" } };
+    view(<OrgWorkspace orgId={ORG_ID} />);
+    const slot = await screen.findByTestId("circle-unavailable", {}, { timeout: 8000 });
+    expect(within(slot).getByTestId("panel-error")).toBeTruthy();
+    expect(within(slot).getByRole("heading").textContent).toBe(UI.circleTitle);
+  });
+
+  it("does not say there are no leads when leads could not be read", async () => {
+    routes["/api/sales/leads"] = { status: 500, body: { error: "boom" } };
+    view(<OrgWorkspace orgId={ORG_ID} />);
+    const panel = await screen.findByTestId("org-leads");
+    await waitFor(() => expect(within(panel).getByTestId("panel-error")).toBeTruthy());
+    expect(panel.textContent).not.toContain(UI.leadsEmpty);
+  });
+});
+
 describe("workspace: access and closed records", () => {
   it("says the business cannot be shown, and shows nothing else, on 403", async () => {
     routes[`/api/sales/orgs/${ORG_ID}`] = { status: 403, body: { error: "Not authorised" } };

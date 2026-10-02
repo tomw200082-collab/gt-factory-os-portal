@@ -9,8 +9,9 @@ import { AlarmClock, ArrowLeft, CalendarCheck2 } from "lucide-react";
 import { fmtDateTime, fmtRelative } from "../../_lib/format";
 import { UI } from "../../_lib/labels";
 import type { NextAction as NextActionValue } from "../../_lib/nextAction";
+import { PanelError } from "../EmptyStates";
 
-export function NextAction({ action, loading }: { action: NextActionValue | null; loading: boolean }) {
+export function NextAction({ action, loading, error = false, onRetry }: { action: NextActionValue | null; loading: boolean; error?: boolean; onRetry?: () => void }) {
   return (
     <section data-testid="next-action" aria-labelledby="org-next-title" className="s-panel s-org-block" data-overdue={action?.overdue || undefined}>
       <h2 id="org-next-title" className="s-section-heading flex items-center gap-2">
@@ -22,6 +23,8 @@ export function NextAction({ action, loading }: { action: NextActionValue | null
         <div className="mt-3 h-16 animate-pulse rounded-[var(--s-radius)]" aria-busy="true" style={{ background: "hsl(var(--s-surface-sunken))" }}>
           <span className="sr-only">{UI.loading}</span>
         </div>
+      ) : error ? (
+        <PanelError what={UI.panelWhatNext} onRetry={() => onRetry?.()} />
       ) : action ? (
         <div className="mt-2 flex flex-col gap-3">
           <div className="flex flex-col gap-1">

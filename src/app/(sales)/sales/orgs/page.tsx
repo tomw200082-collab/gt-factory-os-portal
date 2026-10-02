@@ -140,7 +140,11 @@ function OrgsScreen() {
               id="orgs-sort"
               className="s-input w-auto"
               value={sort}
-              onChange={(e) => setSort(pick(e.target.value, SORTS, "last_order"))}
+              onChange={(e) => {
+                setSort(pick(e.target.value, SORTS, "last_order"));
+                // a new order may not hold the businesses chosen in the old one
+                setSelected(new Set());
+              }}
             >
               {SORTS.map((s) => (
                 <option key={s} value={s}>
@@ -249,8 +253,8 @@ function OrgsScreen() {
             owner.mutate(
               { org_ids: [...selected], owner_email: email },
               {
-                onSuccess: () => {
-                  setToast(UI.ownerAssigned(selected.size, owners[email] ?? email));
+                onSuccess: (res) => {
+                  setToast(UI.ownerAssigned(res?.updated ?? selected.size, owners[email] ?? email));
                   stopSelecting();
                 },
               },

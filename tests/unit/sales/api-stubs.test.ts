@@ -95,9 +95,9 @@ describe("sales API proxy stubs", () => {
     expect(read(STUBS.find((s) => s.file.includes("[gid]"))!)).toContain("encodeURIComponent(raw)");
   });
 
-  it("forwards only the four contact verbs the API knows", () => {
+  it("forwards only the contact decisions the portal makes (code review M2)", () => {
     const src = read(STUBS.find((s) => s.file.includes("[action]"))!);
-    expect(src).toContain('new Set(["verify", "reject", "promote", "redact"])');
+    expect(src).toContain('new Set(["verify", "reject"])');
     expect(src).toContain("status: 404");
   });
 

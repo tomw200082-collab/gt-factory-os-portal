@@ -5,8 +5,9 @@
 // One business, laid out for someone on a call: who it is, what to do next,
 // who to call, and where the account stands, before anything that needs a
 // scroll. The detail call is the permission boundary: until it answers, nothing
-// else about the business is asked for, so a forbidden business costs one
-// request and shows nothing.
+// else about this business is asked for, so a forbidden business costs one
+// org request and shows nothing. (Tasks, leads and the roster are the person's
+// own lists, not this business's, and load alongside.)
 
 import { useCallback, useMemo, useState } from "react";
 import { useSession } from "@/lib/auth/session-provider";
@@ -17,15 +18,15 @@ import { nextActionFor } from "../../_lib/nextAction";
 import { useAutoClear } from "../../_lib/useAutoClear";
 import { historyShown, historyView } from "../../_lib/orgTruth";
 import { buildRing, type RingMonth } from "../../_lib/ring";
-import type { ContactRow, OrderRow, RiverChip } from "../../_lib/types";
-import { QueueError } from "../EmptyStates";
+import type { ContactRow, RiverChip } from "../../_lib/types";
+import { PanelError, QueueError } from "../EmptyStates";
 import { Toast } from "../Toast";
 import { BusinessCircle } from "./BusinessCircle";
 import { ContactsList } from "./ContactsList";
 import { MonthSheet } from "./MonthSheet";
 import { NextAction } from "./NextAction";
 import { OrderRiver } from "./OrderRiver";
-import { OrderSheet } from "./OrderSheet";
+import { OrderSheet, type OrderRef } from "./OrderSheet";
 import { OrgHeader } from "./OrgHeader";
 import { OrgLeads } from "./OrgLeads";
 import { IdentityBanner, OrgForbidden, OrgLoading, OrgNotFound, RetiredBanner, StaleBanner } from "./OrgStates";
@@ -33,7 +34,6 @@ import { OrgSummary } from "./OrgSummary";
 import { PrimaryContact } from "./PrimaryContact";
 import { SourceSheet, type SourceInfo } from "./SourceSheet";
 
-type OrderRef = Pick<OrderRow, "gid" | "name" | "created_at" | "class" | "draft_status">;
 
 export interface OrgWorkspaceProps {
   orgId: string;
@@ -122,14 +122,24 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
 
       {!retired ? (
         <div className="s-org-top">
-          <NextAction action={next} loading={tasks.isLoading || leads.isLoading} />
+          <NextAction
+            action={next}
+            loading={tasks.isLoading || leads.isLoading}
+            error={tasks.isError || leads.isError}
+            onRetry={() => {
+              void tasks.refetch();
+              void leads.refetch();
+            }}
+          />
           <PrimaryContact
             contact={contacts.data?.verified[0] ?? null}
             awaiting={contacts.data?.review.length ?? 0}
             loading={contacts.isLoading}
+            error={contacts.isError}
+            onRetry={() => void contacts.refetch()}
           />
           {view !== "identity" ? (
-            <OrgSummary org={d} view={view} onSource={() => setSource(historySource)} onOpenOrder={(o) => setOrder({ ...o, class: "completed", draft_status: null })} />
+            <OrgSummary org={d} view={view} onSource={() => setSource(historySource)} onOpenOrder={(o) => setOrder({ ...o, class: null, draft_status: null })} />
           ) : null}
           {shown && circle.data && circle.data.months.length > 0 ? (
             <BusinessCircle
@@ -142,6 +152,16 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
             <div className="s-panel animate-pulse" aria-busy="true" style={{ minHeight: 380 }}>
               <span className="sr-only">{UI.loading}</span>
             </div>
+          ) : shown && (circle.isError || circle.data) ? (
+            // the two years keep their place: failed says failed, empty says empty (gate INTER-NEW-001)
+            <section data-testid="circle-unavailable" aria-labelledby="org-circle-missing" className="s-panel s-org-block">
+              <h2 id="org-circle-missing" className="s-section-heading">{UI.circleTitle}</h2>
+              {circle.isError ? (
+                <PanelError what={UI.panelWhatHistory} onRetry={() => void circle.refetch()} />
+              ) : (
+                <p className="mt-2 text-[14px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.noOrdersYet}</p>
+              )}
+            </section>
           ) : null}
         </div>
       ) : null}
@@ -187,7 +207,7 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
         />
       ) : null}
 
-      {!retired ? <OrgLeads leads={orgLeads} /> : null}
+      {!retired ? <OrgLeads leads={orgLeads} error={leads.isError} onRetry={() => void leads.refetch()} /> : null}
 
       {source ? <SourceSheet source={source} onClose={() => setSource(null)} /> : null}
       {month ? (

@@ -17,7 +17,7 @@
 // arrows walk through time.
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Maximize2, Minus, MoveHorizontal, Plus, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minus, MoveHorizontal, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { UI } from "../../_lib/labels";
 import { monthLabel, monthShort, type RingMonth } from "../../_lib/ring";
 import { barPath, columnX, smoothPath, timelineMonths, trendSummary, yTicks, zoomLevels, type TimelineMonth } from "../../_lib/timeline";
@@ -60,11 +60,17 @@ function stackOf(m: TimelineMonth): Kind[] {
 
 const fmtAvg = (n: number) => (Math.round(n * 10) / 10).toLocaleString("he-IL");
 
-export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[]; onMonth: (ym: string) => void; meta?: ReactNode }) {
-  const data = useMemo(() => timelineMonths(months), [months]);
+export function OrdersTimeline({ months, onMonth, meta, asOf = null }: { months: RingMonth[]; onMonth: (ym: string) => void; meta?: ReactNode; asOf?: string | null }) {
+  const data = useMemo(() => timelineMonths(months, asOf), [months, asOf]);
   const summary = useMemo(() => trendSummary(data), [data]);
   const dataMax = Math.max(1, ...data.map((m) => m.total));
-  const levels = useMemo(() => zoomLevels(dataMax), [dataMax]);
+  // zoom stops at the height of a typical month: past it nearly every column would
+  // only say it is cut, and the chart would show nothing (visual gate TL-001)
+  const levels = useMemo(() => {
+    const busy = data.map((m) => m.total).filter((t) => t > 0).sort((a, b) => a - b);
+    const typical = busy.length ? busy[Math.floor((busy.length - 1) / 2)] : 0;
+    return zoomLevels(dataMax).filter((l, k) => k === 0 || l >= typical);
+  }, [data, dataMax]);
   const [zoom, setZoom] = useState(0);
   useEffect(() => setZoom((z) => Math.min(z, levels.length - 1)), [levels.length]);
   const yMax = levels[Math.min(zoom, levels.length - 1)];
@@ -77,6 +83,13 @@ export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[];
   const uid = useId().replace(/:/g, "");
   const [wrapRef, width] = useWidth<HTMLDivElement>(640);
   const targets = useRef<Array<SVGRectElement | null>>([]);
+  // a finger drawn along the chart chooses the month under it (a month column is
+  // narrower than a fingertip on a phone); the tap that ends a drag is not a second choice
+  const scrub = useRef<{ x: number; moved: boolean } | null>(null);
+  const scrubbed = useRef(false);
+  // what was chosen when a press began: the press focuses the month (which chooses it)
+  // before its click, so "tap again to let go" must look at the state before the press
+  const pressStart = useRef<string | null | undefined>(undefined);
 
   const n = data.length;
   const right = width - AXIS_W;
@@ -123,6 +136,12 @@ export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[];
     });
     return out;
   }, [data]);
+
+  function monthAt(clientX: number, el: Element): number {
+    const box = el.getBoundingClientRect();
+    const x = clientX - box.left;
+    return Math.max(0, Math.min(n - 1, Math.floor((right - x) / colW)));
+  }
 
   function onKey(e: KeyboardEvent, i: number) {
     const move = (to: number) => {
@@ -171,12 +190,32 @@ export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[];
           </button>
           <button type="button" className="s-tl-zoom s-tl-zoom-fit" aria-label={UI.timelineZoomFit} title={zoom === 0 ? UI.timelineZoomAtFit : undefined} disabled={zoom === 0} onClick={() => setZoom(0)}>
             <Maximize2 size={14} aria-hidden />
-            {UI.timelineZoomFitShort}
+            <span className="s-tl-zoom-fit-text">{UI.timelineZoomFitShort}</span>
           </button>
         </div>
       </div>
 
-      <div ref={wrapRef} className="s-tl-plot" data-selecting={litMonth ? "" : undefined} onPointerLeave={() => setHovered(null)}>
+      <div
+        ref={wrapRef}
+        className="s-tl-plot"
+        data-selecting={litMonth ? "" : undefined}
+        onPointerLeave={() => setHovered(null)}
+        onPointerDown={(e) => {
+          scrubbed.current = false;
+          if (e.pointerType !== "mouse") scrub.current = { x: e.clientX, moved: false };
+        }}
+        onPointerMove={(e) => {
+          const s = scrub.current;
+          if (!s) return;
+          if (!s.moved && Math.abs(e.clientX - s.x) < 6) return;
+          s.moved = true;
+          scrubbed.current = true;
+          const svg = e.currentTarget.querySelector("svg");
+          if (svg) setSelected(data[monthAt(e.clientX, svg)].ym);
+        }}
+        onPointerUp={() => { scrub.current = null; }}
+        onPointerCancel={() => { scrub.current = null; }}
+      >
         <svg width={width} height={H} viewBox={`0 0 ${width} ${H}`} className="s-tl-svg" role="group" aria-label={UI.timelineChartLabel}>
           <defs>
             <linearGradient id={`${uid}-area`} x1="0" y1="0" x2="0" y2="1">
@@ -259,7 +298,9 @@ export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[];
               });
             }
 
-            const colTop = y(Math.min(m.total, yMax));
+            // the count bubble rides above both the column and the trend's point, never over either (TL-002)
+            const trendY = m.trend === null ? Infinity : base - m.trend * unit;
+            const colTop = Math.max(PAD_TOP + 21, Math.min(y(Math.min(m.total, yMax)), trendY - 6));
             return (
               <g key={m.ym} className="s-tl-col" data-selected={isSel || undefined} data-partial={m.partial || undefined}>
                 {/* dimmed on the wrapper: the arrival animation owns the bars' own opacity */}
@@ -303,7 +344,16 @@ export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[];
                   tabIndex={i === tabStop ? 0 : -1}
                   aria-label={`${monthLabel(m.ym)}: ${UI.monthCounts(m.filled, m.refunded, m.hollow, m.open)}${m.partial ? ` (${UI.timelineInProgress})` : ""}`}
                   aria-pressed={m.ym === selected}
-                  onClick={() => setSelected(m.ym)}
+                  onPointerDown={() => { pressStart.current = selected; }}
+                  onClick={() => {
+                    const before = pressStart.current === undefined ? selected : pressStart.current;
+                    pressStart.current = undefined;
+                    if (scrubbed.current) {
+                      scrubbed.current = false;
+                      return;
+                    }
+                    setSelected(before === m.ym ? null : m.ym);
+                  }}
                   onPointerEnter={(e) => { if (e.pointerType === "mouse") setHovered(m.ym); }}
                   onFocus={() => setSelected(m.ym)}
                   onKeyDown={(e) => onKey(e, i)}
@@ -352,9 +402,26 @@ export function OrdersTimeline({ months, onMonth, meta }: { months: RingMonth[];
               </p>
               <p className="s-tl-callout-sub">{UI.monthCounts(sel.filled, sel.refunded, sel.hollow, sel.open)}</p>
             </div>
-            <button type="button" className="s-btn s-btn-primary s-btn-compact shrink-0" onClick={() => onMonth(sel.ym)}>
-              {UI.timelineOpenMonth}
-            </button>
+            <div className="s-tl-callout-actions">
+              {/* every month within reach of a full-size target, whatever the column width (WCAG 2.5.8) */}
+              <div className="s-tl-steps" role="group" aria-label={UI.timelineSteps}>
+                <button type="button" className="s-tl-zoom" aria-label={UI.timelineMonthPrev} disabled={data.indexOf(sel) === 0} onClick={() => setSelected(data[data.indexOf(sel) - 1].ym)}>
+                  <ChevronRight size={18} aria-hidden />
+                </button>
+                <button type="button" className="s-tl-zoom" aria-label={UI.timelineMonthNext} disabled={data.indexOf(sel) === n - 1} onClick={() => setSelected(data[data.indexOf(sel) + 1].ym)}>
+                  <ChevronLeft size={18} aria-hidden />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="s-btn s-btn-primary s-btn-compact shrink-0"
+                disabled={sel.total === 0}
+                title={sel.total === 0 ? UI.monthEmpty : undefined}
+                onClick={() => onMonth(sel.ym)}
+              >
+                {UI.timelineOpenMonth}
+              </button>
+            </div>
           </>
         ) : (
           <p className="s-tl-callout-sub">{UI.timelinePick}</p>

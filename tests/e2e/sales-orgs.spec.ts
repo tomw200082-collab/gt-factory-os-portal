@@ -203,6 +203,21 @@ test.describe("GT Pulse Unit B journeys @mocked", () => {
   test("Tom's timeline: the circle becomes a two-year trend, zooms on the count, and opens a month's orders", async ({ page }) => {
     await setFakeRole(page, "admin");
     await stubSalesOrgs(page);
+    // a varied two years with one busy month, where zooming on the count shows something:
+    // a uniformly busy business has nothing to zoom into, and the chart says so (gate TL-001)
+    await page.route(`**/api/sales/orgs/${IDS.many}/circle`, (r) => {
+      const months = Array.from({ length: 24 }, (_, i) => {
+        const d = new Date(Date.UTC(2024, 10 + i, 15));
+        return {
+          ym: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+          completed: i === 13 ? 18 : 2 + (i % 4),
+          refunded: 0,
+          cancelled: i % 6 === 0 ? 1 : 0,
+          drafts: 0,
+        };
+      });
+      return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ months, last_order_at: "2026-10-02T04:00:00.000Z", as_of: "2026-10-02T07:00:00.000Z", history_status: "ok" }) });
+    });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/sales/orgs/${IDS.many}`);
     await page.getByRole("group", { name: "תצוגת ההזמנות" }).getByRole("button", { name: "ציר זמן" }).click();
@@ -361,5 +376,31 @@ test.describe("GT Pulse Unit B on a touch phone @mocked", () => {
     const b = (await call.boundingBox())!;
     const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.getAttribute("href"), [b.x + b.width / 2, b.y + b.height / 2]);
     expect(hit).toMatch(/^tel:/);
+  });
+
+  test("a finger drawn along the timeline chooses the month under it, and the steps reach any month", async ({ page }) => {
+    await setFakeRole(page, "admin");
+    await page.addInitScript(() => localStorage.setItem("gt.sales.ordersView", "timeline"));
+    await stubSalesOrgs(page);
+    await page.goto(`/sales/orgs/${IDS.many}`);
+    const plot = page.getByTestId("orders-timeline").locator(".s-tl-plot");
+    await plot.scrollIntoViewIfNeeded();
+    const box = (await plot.boundingBox())!;
+    const y = box.y + box.height / 2;
+    // a drag from the right edge (oldest) towards the left (newest), as a finger would
+    await plot.dispatchEvent("pointerdown", { pointerType: "touch", clientX: box.x + box.width - 40, clientY: y, isPrimary: true });
+    await plot.dispatchEvent("pointermove", { pointerType: "touch", clientX: box.x + box.width - 60, clientY: y, isPrimary: true });
+    await plot.dispatchEvent("pointermove", { pointerType: "touch", clientX: box.x + 30, clientY: y, isPrimary: true });
+    await plot.dispatchEvent("pointerup", { pointerType: "touch", clientX: box.x + 30, clientY: y, isPrimary: true });
+    const callout = page.getByTestId("timeline-callout");
+    await expect(callout).toContainText("2026");
+    const before = await callout.locator(".s-tl-callout-title").textContent();
+    await callout.getByRole("button", { name: "החודש הקודם" }).tap();
+    await expect(callout.locator(".s-tl-callout-title")).not.toHaveText(before ?? "");
+    for (const name of ["החודש הקודם", "החודש הבא", "פתח את הזמנות החודש"]) {
+      const b = (await callout.getByRole("button", { name }).boundingBox())!;
+      expect(b.height).toBeGreaterThanOrEqual(44);
+      expect(b.width).toBeGreaterThanOrEqual(44);
+    }
   });
 });

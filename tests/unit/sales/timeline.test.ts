@@ -67,6 +67,16 @@ describe("right-to-left time", () => {
   });
 });
 
+describe("a stale mirror", () => {
+  it("counts no month after the last good reconcile as full (code review I-2)", () => {
+    // the last good read was 2026-09-20: September is not a full month, whatever the calendar says
+    const t = timelineMonths(months(), "2026-09-20T05:00:00Z");
+    expect(t.find((m) => m.ym === "2026-09")!.partial).toBe(true);
+    expect(t.find((m) => m.ym === "2026-09")!.trend).toBeNull();
+    expect(t.find((m) => m.ym === "2026-08")!.partial).toBe(false);
+  });
+});
+
 describe("the headline", () => {
   const flat = (filled: number[]) =>
     timelineMonths(filled.map((f, i) => ({ ym: `2025-${String(i + 1).padStart(2, "0")}`, filled: f, refunded: 0, hollow: 0, open: 0 })));

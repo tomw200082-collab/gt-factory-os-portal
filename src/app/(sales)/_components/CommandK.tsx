@@ -107,6 +107,8 @@ export function CommandK({ leads, onClose }: CommandKProps) {
   const hits = useMemo(() => searchAll(leads, orgs ?? [], query), [leads, orgs, query]);
   // "No results" only once the server has answered for what is typed now.
   const orgsPending = query.trim().length >= 2 && (settled !== query || orgSearch.isFetching);
+  // a failed business search is not "nobody matched"
+  const orgsFailed = query.trim().length >= 2 && !orgsPending && orgSearch.isError;
 
   function open(hit: Hit) {
     onClose();
@@ -158,10 +160,16 @@ export function CommandK({ leads, onClose }: CommandKProps) {
             a screen-reader user pastes a number and hears silence, then has to
             Tab into the list to find out whether it matched anyone. */}
         <p className="sr-only" role="status" aria-live="polite">
-          {query.trim() && !orgsPending ? (hits.length === 0 ? UI.searchEmpty : UI.searchResults(hits.length)) : ""}
+          {orgsFailed ? UI.commandSearchFailed : query.trim() && !orgsPending ? (hits.length === 0 ? UI.searchEmpty : UI.searchResults(hits.length)) : ""}
         </p>
 
-        {query.trim() && hits.length === 0 && !orgsPending ? (
+        {orgsFailed ? (
+          <p data-testid="command-failed" className="px-3 py-4 text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+            {UI.commandSearchFailed}
+          </p>
+        ) : null}
+
+        {query.trim() && hits.length === 0 && !orgsPending && !orgsFailed ? (
           <p className="px-3 py-4 text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
             {UI.searchEmpty}
           </p>

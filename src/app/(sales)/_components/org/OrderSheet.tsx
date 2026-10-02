@@ -14,14 +14,19 @@ export function orderKindLabel(order: Pick<OrderRow, "class" | "draft_status">):
   return ORDER_CLASS_LABELS[order.class];
 }
 
-export function OrderSheet({ orgId, order, onClose }: { orgId: string; order: Pick<OrderRow, "gid" | "name" | "created_at" | "class" | "draft_status">; onClose: () => void }) {
+/** `class` is null when the caller does not know it (the summary's last order may be refunded): the sheet
+ *  then names the order from its own detail, never from a guess (code review I-3). */
+export type OrderRef = Pick<OrderRow, "gid" | "name" | "created_at" | "draft_status"> & { class: OrderRow["class"] | null };
+
+export function OrderSheet({ orgId, order, onClose }: { orgId: string; order: OrderRef; onClose: () => void }) {
   const detail = useOrder(orgId, order.gid);
+  const known = detail.data ?? (order.class ? { class: order.class, draft_status: order.draft_status } : null);
   const title = `${order.name ?? UI.orderNameless} · ${fmtDate(order.created_at)}`;
 
   return (
     <Sheet title={title} onClose={onClose} testId="order-sheet">
       <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-        {orderKindLabel(order)}
+        {known ? orderKindLabel(known) : "\u00a0"}
       </p>
       {detail.isLoading ? (
         <div className="mt-3 flex flex-col gap-2" aria-busy="true">

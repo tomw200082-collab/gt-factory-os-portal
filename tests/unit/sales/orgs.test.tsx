@@ -289,6 +289,17 @@ describe("bulk owner assignment", () => {
     expect(await screen.findByTestId("sales-toast")).toBeTruthy();
   });
 
+  it("lets go of the selection when the order changes", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    fireEvent.click(screen.getByRole("button", { name: UI.orgsSelect }));
+    fireEvent.click(screen.getByRole("checkbox", { name: UI.selectOrgNamed("קפה הדגמה רמת השרון") }));
+    expect(screen.getByTestId("bulk-owner-bar")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(UI.sortLabel), { target: { value: "name" } });
+    expect(screen.queryByTestId("bulk-owner-bar")).toBeNull();
+  });
+
   it("is not offered to a rep", async () => {
     role.value = "sales_rep";
     respond = () => ({ rows: [row()], next: null, total: 1 });

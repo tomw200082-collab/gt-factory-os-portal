@@ -203,6 +203,7 @@ export function useOrgsPage(filter: OrgFilter, sort: OrgSort) {
       ),
     getNextPageParam: (last) => last.next,
     placeholderData: keepPreviousData,
+    retry: retryServerErrors,
     staleTime: 30_000,
   });
 }
@@ -217,6 +218,7 @@ export function useOrgSearch(query: string): UseQueryResult<OrgSearchHit[], Sale
       const hits = await request<unknown>(`/api/sales/orgs/search?q=${encodeURIComponent(q)}`);
       return Array.isArray(hits) ? (hits as OrgSearchHit[]) : [];
     },
+    retry: retryServerErrors,
     staleTime: 30_000,
   });
 }

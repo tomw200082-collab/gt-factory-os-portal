@@ -58,4 +58,12 @@ describe("command palette", () => {
     expect(screen.queryByTestId("command-searching")).toBeNull();
     expect(hit.querySelector("[title='בית קפה לדוגמה']")).toBeTruthy();
   });
+
+  it("says the search failed rather than that nobody matched", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "x" }), { status: 400 })));
+    render(withQuery(<CommandK leads={[]} onClose={() => {}} />));
+    fireEvent.change(screen.getByTestId("command-input"), { target: { value: "בית קפה" } });
+    expect((await screen.findByTestId("command-failed")).textContent).toBe(UI.commandSearchFailed);
+    expect(screen.queryByText(UI.searchEmpty)).toBeNull();
+  });
 });
