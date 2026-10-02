@@ -38,7 +38,10 @@ test.describe("sales report @mocked", () => {
     // dispatchEvent, not click(): under `next dev` the dev-tools badge sits at the bottom-left, which is
     // exactly where the fifth item of a right-to-left bar is, and swallows the pointer
     await page.getByTestId("sales-tab-/sales/report").dispatchEvent("click");
-    await expect(page).toHaveURL(/\/sales\/report$/);
+    // The first entry compiles /sales/report under `next dev`; on the CI runner that took longer than
+    // the default 5s (red twice in CI, green locally, URL never left /sales/today). Production serves a
+    // prebuilt route. Same cause and wait as sales-orgs journey A.
+    await expect(page).toHaveURL(/\/sales\/report$/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { level: 1, name: "דוח מכירות" })).toBeVisible();
     await expect(page.getByTestId("report-tabs").getByRole("tab")).toHaveText(["יומי", "לקוחות", "מוצרים", "רשתות", "מגמה"]);
     // opens on the customers sheet, as the Artifact does
