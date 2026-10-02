@@ -95,7 +95,11 @@ export function IdentityReview() {
     const orgId = p.org.org_id;
     const vars =
       p.kind === "link"
-        ? { orgId, action: p.action, customer_gid: p.candidate.customer_gid }
+        ? {
+            orgId, action: p.action, customer_gid: p.candidate.customer_gid,
+            // the holder this screen showed; the server refuses if it changed since (absent: not known)
+            ...(p.candidate.held_by !== undefined ? { expected_holder: p.candidate.held_by?.org_id ?? null } : {}),
+          }
         : { orgId, action: (p.kind === "chain" ? "confirm" : "reject") as IdentityAction };
     setErrors((e) => ({ ...e, [orgId]: "" }));
     resolve.mutate(vars, {

@@ -427,7 +427,7 @@ export function useIdentityReview(enabled: boolean): UseQueryResult<IdentityRevi
 
 /** A manager's identity decision: one transaction writes the link, the event and closes the task. */
 export function useResolveIdentity() {
-  return useSalesMutation<{ orgId: string; action: IdentityAction; customer_gid?: string }, IdentityResult>(
+  return useSalesMutation<{ orgId: string; action: IdentityAction; customer_gid?: string; expected_holder?: string | null }, IdentityResult>(
     ({ orgId, ...body }) => request(`/api/sales/orgs/${encodeURIComponent(orgId)}/identity`, jsonBody(body)),
   );
 }

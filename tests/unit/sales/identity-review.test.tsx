@@ -173,6 +173,8 @@ describe("identity review", () => {
     expect(dialog.textContent).toContain("קפה היעד");
     expect(dialog.textContent).toContain(UI.mergeConsequence("עסק 01", "קפה היעד"));
     fireEvent.click(within(dialog).getByRole("button", { name: UI.mergeConfirm }));
+    // the server refuses if someone else holds the customer by now (gt-factory-os #341)
+    await waitFor(() => expect(posts[0]?.body).toEqual({ action: "pick", customer_gid: "gid://shopify/Customer/9002", expected_holder: HOLDER }));
     const toast = await screen.findByTestId("sales-toast");
     expect(toast.textContent).toContain(UI.reviewMerged("עסק 01", "קפה היעד"));
     fireEvent.click(within(toast).getByTestId("sales-toast-action"));
@@ -187,6 +189,21 @@ describe("identity review", () => {
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog.textContent).toContain(UI.linkConsequence);
     expect(dialog.textContent).not.toContain(UI.linkMaybeMerge);
+    fireEvent.click(within(dialog).getByRole("button", { name: UI.linkConfirm }));
+    await waitFor(() => expect(posts[0]?.body).toEqual({ action: "pick", customer_gid: "gid://shopify/Customer/9002", expected_holder: null }));
+  });
+
+  it("says in Hebrew when the holder changed since the screen was read", async () => {
+    payload.orgs[0].candidates[1] = cand({ customer_gid: "gid://shopify/Customer/9002", name: "לקוח מועמד ב", held_by: null });
+    postStatus = 422;
+    postBody = { error: "x", code: "SALES_IDENTITY_HOLDER_CHANGED" };
+    view(<IdentityReview />);
+    const card = await screen.findByTestId(`review-${ID(1)}`);
+    fireEvent.click(within(within(card).getAllByTestId("candidate")[1]).getByRole("button", { name: UI.chooseCandidate }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: UI.linkConfirm }));
+    const alert = await within(card).findByRole("alert");
+    expect(alert.textContent).toContain("כבר שייך לעסק אחר");
+    expect(alert.textContent).not.toContain("SALES_");
   });
 
   it("holds every card still while one decision is saving", async () => {
