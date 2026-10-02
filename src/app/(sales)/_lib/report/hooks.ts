@@ -74,7 +74,7 @@ export function useElementWidth<T extends HTMLElement>(fallback: number): [RefOb
  * columns (`--s-rp-col`), the scroller snaps on their edges, and `--s-rp-pin` is the pinned column's
  * measured width (the snap line and scroll-padding). It opens on the newest end, which is a tile edge.
  */
-export function usePinnedScroller(ref: RefObject<HTMLElement>, key: unknown): void {
+export function usePinnedScroller(ref: RefObject<HTMLElement>, key: unknown, focusSel?: string): void {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -96,6 +96,15 @@ export function usePinnedScroller(ref: RefObject<HTMLElement>, key: unknown): vo
     fit();
     const max = el.scrollWidth - el.clientWidth;
     if (max > 0) el.scrollLeft = getComputedStyle(el).direction === "rtl" ? -max : max;
+    // a table whose newest figures are blank at the far end opens on the latest figure instead
+    const target = focusSel ? el.querySelector<HTMLElement>(focusSel) : null;
+    if (target && max > 0) {
+      const r = target.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
+      const pin = first.getBoundingClientRect().width;
+      const visibleCentre = (b.left + b.right - pin) / 2;
+      el.scrollLeft += r.left + r.width / 2 - visibleCentre;
+    }
     if (typeof ResizeObserver === "undefined") return;
     // only the scroller's own width matters (a rotation, a resized window); the pinned column's width follows from it
     let w = el.clientWidth;

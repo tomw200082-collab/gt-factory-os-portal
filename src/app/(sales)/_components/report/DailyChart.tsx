@@ -46,14 +46,7 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={L.chartDailyAria}>
         {[1, 2, 3, 4].map((i) => {
           const yy = P.t + ih - (ih * i) / 4;
-          return (
-            <g key={i}>
-              <line className="s-rp-gl" x1={P.l} x2={W - P.r} y1={yy} y2={yy} />
-              <text className="s-rp-axis" x={P.l} y={yy - 4} textAnchor="start">
-                {compact((mx * i) / 4, "rev")}
-              </text>
-            </g>
-          );
+          return <line key={i} className="s-rp-gl" x1={P.l} x2={W - P.r} y1={yy} y2={yy} />;
         })}
         {vals.map((v, i) => {
           const day = a0 + i;
@@ -75,18 +68,25 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
                 strokeWidth={partial ? 1.2 : undefined}
                 strokeDasharray={partial ? "2 2" : undefined}
               />
-              {over ? (
-                <>
-                  <path d={`M${(X(i) - bw / 2).toFixed(1)} ${(P.t + 3).toFixed(1)} l${bw.toFixed(1)} 0`} stroke="hsl(var(--s-surface))" strokeWidth={3} />
-                  <text className="s-rp-axis" x={X(i)} y={P.t - 6} textAnchor="middle" style={{ fill: "hsl(var(--s-fg))", fontWeight: 600 }}>
-                    ▲ {compact(v, "rev")}
-                  </text>
-                </>
-              ) : null}
+              {over ? <path d={`M${(X(i) - bw / 2).toFixed(1)} ${(P.t + 3).toFixed(1)} l${bw.toFixed(1)} 0`} stroke="hsl(var(--s-surface))" strokeWidth={3} /> : null}
             </g>
           );
         })}
         <path d={smoothPath(ma.map((v, i) => [X(i), Y(v)] as const))} fill="none" stroke="hsl(var(--s-accent))" strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+        {a !== null ? <line x1={X(a)} x2={X(a)} y1={P.t} y2={P.t + ih} stroke="hsl(var(--s-border-strong))" strokeWidth={1} /> : null}
+        {/* every label last, so its halo masks the bars and the line under it */}
+        {[1, 2, 3, 4].map((i) => (
+          <text key={`y${i}`} className="s-rp-axis" x={P.l} y={P.t + ih - (ih * i) / 4 - 4} textAnchor="start">
+            {compact((mx * i) / 4, "rev")}
+          </text>
+        ))}
+        {vals.map((v, i) =>
+          v > mx ? (
+            <text key={`o${i}`} className="s-rp-axis" x={X(i)} y={P.t - 6} textAnchor="middle" style={{ fill: "hsl(var(--s-fg))", fontWeight: 600 }}>
+              ▲ {compact(v, "rev")}
+            </text>
+          ) : null,
+        )}
         {peak !== null ? (
           <text className="s-rp-axis" x={X(peak)} y={Math.max(P.t + 10, Y(vals[peak]) - 8)} textAnchor="middle" style={{ fill: "hsl(var(--s-fg))", fontWeight: 600 }}>
             {compact(vals[peak], "rev")} · {dayLabel(d, a0 + peak)}
@@ -97,7 +97,6 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
             {dayLabel(d, a0 + i)}
           </text>
         ))}
-        {a !== null ? <line x1={X(a)} x2={X(a)} y1={P.t} y2={P.t + ih} stroke="hsl(var(--s-border-strong))" strokeWidth={1} /> : null}
       </svg>
       <ChartTip show={a !== null} x={a !== null ? X(a) : 0} width={W} top={2}>
         {a !== null ? (

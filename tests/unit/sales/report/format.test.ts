@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { amount, amountUnit, cell, compact, fmtInt, money, monthYear, pctChip, pctTone, shortDate, signedPct } from "@/app/(sales)/_lib/report/format";
+import { amount, amountUnit, cell, cellCompact, compact, fmtInt, money, monthYear, pctChip, pctTone, shortDate, signedPct } from "@/app/(sales)/_lib/report/format";
 
 describe("report number formats", () => {
   it("prints agorot as whole shekels, and a real zero as zero", () => {
@@ -65,5 +65,16 @@ describe("report number formats", () => {
   it("writes a month the way the table headers do", () => {
     expect(monthYear("2026-02")).toBe("פבר׳ 26");
     expect(monthYear("")).toBe("");
+  });
+
+  it("prints a phone's table cell in at most five characters, blank for zero", () => {
+    expect(cellCompact(0, "rev")).toBe("");
+    expect(cellCompact(45_000, "rev")).toBe("450");
+    expect(cellCompact(830_000, "rev")).toBe("8.3K");
+    expect(cellCompact(1_240_000, "rev")).toBe("12K");
+    expect(cellCompact(41_380_000, "rev")).toBe("414K");
+    expect(cellCompact(297_021_000, "rev")).toBe("2.97M");
+    expect(cellCompact(1_234, "units")).toBe("1.2K");
+    expect(cellCompact(12, "units")).toBe("12");
   });
 });

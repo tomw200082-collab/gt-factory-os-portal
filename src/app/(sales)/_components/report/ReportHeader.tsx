@@ -54,16 +54,20 @@ export function StaleBand({ fresh }: { fresh: Freshness }) {
 }
 
 /** A refresh that failed after one that worked: the numbers are still the last good ones, and it says so, and that the page keeps trying. */
-export function RefreshFailed({ clock, pending, onRetry }: { clock: string | null; pending: boolean; onRetry: () => void }) {
+export function RefreshFailed({ clock, checkedAt, pending, onRetry }: { clock: string | null; checkedAt: string | null; pending: boolean; onRetry: () => void }) {
   return (
-    <div className="s-banner s-banner-retired flex-col" role="status" data-testid="report-refresh-failed">
-      <div className="flex w-full flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px]">{clock ? L.refreshFailed(clock) : L.staleBandNoTime}</p>
-        <button type="button" className="s-btn s-btn-ghost s-btn-compact" disabled={pending} aria-busy={pending} onClick={onRetry} data-testid="report-recheck">
-          {pending ? L.rechecking : L.recheck}
-        </button>
+    <div className="s-banner s-banner-row s-banner-fail" role="status" data-testid="report-refresh-failed">
+      <TriangleAlert size={18} aria-hidden />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="text-[13px] font-semibold">{clock ? L.refreshFailed(clock) : L.staleBandNoTime}</p>
+        <p className="text-[12px]">
+          {checkedAt ? `${L.checkedAt(checkedAt)} · ` : ""}
+          {L.refreshAuto}
+        </p>
       </div>
-      <p className="s-rp-note">{L.refreshAuto}</p>
+      <button type="button" className="s-btn s-btn-ghost s-btn-compact shrink-0" disabled={pending} aria-busy={pending} onClick={onRetry} data-testid="report-recheck">
+        {pending ? L.rechecking : L.recheck}
+      </button>
     </div>
   );
 }

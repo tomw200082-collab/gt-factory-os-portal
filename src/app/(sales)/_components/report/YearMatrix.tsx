@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
-import { usePinnedScroller } from "../../_lib/report/hooks";
+import { useMediaQuery, usePinnedScroller } from "../../_lib/report/hooks";
 import { cell, pctTone, signedPct } from "../../_lib/report/format";
 import { MONTH_SHORT } from "../../_lib/report/period";
 import type { YearRow } from "../../_lib/report/trend";
@@ -12,9 +12,13 @@ import { HeatMark, heatBackground } from "./GridTab";
 /** Years down, calendar months across. Growth is over months both years have in full: the one in progress never counts. */
 export function YearMatrix({ rows, unit }: { rows: readonly YearRow[]; unit: Unit }) {
   const scroller = useRef<HTMLDivElement>(null);
-  usePinnedScroller(scroller, rows.length);
+  const short = useMediaQuery("(max-width: 639px)");
+  usePinnedScroller(scroller, `${rows.length}${short}`, "[data-latest]");
+  // the latest month that has a figure, in the latest year that has one
+  const lastRow = rows[rows.length - 1];
+  const latest = lastRow ? [...lastRow.cells].reverse().find((c) => c.v !== null)?.month : undefined;
   return (
-    <div ref={scroller} className="s-rp-scroll" data-testid="year-matrix">
+    <div ref={scroller} className="s-rp-scroll s-rp-fade" role="region" tabIndex={0} aria-label={L.matrixTitle} data-testid="year-matrix">
       <table className="s-rp-table">
         <caption className="sr-only">{L.matrixTitle}</caption>
         <thead>
@@ -42,7 +46,7 @@ export function YearMatrix({ rows, unit }: { rows: readonly YearRow[]; unit: Uni
                 {r.year}
               </th>
               {r.cells.map((c) => (
-                <td key={c.month} className="s-rp-num" style={{ background: heatBackground(c.heat) }} data-testid="matrix-cell">
+                <td key={c.month} className="s-rp-num" data-latest={r === lastRow && c.month === latest ? "" : undefined} style={{ background: heatBackground(c.heat) }} data-testid="matrix-cell">
                   <HeatMark h={c.heat} />
                   {c.v === null ? "" : c.v === 0 ? "0" : cell(c.v, unit)}
                   {c.partial ? ` ${L.partialMark}` : ""}

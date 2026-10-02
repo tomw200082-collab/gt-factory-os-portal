@@ -66,6 +66,7 @@ export function ReportScreen() {
           usable={usable}
           refreshFailed={report.isError}
           pending={report.isFetching}
+          checkedAt={report.errorUpdatedAt ? new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Jerusalem" }).format(report.errorUpdatedAt) : null}
           onRetry={() => void report.refetch()}
           tab={tab}
           onTab={setTab}
@@ -75,14 +76,14 @@ export function ReportScreen() {
   );
 }
 
-function ReportBody({ payload, fresh, usable, refreshFailed, pending, onRetry, tab, onTab }: { payload: ReportPayload; fresh: Freshness; usable: boolean; refreshFailed: boolean; pending: boolean; onRetry: () => void; tab: ReportTab; onTab: (t: ReportTab) => void }) {
+function ReportBody({ payload, fresh, usable, refreshFailed, pending, checkedAt, onRetry, tab, onTab }: { payload: ReportPayload; fresh: Freshness; usable: boolean; refreshFailed: boolean; pending: boolean; checkedAt: string | null; onRetry: () => void; tab: ReportTab; onTab: (t: ReportTab) => void }) {
   if (payload.state === "never") return <ReportNever why={fresh.why === "delayed" ? null : fresh.why} />;
   if (!usable || !validReportData(payload.data)) return <ReportInvalid onRetry={onRetry} />;
   const note = historicNoteLine(payload.notes?.historic_sku_over_threshold);
   return (
     <>
       {fresh.stale ? <StaleBand fresh={fresh} /> : null}
-      {refreshFailed ? <RefreshFailed clock={fresh.clock} pending={pending} onRetry={onRetry} /> : null}
+      {refreshFailed ? <RefreshFailed clock={fresh.clock} checkedAt={checkedAt} pending={pending} onRetry={onRetry} /> : null}
       {note ? (
         <p className="s-rp-note" data-testid="report-note-historic">
           {note}
@@ -148,7 +149,9 @@ function Report({ d, tab, onTab }: { d: ReportData; tab: ReportTab; onTab: (t: R
   const sortFor = (t: ReportTab) => (s: SortState) => setSorts((cur) => ({ ...cur, [t]: s }));
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const i = TAB_ORDER.indexOf(tab);
+    // from the tab that has focus, not the one that is selected: they differ after a Tab key from elsewhere
+    const at = TAB_ORDER.findIndex((t) => `rp-tab-${t}` === (e.target as HTMLElement).id);
+    const i = at >= 0 ? at : TAB_ORDER.indexOf(tab);
     // the first tab is at the right: the key that points left reaches the next one
     const next =
       e.key === "ArrowLeft" ? TAB_ORDER[(i + 1) % TAB_ORDER.length] : e.key === "ArrowRight" ? TAB_ORDER[(i - 1 + TAB_ORDER.length) % TAB_ORDER.length] : e.key === "Home" ? TAB_ORDER[0] : e.key === "End" ? TAB_ORDER[TAB_ORDER.length - 1] : null;

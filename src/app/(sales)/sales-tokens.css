@@ -2766,6 +2766,8 @@
   min-inline-size: 0;
 }
 [data-app="sales"] .s-rp-tile-label {
+  /* two lines are always reserved: when one label wraps and its neighbour does not, the figures still line up */
+  min-block-size: 2.6em;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
@@ -2850,7 +2852,7 @@
 /* A month figure is never half under the pinned column: cells snap to its edge (its measured width is
    --s-rp-pin), and keyboard focus keeps clear of the sticky header and total row. */
 [data-app="sales"] .s-rp-scroll {
-  scroll-snap-type: x proximity;
+  scroll-snap-type: x mandatory;
   scroll-padding-inline-start: var(--s-rp-pin, 112px);
   scroll-padding-block: 44px;
 }
@@ -3244,6 +3246,7 @@
 
 /* the weekday rhythm */
 [data-app="sales"] .s-rp-dow {
+  max-inline-size: 640px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -3407,4 +3410,68 @@
 /* the distributor badge on its dark fill: ink, not accent, so it clears 4.5:1 */
 :root.dark [data-app="sales"] .s-rp-bdg-di {
   color: hsl(var(--s-fg));
+}
+
+/* a banner whose action sits beside its words, centred on them, in the failure tone */
+[data-app="sales"] .s-banner-row {
+  align-items: center;
+}
+[data-app="sales"] .s-banner-fail {
+  background: hsl(var(--s-sla-overdue-soft));
+  color: hsl(var(--s-sla-overdue));
+  border: 1px solid hsl(var(--s-sla-overdue) / 0.3);
+}
+
+/* a summary row's focus ring sits inside the card that clips it */
+[data-app="sales"] .s-rp-item:focus-visible,
+[data-app="sales"] .s-rp-scroll:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: -2px;
+}
+
+/* a month name on a phone: two lines at most, and a Latin name keeps its start; the chain label waits for room */
+[data-app="sales"] .s-rp-table tbody th {
+  font-weight: 500;
+  text-align: start;
+}
+[data-app="sales"] .s-rp-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 639px) {
+  [data-app="sales"] .s-rp-table .s-rp-first {
+    max-inline-size: 30vw;
+    min-inline-size: 88px;
+    font-size: 12.5px;
+  }
+  [data-app="sales"] .s-rp-table .s-rp-sub {
+    display: none;
+  }
+  [data-app="sales"] .s-rp-table th,
+  [data-app="sales"] .s-rp-table td {
+    padding-inline: 4px;
+  }
+  [data-app="sales"] .s-rp-table .s-rp-first {
+    padding-inline: 8px;
+  }
+  [data-app="sales"] .s-rp-table thead th {
+    font-size: 11.5px;
+  }
+}
+
+/* an edge fade says a table scrolls on */
+[data-app="sales"] .s-rp-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 28px);
+  mask-image: linear-gradient(to right, transparent 0, black 28px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app="sales"] .s-rp-chev {
+    transition: none;
+  }
 }

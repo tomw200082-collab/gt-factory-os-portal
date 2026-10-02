@@ -66,3 +66,15 @@ export const cell = (v: number, unit: Unit): string => (v ? intFmt.format(Math.r
 export function shortDate(iso: string): string {
   return iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : "";
 }
+
+/** A phone's table cell: the figure in at most five characters (8.3K, 414K, 2.97M), blank for zero. The full figure travels with it. */
+export function cellCompact(v: number, unit: Unit): string {
+  if (!v) return "";
+  const x = Math.abs(unit === "rev" ? v / AG : v);
+  const sign = v < 0 ? "-" : "";
+  const one = (n: number) => String(Math.round(n * 10) / 10);
+  if (x >= 1e6) return `${sign}${String(Math.round((x / 1e6) * 100) / 100)}M`;
+  if (x >= 1e4) return `${sign}${Math.round(x / 1e3)}K`;
+  if (x >= 1e3) return `${sign}${one(x / 1e3)}K`;
+  return `${sign}${Math.round(x)}`;
+}

@@ -12,13 +12,13 @@ import { Fragment, useDeferredValue, useId, useMemo, useRef } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
 import { buildChains, DORMANT_DAYS, type ChainBadge, type ChainBranch, type ChainNode, type ChainsModel } from "../../_lib/report/chains";
 import { chainsCsvRows } from "../../_lib/report/csv";
-import { amountUnit, cell, shortDate } from "../../_lib/report/format";
-import { usePinnedScroller } from "../../_lib/report/hooks";
+import { amountUnit, shortDate } from "../../_lib/report/format";
+import { useMediaQuery, usePinnedScroller } from "../../_lib/report/hooks";
 import { monthLabel, periodMonths, periodYears } from "../../_lib/report/period";
 import type { Period, ReportData, Unit } from "../../_lib/report/types";
 import { ListEmpty } from "../EmptyStates";
 import { CopyCsv } from "./CopyCsv";
-import { partialNote } from "./GridTab";
+import { Fig, NameText, partialNote } from "./GridTab";
 import { ControlsBar, PeriodControl, SearchBox, UnitControl, ViewControl, type ViewMode } from "./ReportControls";
 
 export interface ChainsTabProps {
@@ -112,13 +112,22 @@ export function ChainsTab(p: ChainsTabProps) {
         ))}
       </div>
 
-      <p className="s-nums text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }} data-testid="report-summary" role="group" aria-label={L.summaryLabel} aria-live="polite">
-        {chainsSummaryLine(model, unit, filtered)}
-        {partial ? ` · ${partial}` : ""}
-      </p>
+      {model.shown.length > 0 || !filtered ? (
+        <p className="s-nums text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }} data-testid="report-summary" role="group" aria-label={L.summaryLabel} aria-live="polite">
+          {chainsSummaryLine(model, unit, filtered)}
+          {partial ? ` · ${partial}` : ""}
+        </p>
+      ) : null}
 
       {model.shown.length === 0 ? (
-        <ListEmpty label={filtered ? L.emptyChainSearch : L.emptyPeriod} />
+        <div className="flex flex-col items-center gap-2">
+          <ListEmpty label={filtered ? L.emptyChainSearch : L.emptyPeriod} />
+          {filtered ? (
+            <button type="button" className="s-btn s-btn-ghost" data-testid="report-clear-search" onClick={() => p.onQ("")}>
+              {L.clearSearch}
+            </button>
+          ) : null}
+        </div>
       ) : p.view === "months" ? (
         <ChainsTable {...p} ms={ms} model={model} />
       ) : (
@@ -135,14 +144,15 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
   const mcells = (months: Record<number, number>, cls = "") =>
     ms.map((i) => (
       <td key={i} className={`s-rp-num ${cls}`}>
-        {cell(months[i] || 0, unit)}
+        <Fig v={months[i] || 0} unit={unit} short={short} />
       </td>
     ));
   const scroller = useRef<HTMLDivElement>(null);
-  usePinnedScroller(scroller, ms.length);
+  const short = useMediaQuery("(max-width: 639px)");
+  usePinnedScroller(scroller, `${ms.length}${short}`);
   return (
-    <div ref={scroller} className="s-card s-rp-scroll s-rp-scroll-tall" data-testid="report-table">
-      <table className="s-rp-table">
+    <div ref={scroller} className="s-card s-rp-scroll s-rp-scroll-tall" role="region" tabIndex={0} aria-label={L.chainsColName} data-testid="report-table">
+      <table className="s-rp-table" aria-label={L.chainsColName}>
         <caption className="sr-only">{L.chainsColName}</caption>
         <thead>
           <tr>
@@ -170,21 +180,21 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
             return (
               <Fragment key={c.name}>
                 <tr className="s-rp-main" data-testid="chain-row" data-chain={c.name}>
-                  <td className="s-rp-first s-rp-first-wrap">
+                  <th scope="row" className="s-rp-first s-rp-first-wrap">
                     <button type="button" className="s-rp-rowbtn" style={{ alignItems: "flex-start" }} aria-expanded={cOpen} onClick={() => onToggle(ck)}>
                       <ChevronLeft size={14} className="s-rp-chev" style={{ marginBlockStart: 4 }} aria-hidden />
                       <span className="s-rp-wrapname">
-                        <span>{c.name}</span>
+                        <NameText name={c.name} />
                         <Badges badges={c.badges} />
                       </span>
                     </button>
-                  </td>
+                  </th>
                   <td className="s-rp-mid s-rp-muted" style={{ fontSize: 11.5 }}>
                     {c.seg}
                   </td>
                   {mcells(c.months)}
                   <td className="s-rp-num" style={{ fontWeight: 700 }} data-testid="cell-total">
-                    {cell(c.tot, unit)}
+                    <Fig v={c.tot} unit={unit} short={short} />
                   </td>
                 </tr>
                 {cOpen
@@ -194,32 +204,36 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
                       return (
                         <Fragment key={b.ci}>
                           <tr className={`s-rp-child ${b.isDormant ? "s-rp-quiet" : ""}`} data-testid="branch-row">
-                            <td className="s-rp-first s-rp-first-wrap" style={{ paddingInlineStart: 22 }}>
+                            <th scope="row" className="s-rp-first s-rp-first-wrap" style={{ paddingInlineStart: 22 }}>
                               <button type="button" className="s-rp-rowbtn" style={{ alignItems: "flex-start" }} aria-expanded={bOpen} onClick={() => onToggle(bk)}>
                                 <ChevronLeft size={13} className="s-rp-chev" style={{ marginBlockStart: 4 }} aria-hidden />
                                 <span className="s-rp-wrapname">
-                                  <span>{b.name}</span>
+                                  <NameText name={b.name} />
                                   <BranchBadges b={b} />
                                 </span>
                               </button>
-                            </td>
+                            </th>
                             <td className="s-rp-mid" style={{ fontSize: 11.5 }}>
                               {shortDate(b.last)}
                             </td>
                             {mcells(b.months)}
-                            <td className="s-rp-num">{cell(b.tot, unit)}</td>
+                            <td className="s-rp-num">
+                              <Fig v={b.tot} unit={unit} short={short} />
+                            </td>
                           </tr>
                           {bOpen
                             ? b.products.map((pr) => (
                                 <tr key={pr.si} className="s-rp-child s-rp-lvl3" data-testid="product-row">
-                                  <td className="s-rp-first" style={{ paddingInlineStart: 44, fontWeight: 400 }} title={`${d.sku[pr.si][0]} · ${d.sku[pr.si][1] || ""}`}>
-                                    {d.sku[pr.si][0]} · {d.sku[pr.si][1] || ""}
-                                  </td>
+                                  <th scope="row" className="s-rp-first" style={{ paddingInlineStart: 44, fontWeight: 400 }} title={`${d.sku[pr.si][0]} · ${d.sku[pr.si][1] || ""}`}>
+                                    <NameText name={`${d.sku[pr.si][0]} · ${d.sku[pr.si][1] || ""}`} />
+                                  </th>
                                   <td className="s-rp-mid" style={{ fontSize: 11.5 }}>
                                     {d.sku[pr.si][3]}
                                   </td>
                                   {mcells(pr.months)}
-                                  <td className="s-rp-num">{cell(pr.tot, unit)}</td>
+                                  <td className="s-rp-num">
+                                    <Fig v={pr.tot} unit={unit} short={short} />
+                                  </td>
                                 </tr>
                               ))
                             : null}
@@ -233,11 +247,11 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
         </tbody>
         <tfoot>
           <tr className="s-rp-total" data-testid="report-total">
-            <td className="s-rp-first">{L.chainsTotalRow}</td>
+            <th scope="row" className="s-rp-first">{L.chainsTotalRow}</th>
             <td />
             {mcells(model.totals.months)}
             <td className="s-rp-num" data-testid="total-tot">
-              {cell(model.totals.tot, unit)}
+              <Fig v={model.totals.tot} unit={unit} short={short} />
             </td>
           </tr>
         </tfoot>

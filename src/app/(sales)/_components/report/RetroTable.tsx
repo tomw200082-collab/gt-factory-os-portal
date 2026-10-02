@@ -48,7 +48,7 @@ export function RetroTable({ d, rows }: { d: ReportData; rows: readonly RetroRow
     );
   }
   return (
-    <div className="s-rp-scroll" data-testid="retro">
+    <div className="s-rp-scroll" role="region" tabIndex={0} aria-label={L.retroTitle} data-testid="retro">
       <table className="s-rp-table">
         <caption className="sr-only">{L.retroTitle}</caption>
         <thead>

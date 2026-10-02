@@ -59,39 +59,40 @@ export function MonthlyChart({ months, all, unit, partialIdx }: { months: readon
         {[1, 2, 3, 4].map((i) => {
           const yy = P.t + ih - (ih * i) / 4;
           return (
-            <g key={i}>
-              <line className="s-rp-gl" x1={P.l} x2={W - P.r} y1={yy} y2={yy} />
-              <text className="s-rp-axis" x={P.l} y={yy - 4} textAnchor="start">
-                {compact((mx * i) / 4, unit)}
-              </text>
-            </g>
+            <line key={i} className="s-rp-gl" x1={P.l} x2={W - P.r} y1={yy} y2={yy} />
           );
         })}
-        {xLabels.map((i) => (
-          <text key={i} className="s-rp-axis" x={X(i)} y={H - 6} textAnchor="middle">
-            {monthLabel(months, i)}
-          </text>
-        ))}
         {prior.length > 1 ? <path d={smoothPath(prior)} fill="none" stroke="hsl(var(--s-fg-faint))" strokeWidth={2} strokeDasharray="6 5" /> : null}
         <path d={`${solid} L${X(lastFull)} ${base} L${X(0)} ${base} Z`} fill={`url(#g${uid})`} stroke="none" />
         <path d={solid} fill="none" stroke="hsl(var(--s-accent))" strokeWidth={2.6} strokeLinejoin="round" />
         <path d={`M${X(lastFull)} ${Y(all[lastFull])} L${X(NP - 1)} ${Y(all[NP - 1])}`} fill="none" stroke="hsl(var(--s-review))" strokeWidth={2.6} strokeDasharray="5 5" />
         <circle cx={X(NP - 1)} cy={Y(all[NP - 1])} r={4.5} fill="hsl(var(--s-surface))" stroke="hsl(var(--s-review))" strokeWidth={2} />
         <circle cx={X(lastFull)} cy={Y(all[lastFull])} r={4.5} fill="hsl(var(--s-accent))" />
-        <text className="s-rp-axis" x={X(lastFull)} y={Y(all[lastFull]) - 12} textAnchor="middle" style={{ fill: "hsl(var(--s-fg))", fontWeight: 600, fontSize: 12 }}>
-          {compact(all[lastFull], unit)}
-        </text>
-        {showPeak ? (
-          <text className="s-rp-axis" x={X(pk)} y={Y(all[pk]) - 10} textAnchor="middle">
-            {L.chartPeak(monthLabel(months, pk))}
-          </text>
-        ) : null}
         {a !== null ? (
           <g>
             <line x1={X(a)} x2={X(a)} y1={P.t} y2={base} stroke="hsl(var(--s-border-strong))" strokeWidth={1} />
             {pv !== null ? <circle cx={X(a)} cy={Y(pv)} r={3.5} fill="none" stroke="hsl(var(--s-fg-faint))" strokeWidth={1.5} /> : null}
             <circle cx={X(a)} cy={Y(all[a])} r={4} fill="hsl(var(--s-accent))" />
           </g>
+        ) : null}
+        {/* every label last, so its halo masks the line and the area under it */}
+        {[1, 2, 3, 4].map((i) => (
+          <text key={`y${i}`} className="s-rp-axis" x={P.l} y={P.t + ih - (ih * i) / 4 - 4} textAnchor="start">
+            {compact((mx * i) / 4, unit)}
+          </text>
+        ))}
+        {xLabels.map((i) => (
+          <text key={i} className="s-rp-axis" x={X(i)} y={H - 6} textAnchor="middle">
+            {monthLabel(months, i)}
+          </text>
+        ))}
+        <text className="s-rp-axis" x={X(lastFull)} y={Y(all[lastFull]) - 14} textAnchor="middle" style={{ fill: "hsl(var(--s-fg))", fontWeight: 600, fontSize: 12 }}>
+          {compact(all[lastFull], unit)}
+        </text>
+        {showPeak ? (
+          <text className="s-rp-axis" x={X(pk)} y={Y(all[pk]) - 10} textAnchor="middle">
+            {L.chartPeak(monthLabel(months, pk))}
+          </text>
         ) : null}
       </svg>
       <ChartTip show={a !== null} x={a !== null ? X(a) : 0} width={W} top={a !== null ? Math.max(0, Math.min(Y(all[a]) - 74, H - 110)) : 0}>

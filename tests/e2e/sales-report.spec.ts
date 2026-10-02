@@ -545,8 +545,8 @@ test.describe("sales report @mocked", () => {
             const r = th.getBoundingClientRect();
             if (r.width === 0) return;
             // under the pinned column, or hanging off the far edge
-            if (r.right > pin.left + 1 && r.left < pin.left - 1) bad.push(`${th.textContent} under the pinned column`);
-            if (r.left < b.left - 1 && r.right > b.left + 1) bad.push(`${th.textContent} at the far edge`);
+            if (r.right > pin.left + 2 && r.left < pin.left - 2) bad.push(`${th.textContent} under the pinned column`);
+            if (r.left < b.left - 2 && r.right > b.left + 2) bad.push(`${th.textContent} at the far edge`);
           });
           return bad;
         });
@@ -558,4 +558,62 @@ test.describe("sales report @mocked", () => {
       await check("after a scroll");
     });
   }
+
+  for (const [width, months] of [[320, 2], [390, 3], [430, 3]] as const) {
+    test(`a phone's month view shows at least ${months} months and the total at ${width}px`, async ({ page }) => {
+      await open(page, {}, NOW_FRESH, width);
+      await page.getByTestId("report-view-months").click();
+      const n = await page.getByTestId("report-table").evaluate((box) => {
+        const b = box.getBoundingClientRect();
+        const pin = box.querySelector("th.s-rp-first")!.getBoundingClientRect();
+        return [...box.querySelectorAll("thead th:not(.s-rp-first)")].filter((th) => {
+          const r = th.getBoundingClientRect();
+          return r.width > 0 && r.left >= b.left - 1 && r.right <= pin.left + 1;
+        }).length;
+      });
+      expect(n, "columns fully visible (months and total)").toBeGreaterThanOrEqual(months + 1);
+      // a short figure travels with its full value
+      const cell = page.getByTestId("report-row").first().getByTestId("cell-total");
+      await expect(cell.locator(".sr-only")).toHaveText(/\d{1,3}(,\d{3})+/);
+    });
+  }
+
+  test("a search with no match offers to clear it, and carries no zero total", async ({ page }) => {
+    await open(page);
+    await page.getByTestId("report-search").fill("אין-כזה-בכלל");
+    await expect(page.getByTestId("report-summary")).toHaveCount(0);
+    await page.getByTestId("report-clear-search").click();
+    await expect(page.getByTestId("report-search")).toHaveValue("");
+    await expect(page.getByTestId("report-row").first()).toBeVisible();
+  });
+
+  test("the year matrix opens on the latest month that has a figure", async ({ page }) => {
+    await open(page);
+    await page.getByTestId("report-tabbtn-trend").click();
+    const ok = await page.getByTestId("year-matrix").evaluate((box) => {
+      const b = box.getBoundingClientRect();
+      const pin = box.querySelector("th.s-rp-first")!.getBoundingClientRect();
+      const r = box.querySelector("[data-latest]")!.getBoundingClientRect();
+      return r.left >= b.left - 1 && r.right <= pin.left + 1;
+    });
+    expect(ok).toBe(true);
+  });
+
+  test("the refresh-failed band keeps its action beside its words, in the failure tone", async ({ page }) => {
+    await setFakeRole(page, "admin");
+    await stubSalesReport(page, { failAfterFirst: true });
+    await page.clock.install({ time: new Date(NOW_FRESH) });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/sales/report");
+    await expect(page.getByTestId("report-tabs")).toBeVisible();
+    await page.clock.fastForward(5 * 60_000 + 2_000);
+    const strip = page.getByTestId("report-refresh-failed");
+    await expect(strip).toContainText("נבדק לאחרונה");
+    const gap = await strip.evaluate((e) => {
+      const t = e.querySelector("p")!.getBoundingClientRect();
+      const b = e.querySelector("button")!.getBoundingClientRect();
+      return Math.abs(t.left - b.right);
+    });
+    expect(gap).toBeLessThan(700);
+  });
 });

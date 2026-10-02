@@ -559,6 +559,8 @@ export const REPORT_UI = {
   staleRunning: "העדכון מתבצע עכשיו",
   refreshFailed: (clock: string) => `הרענון האחרון נכשל · מוצגים נתונים מ־${clock}`,
   recheck: "בדוק שוב",
+  clearSearch: "נקה חיפוש",
+  checkedAt: (time: string) => `נבדק לאחרונה ב־${time}`,
   rechecking: "בודק…",
   refreshAuto: "הדף בודק שוב מעצמו כל 5 דקות",
   historicSku: (month: string, amount: string) => `ב${month} ${amount} ממכירות מוצרים שאינם במחירון (מסווגים לפי שם המוצר)`,

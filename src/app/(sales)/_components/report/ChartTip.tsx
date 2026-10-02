@@ -85,7 +85,8 @@ export function useChartTip(ref: RefObject<HTMLDivElement>, count: number, locat
       // a still tap chooses a point; a finger that travelled was a swipe
       if (Math.abs(e.clientX - p.x) <= MOVE_SLOP && Math.abs(e.clientY - p.y) <= MOVE_SLOP) {
         const i = at(e);
-        if (i !== null) setActive(i);
+        // a second tap on the chosen point lets it go
+        if (i !== null) setActive((cur) => (cur === i ? null : i));
       }
     },
     onPointerCancel: () => {

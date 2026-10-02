@@ -11,8 +11,8 @@ import { Fragment, useDeferredValue, useId, useMemo, useRef } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
 import { buildGrid, gridChildren, type GridChild, type GridModel, type GridRow, type Heat, type SortCol, type SortState, type YoyCell, nextSort } from "../../_lib/report/aggregate";
 import { gridCsvRows } from "../../_lib/report/csv";
-import { amount, cell, fmtInt, money, pctTone, signedPct } from "../../_lib/report/format";
-import { usePinnedScroller } from "../../_lib/report/hooks";
+import { amount, cell, cellCompact, fmtInt, money, pctTone, signedPct } from "../../_lib/report/format";
+import { useMediaQuery, usePinnedScroller } from "../../_lib/report/hooks";
 import { monthLabel, monthName, periodYears } from "../../_lib/report/period";
 import type { Period, ReportData, Unit } from "../../_lib/report/types";
 import { ListEmpty } from "../EmptyStates";
@@ -55,6 +55,25 @@ export function HeatMark({ h }: { h: Heat | null }) {
       <span className="sr-only">{h.dir === "up" ? L.heatAbove : L.heatBelow}</span>
     </>
   );
+}
+
+/** A figure in a table cell. On a phone it is short (8.3K) and the full figure rides along for a screen reader and a long press. */
+export function Fig({ v, unit, short }: { v: number; unit: Unit; short: boolean }) {
+  const full = cell(v, unit);
+  if (!short || !v) return <>{full}</>;
+  return (
+    <>
+      <span aria-hidden title={full}>
+        {cellCompact(v, unit)}
+      </span>
+      <span className="sr-only">{full}</span>
+    </>
+  );
+}
+
+/** A name in a narrow cell: two lines at most, and a Latin name keeps its start (it is isolated left-to-right). */
+export function NameText({ name }: { name: string }) {
+  return <span className="s-rp-name">{/[A-Za-z]/.test(name) ? <bdi dir="ltr">{name}</bdi> : name}</span>;
 }
 
 /** A percentage's colour follows what it prints: 0% is neither green nor red. */
@@ -118,12 +137,21 @@ export function GridTab(p: GridTabProps) {
         </SearchBox>
       </ControlsBar>
 
-      <p className="s-nums text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }} data-testid="report-summary" role="group" aria-label={L.summaryLabel} aria-live="polite">
-        {summaryLine(grid, unit, d)}
-      </p>
+      {grid.rows.length > 0 || !q.trim() ? (
+        <p className="s-nums text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }} data-testid="report-summary" role="group" aria-label={L.summaryLabel} aria-live="polite">
+          {summaryLine(grid, unit, d)}
+        </p>
+      ) : null}
 
       {grid.rows.length === 0 ? (
-        <ListEmpty label={q.trim() ? L.emptySearch : L.emptyPeriod} />
+        <div className="flex flex-col items-center gap-2">
+          <ListEmpty label={q.trim() ? L.emptySearch : L.emptyPeriod} />
+          {q.trim() ? (
+            <button type="button" className="s-btn s-btn-ghost" data-testid="report-clear-search" onClick={() => p.onQ("")}>
+              {L.clearSearch}
+            </button>
+          ) : null}
+        </div>
       ) : monthsView ? (
         <MonthTable {...p} grid={grid} />
       ) : (
@@ -149,10 +177,12 @@ function MonthTable({ d, tab, period, unit, heat, onSort, open, onToggle, grid }
     </button>
   );
   const scroller = useRef<HTMLDivElement>(null);
-  usePinnedScroller(scroller, `${period}${ms.length}${tab}`);
+  const short = useMediaQuery("(max-width: 639px)");
+  usePinnedScroller(scroller, `${period}${ms.length}${tab}${short}`);
+  const name = tab === "cust" ? L.colCust : L.colProd;
   return (
-    <div ref={scroller} className="s-card s-rp-scroll s-rp-scroll-tall" data-testid="report-table">
-      <table className="s-rp-table">
+    <div ref={scroller} className="s-card s-rp-scroll s-rp-scroll-tall" role="region" tabIndex={0} aria-label={L.tableCaption(name)} data-testid="report-table">
+      <table className="s-rp-table" aria-label={L.tableCaption(name)}>
         <caption className="sr-only">{L.tableCaption(tab === "cust" ? L.colCust : L.colProd)}</caption>
         <thead>
           <tr>
@@ -190,21 +220,21 @@ function MonthTable({ d, tab, period, unit, heat, onSort, open, onToggle, grid }
             return (
               <Fragment key={r.k}>
                 <tr className="s-rp-main" data-testid="report-row" data-key={r.k}>
-                  <td className="s-rp-first" title={r.sub || undefined}>
+                  <th scope="row" className="s-rp-first" title={r.sub || undefined}>
                     <button type="button" className="s-rp-rowbtn" aria-expanded={isOpen} onClick={() => onToggle(key)}>
                       <ChevronLeft size={14} className="s-rp-chev" aria-hidden />
-                      <span>{r.k}</span>
+                      <NameText name={r.k} />
                       {r.sub ? <span className="s-rp-sub">· {r.sub}</span> : null}
                     </button>
-                  </td>
+                  </th>
                   {r.months.map((v, j) => (
                     <td key={ms[j]} className="s-rp-num" style={heat ? { background: heatBackground(r.heat[j]) } : undefined} data-testid="cell-month">
                       {heat ? <HeatMark h={r.heat[j]} /> : null}
-                      {cell(v, unit)}
+                      <Fig v={v} unit={unit} short={short} />
                     </td>
                   ))}
                   <td className="s-rp-num" style={{ fontWeight: 700 }} data-testid="cell-total">
-                    {cell(r.tot, unit)}
+                    <Fig v={r.tot} unit={unit} short={short} />
                   </td>
                   <td className="s-rp-mid s-rp-muted s-rp-opt-sm">{r.share === null ? "" : `${r.share.toFixed(1)}%`}</td>
                   {grid.hasYoy ? (
@@ -216,21 +246,21 @@ function MonthTable({ d, tab, period, unit, heat, onSort, open, onToggle, grid }
                     <Sparkline vals={r.spark} w={72} />
                   </td>
                 </tr>
-                {isOpen ? <ChildRows d={d} dim={dim} period={period} unit={unit} parent={r.k} ms={ms} hasYoy={grid.hasYoy} /> : null}
+                {isOpen ? <ChildRows d={d} dim={dim} period={period} unit={unit} parent={r.k} ms={ms} hasYoy={grid.hasYoy} short={short} /> : null}
               </Fragment>
             );
           })}
         </tbody>
         <tfoot>
           <tr className="s-rp-total" data-testid="report-total">
-            <td className="s-rp-first">{grid.capped ? L.totalRowCapped(grid.rows.length, grid.matched) : L.totalRow}</td>
+            <th scope="row" className="s-rp-first">{grid.capped ? L.totalRowCapped(grid.rows.length, grid.matched) : L.totalRow}</th>
             {grid.total.months.map((v, j) => (
               <td key={ms[j]} className="s-rp-num">
-                {cell(v, unit)}
+                <Fig v={v} unit={unit} short={short} />
               </td>
             ))}
             <td className="s-rp-num" data-testid="total-tot">
-              {cell(grid.total.tot, unit)}
+              <Fig v={grid.total.tot} unit={unit} short={short} />
             </td>
             <td className="s-rp-mid s-rp-opt-sm">100%</td>
             {grid.hasYoy ? (
@@ -246,22 +276,22 @@ function MonthTable({ d, tab, period, unit, heat, onSort, open, onToggle, grid }
   );
 }
 
-function ChildRows({ d, dim, period, unit, parent, ms, hasYoy }: { d: ReportData; dim: "cust" | "fam"; period: Period; unit: Unit; parent: string; ms: number[]; hasYoy: boolean }) {
+function ChildRows({ d, dim, period, unit, parent, ms, hasYoy, short }: { d: ReportData; dim: "cust" | "fam"; period: Period; unit: Unit; parent: string; ms: number[]; hasYoy: boolean; short: boolean }) {
   const kids = useMemo(() => gridChildren(d, { dim, period, unit }, parent), [d, dim, period, unit, parent]);
   return (
     <>
       {kids.map((k) => (
         <tr key={k.k} className="s-rp-child" data-testid="report-child">
-          <td className="s-rp-first" style={{ paddingInlineStart: 30, fontWeight: 400 }} title={k.k}>
-            {k.k}
-          </td>
+          <th scope="row" className="s-rp-first" style={{ paddingInlineStart: 30, fontWeight: 400 }} title={k.k}>
+            <NameText name={k.k} />
+          </th>
           {k.months.map((v, j) => (
             <td key={ms[j]} className="s-rp-num">
-              {cell(v, unit)}
+              <Fig v={v} unit={unit} short={short} />
             </td>
           ))}
           <td className="s-rp-num" style={{ fontWeight: 600 }}>
-            {cell(k.tot, unit)}
+            <Fig v={k.tot} unit={unit} short={short} />
           </td>
           <td className="s-rp-mid s-rp-opt-sm">{k.share === null ? "" : `${k.share.toFixed(0)}%`}</td>
           {hasYoy ? <td className="s-rp-opt-sm" /> : null}
