@@ -65,7 +65,7 @@ export function OrderSheet({ orgId, order, onClose }: { orgId: string; order: Pi
             </span>
           </div>
           <p className="mt-3 text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-            {UI.contactFrom(UI.sourceShopify, fmtDateTime(detail.data.provenance.observed_at))}
+            {UI.sourceSystem}: {UI.sourceShopify} · <bdi>{fmtDateTime(detail.data.provenance.observed_at)}</bdi>
           </p>
         </>
       ) : null}

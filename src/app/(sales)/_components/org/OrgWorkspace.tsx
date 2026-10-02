@@ -8,18 +8,21 @@
 // else about the business is asked for, so a forbidden business costs one
 // request and shows nothing.
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSession } from "@/lib/auth/session-provider";
-import { useContactAction, useLeads, useOrg, useOrgContacts, useOrgRiver, useSettings, useTasks } from "../../_lib/api";
+import { useContactAction, useLeads, useOrg, useOrgCircle, useOrgContacts, useOrgRiver, useSettings, useTasks } from "../../_lib/api";
 import { fmtDateTime } from "../../_lib/format";
 import { UI, contactSourceLabel } from "../../_lib/labels";
 import { nextActionFor } from "../../_lib/nextAction";
 import { useAutoClear } from "../../_lib/useAutoClear";
 import { historyShown, historyView } from "../../_lib/orgTruth";
+import { buildRing, type RingMonth } from "../../_lib/ring";
 import type { ContactRow, OrderRow, RiverChip } from "../../_lib/types";
 import { QueueError } from "../EmptyStates";
 import { Toast } from "../Toast";
+import { BusinessCircle } from "./BusinessCircle";
 import { ContactsList } from "./ContactsList";
+import { MonthSheet } from "./MonthSheet";
 import { NextAction } from "./NextAction";
 import { OrderRiver } from "./OrderRiver";
 import { OrderSheet } from "./OrderSheet";
@@ -34,11 +37,9 @@ type OrderRef = Pick<OrderRow, "gid" | "name" | "created_at" | "class" | "draft_
 
 export interface OrgWorkspaceProps {
   orgId: string;
-  /** Tranche 191 places the business circle here, after the summary. */
-  circleSlot?: (ctx: { onOpenOrder: (o: OrderRef) => void; pendingDrafts: import("../../_lib/types").PendingDraft[] }) => ReactNode;
 }
 
-export function OrgWorkspace({ orgId, circleSlot }: OrgWorkspaceProps) {
+export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
   const { session } = useSession();
   const manager = session?.role === "admin" || session?.role === "planner";
 
@@ -50,6 +51,12 @@ export function OrgWorkspace({ orgId, circleSlot }: OrgWorkspaceProps) {
   const contacts = useOrgContacts(orgId, ready && !retired);
   const [chip, setChip] = useState<RiverChip>("all");
   const river = useOrgRiver(orgId, chip, ready);
+  const showsHistory = view !== null && historyShown(view);
+  const circle = useOrgCircle(orgId, ready && showsHistory);
+  // The ring's open drafts come from the unfiltered river's first page (F1); a
+  // chip switch keeps the last ones seen rather than blanking the ring.
+  const allRiver = useOrgRiver(orgId, "all", ready && showsHistory && chip !== "all");
+  const [month, setMonth] = useState<RingMonth | null>(null);
   const tasks = useTasks(manager ? "all" : "mine");
   const leads = useLeads();
   const settings = useSettings(manager);
@@ -69,6 +76,13 @@ export function OrgWorkspace({ orgId, circleSlot }: OrgWorkspaceProps) {
   );
   const riverItems = useMemo(() => river.data?.pages.flatMap((p) => p.rows) ?? [], [river.data]);
   const firstRiverPage = river.data?.pages[0];
+  const pendingPage = chip === "all" ? firstRiverPage : allRiver.data?.pages[0];
+  const pendingDrafts = useMemo(() => pendingPage?.pending_drafts ?? [], [pendingPage]);
+  const ringMonths = useMemo(() => {
+    if (!circle.data) return [];
+    const r = buildRing(circle.data.months, pendingDrafts);
+    return [...r.inner, ...r.outer];
+  }, [circle.data, pendingDrafts]);
 
   if (org.isLoading) return <OrgLoading />;
   if (org.isError) {
@@ -117,7 +131,18 @@ export function OrgWorkspace({ orgId, circleSlot }: OrgWorkspaceProps) {
           {view !== "identity" ? (
             <OrgSummary org={d} view={view} onSource={() => setSource(historySource)} onOpenOrder={(o) => setOrder({ ...o, class: "completed", draft_status: null })} />
           ) : null}
-          {shown && circleSlot ? circleSlot({ onOpenOrder: setOrder, pendingDrafts: firstRiverPage?.pending_drafts ?? [] }) : null}
+          {shown && circle.data && circle.data.months.length > 0 ? (
+            <BusinessCircle
+              data={circle.data}
+              pending={pendingDrafts}
+              moved={d.moved}
+              onMonth={(ym) => setMonth(ringMonths.find((m) => m.ym === ym) ?? null)}
+            />
+          ) : shown && circle.isLoading ? (
+            <div className="s-panel animate-pulse" aria-busy="true" style={{ minHeight: 380 }}>
+              <span className="sr-only">{UI.loading}</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -162,6 +187,9 @@ export function OrgWorkspace({ orgId, circleSlot }: OrgWorkspaceProps) {
       {!retired ? <OrgLeads leads={orgLeads} /> : null}
 
       {source ? <SourceSheet source={source} onClose={() => setSource(null)} /> : null}
+      {month ? (
+        <MonthSheet orgId={orgId} month={month} asOf={d.as_of} onOpenOrder={setOrder} onClose={() => setMonth(null)} />
+      ) : null}
       {order ? <OrderSheet orgId={orgId} order={order} onClose={() => setOrder(null)} /> : null}
       {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
     </div>

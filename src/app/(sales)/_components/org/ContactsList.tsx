@@ -180,9 +180,13 @@ function ContactText({ contact, onSource }: { contact: ContactRow; onSource: () 
       </p>
       <button type="button" className="s-source-link" onClick={onSource} aria-haspopup="dialog">
         <Info size={12} aria-hidden />
-        {contact.verified_at && contact.verified_by
-          ? UI.contactVerifiedBy(contact.verified_by.split("@")[0], fmtDateTime(contact.verified_at))
-          : UI.contactFrom(contactSourceLabel(contact.source.system), fmtDateTime(contact.source.observed_at))}
+        <span>
+          {contact.verified_at && contact.verified_by
+            ? UI.contactVerifiedByWho(contact.verified_by.split("@")[0])
+            : UI.contactFromWhere(contactSourceLabel(contact.source.system))}
+          {" · "}
+          <bdi>{fmtDateTime(contact.verified_at ?? contact.source.observed_at)}</bdi>
+        </span>
       </button>
     </div>
   );

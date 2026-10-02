@@ -744,7 +744,10 @@
   [data-app="sales"] .s-mini-rail *::after,
   [data-app="sales"] .s-lead-rail *,
   [data-app="sales"] .s-lead-rail *::before,
-  [data-app="sales"] .s-lead-rail *::after {
+  [data-app="sales"] .s-lead-rail *::after,
+  [data-app="sales"] .s-ring-month,
+  [data-app="sales"] .s-ring-seg,
+  [data-app="sales"] .s-refetching {
     animation: none !important;
     transition: none !important;
   }
@@ -1902,4 +1905,261 @@
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid hsl(var(--s-border));
   background: hsl(var(--s-surface));
+}
+
+/* ===========================================================================
+   GT Pulse Unit B: the business circle and the identity review (tranche 191)
+   =========================================================================== */
+
+/* The ring. Each month is an annular sector: the tap target. A month with
+   orders is tinted order green, an empty one is a quiet sunken grey, and the
+   current month carries the action ring. Marks are drawn, never pressed. */
+[data-app="sales"] .s-ring-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  margin: 12px auto 0;
+  aspect-ratio: 1;
+}
+[data-app="sales"] .s-ring {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+[data-app="sales"] .s-ring-seg {
+  fill: hsl(var(--s-surface-sunken));
+  stroke: hsl(var(--s-border));
+  stroke-width: 1;
+  cursor: pointer;
+  transition: fill 180ms var(--s-settle);
+}
+[data-app="sales"] .s-ring-seg[data-has] {
+  fill: hsl(var(--s-status-won-soft));
+  stroke: hsl(var(--s-status-won) / 0.35);
+}
+[data-app="sales"] .s-ring-seg[data-current] {
+  stroke: hsl(var(--s-accent));
+  stroke-width: 2.5;
+}
+[data-app="sales"] .s-ring-seg:hover {
+  fill: hsl(var(--s-accent-soft));
+}
+[data-app="sales"] .s-ring-seg:focus {
+  outline: none;
+}
+[data-app="sales"] .s-ring-seg:focus-visible {
+  stroke: hsl(var(--s-accent));
+  stroke-width: 4;
+}
+[data-app="sales"] .s-ring-mark {
+  pointer-events: none;
+}
+[data-app="sales"] .s-ring-mark-filled {
+  fill: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-ring-mark-hollow {
+  fill: hsl(var(--s-surface));
+  stroke: hsl(var(--s-fg-muted));
+  stroke-width: 1.6;
+}
+[data-app="sales"] .s-ring-mark-open {
+  fill: none;
+  stroke: hsl(var(--s-review));
+  stroke-width: 2.4;
+}
+/* Arrival: the months settle in once, oldest first. Nothing loops. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-app="sales"] .s-ring-wrap[data-motion="on"] .s-ring-month {
+    transform-origin: 170px 170px;
+    animation: s-ring-in 520ms var(--s-settle) both;
+    animation-delay: calc(var(--i, 0) * 18ms);
+  }
+}
+@keyframes s-ring-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+[data-app="sales"] .s-ring-centre {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 40%;
+  height: 40%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  pointer-events: none;
+}
+[data-app="sales"] .s-ring-centre-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--s-fg-muted));
+  overflow-wrap: anywhere;
+}
+[data-app="sales"] .s-ring-centre-value {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: hsl(var(--s-fg));
+}
+[data-app="sales"] .s-ring-centre-sub {
+  font-size: 13px;
+  color: hsl(var(--s-fg));
+}
+[data-app="sales"] .s-ring-centre-source {
+  margin-top: 2px;
+  font-size: 12px;
+  color: hsl(var(--s-fg-faint));
+}
+
+/* Below 360px the ring would push its inner months under 44px: the same 24
+   months become a grid of named buttons, newest first. */
+[data-app="sales"] .s-circle-grid {
+  display: none;
+}
+@media (max-width: 359px) {
+  [data-app="sales"] .s-ring-wrap {
+    display: none;
+  }
+  [data-app="sales"] .s-circle-grid {
+    display: block;
+    margin-top: 12px;
+  }
+}
+[data-app="sales"] .s-circle-grid-centre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+}
+[data-app="sales"] .s-circle-grid-centre .s-ring-centre-source {
+  flex-basis: 100%;
+}
+[data-app="sales"] .s-circle-cells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+[data-app="sales"] .s-circle-cell {
+  display: flex;
+  min-height: 56px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: var(--s-radius-sm);
+  border: 1px solid hsl(var(--s-border));
+  background: hsl(var(--s-surface-sunken));
+  font-family: inherit;
+  color: hsl(var(--s-fg));
+  cursor: pointer;
+}
+[data-app="sales"] .s-circle-cell[data-has] {
+  background: hsl(var(--s-status-won-soft));
+  border-color: hsl(var(--s-status-won) / 0.35);
+}
+[data-app="sales"] .s-circle-cell[data-current] {
+  border: 2px solid hsl(var(--s-accent));
+}
+[data-app="sales"] .s-circle-cell:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+[data-app="sales"] .s-circle-cell-month {
+  font-size: 13px;
+  font-weight: 500;
+}
+[data-app="sales"] .s-circle-cell-year {
+  font-size: 12px;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-circle-cell-marks {
+  display: flex;
+  gap: 3px;
+  min-height: 8px;
+}
+
+/* Marks outside the SVG (grid cells, legend) share the ring's language. */
+[data-app="sales"] .s-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+[data-app="sales"] .s-dot-filled {
+  background: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-dot-hollow {
+  background: hsl(var(--s-surface));
+  box-shadow: inset 0 0 0 1.5px hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-dot-open {
+  box-shadow: inset 0 0 0 2px hsl(var(--s-review));
+}
+[data-app="sales"] .s-circle-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-circle-legend > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-app="sales"] .s-legend-grid {
+  display: none !important;
+}
+@media (max-width: 359px) {
+  [data-app="sales"] .s-legend-ring {
+    display: none !important;
+  }
+  [data-app="sales"] .s-legend-grid {
+    display: inline-flex !important;
+  }
+}
+[data-app="sales"] .s-circle-legend-rings {
+  flex-basis: 100%;
+  justify-content: center;
+  text-align: center;
+}
+
+/* The identity review: candidates side by side from 640px, stacked on a phone. */
+[data-app="sales"] .s-review-name {
+  color: hsl(var(--s-fg));
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--s-border-strong));
+  text-underline-offset: 3px;
+}
+[data-app="sales"] .s-review-name:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+[data-app="sales"] .s-candidates {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 640px) {
+  [data-app="sales"] .s-candidates {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+[data-app="sales"] .s-candidate {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: var(--s-radius);
+  border: 1px solid hsl(var(--s-border));
+  background: hsl(var(--s-surface-sunken));
 }

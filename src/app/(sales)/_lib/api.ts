@@ -20,6 +20,9 @@ import type {
   AttentionRow,
   LeadEventRow,
   TodayPayload,
+  IdentityAction,
+  IdentityResult,
+  IdentityReview,
   OrderDetail,
   OrdersPage,
   OrgCircle,
@@ -112,6 +115,7 @@ export const salesKeys = {
   orgSearch: (q: string) => ["sales", "orgs", "search", q] as const,
   org: (id: string) => ["sales", "org", id] as const,
   orgPart: (id: string, part: string, ...rest: string[]) => ["sales", "org", id, part, ...rest] as const,
+  identityReview: () => ["sales", "identity-review"] as const,
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
@@ -406,6 +410,24 @@ export function useBulkAssign() {
     { lead_ids: string[]; assignee: string; next_touch_at?: string | null },
     { assigned: number }
   >((vars) => request("/api/sales/bulk-assign", jsonBody(vars)));
+}
+
+/** The managers' review queue: orgs whose Shopify link waits for a decision. */
+export function useIdentityReview(enabled: boolean): UseQueryResult<IdentityReview, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.identityReview(),
+    enabled,
+    queryFn: async () => await request<IdentityReview>("/api/sales/identity-review"),
+    retry: retryServerErrors,
+    staleTime: 15_000,
+  });
+}
+
+/** A manager's identity decision: one transaction writes the link, the event and closes the task. */
+export function useResolveIdentity() {
+  return useSalesMutation<{ orgId: string; action: IdentityAction; customer_gid?: string }, IdentityResult>(
+    ({ orgId, ...body }) => request(`/api/sales/orgs/${encodeURIComponent(orgId)}/identity`, jsonBody(body)),
+  );
 }
 
 /** A manager's decision on one contact that awaits review. */

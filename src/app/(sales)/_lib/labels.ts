@@ -387,8 +387,8 @@ export const ORG_UI = {
   contactsVerifiedTitle: "מאומתים",
   contactsReviewTitle: "ממתינים לאימות",
   contactsReviewHint: "לא מאומת: אין חיוג או הודעה מכאן עד שמישהו יאשר.",
-  contactVerifiedBy: (who: string, when: string) => `אומת על ידי ${who} · ${when}`,
-  contactFrom: (source: string, when: string) => `מקור: ${source} · ${when}`,
+  contactVerifiedByWho: (who: string) => `אומת על ידי ${who}`,
+  contactFromWhere: (source: string) => `מקור: ${source}`,
   contactVerifyNamed: (name: string) => `אמת את ${name}`,
   contactRejectNamed: (name: string) => `דחה את ${name}`,
   contactVerify: "אמת",
@@ -404,6 +404,71 @@ export const ORG_UI = {
   leadsTitle: "הלידים של העסק",
   leadsEmpty: "אין לידים לעסק",
   openBusiness: "לעמוד העסק",
+
+  // the business circle and the month sheet (tranche 191)
+  circleTitle: "שנתיים של הזמנות",
+  circleMonthsGroup: "חודשים, מהישן לחדש",
+  circleLegendOrder: "הזמנה",
+  circleLegendCancelled: "בוטלה",
+  circleLegendDraft: "טיוטה פתוחה",
+  circleLegendRings: "בחוץ: 12 החודשים האחרונים. בפנים: 12 שלפניהם. החודש הנוכחי למעלה",
+  circleLegendGrid: "מהחודש הנוכחי (במסגרת) אחורה, שנתיים",
+  circleMovedTitle: (to: string) => `עבר ל${to}`,
+  circleMovedSince: (on: string) => `מ־${on}`,
+  circleNoOrders: "אין הזמנות בשנתיים האחרונות",
+  circleSource: "מקור: Shopify",
+  monthCounts: (orders: number, refunded: number, cancelled: number, open: number) => {
+    const parts: string[] = [];
+    if (orders === 0 && cancelled === 0 && open === 0) return "אין הזמנות";
+    if (orders > 0) parts.push(orders === 1 ? "הזמנה אחת" : `${orders} הזמנות`);
+    if (refunded > 0) parts.push(refunded === 1 ? "אחת עם החזר" : `${refunded} עם החזר`);
+    if (cancelled > 0) parts.push(cancelled === 1 ? "אחת בוטלה" : `${cancelled} בוטלו`);
+    if (open > 0) parts.push(open === 1 ? "טיוטה פתוחה אחת" : `${open} טיוטות פתוחות`);
+    return parts.join(", ");
+  },
+  monthEmpty: "אין הזמנות בחודש הזה",
+  monthLoading: "טוען את הזמנות החודש…",
+
+  // the identity review (tranche 191)
+  reviewTitle: "בדיקת זהות",
+  reviewIntro: "עסקים שהקישור שלהם ל־Shopify מחכה להחלטה של מנהל. עד ההחלטה לא מוצגים להם הזמנות וסכומים.",
+  reviewCount: (n: number) => (n === 1 ? "עסק אחד ממתין להחלטה" : `${n} עסקים ממתינים להחלטה`),
+  reviewCoverage: (verified: number, census: number) =>
+    `${new Intl.NumberFormat("he-IL").format(verified)} מתוך ${new Intl.NumberFormat("he-IL").format(census)} הלקוחות הפעילים ב־Shopify מאומתים`,
+  reviewCoverageSource: "מקור: ספירת הלקוחות של Shopify",
+  reviewEmpty: "אין עסקים שממתינים להחלטה ✓",
+  reviewForbiddenTitle: "המסך הזה למנהלי מכירות",
+  reviewForbiddenHint: "החלטות על זהות של עסקים מתקבלות בידי מנהל.",
+  reviewSince: (when: string) => `בבדיקה מ־${when}`,
+  candidatesTitle: "מועמדים ב־Shopify",
+  candidateEvidence: "ראיה להחלטה, לא נתון מאומת",
+  candidateHeld: "הלקוח שהעסק מחזיק היום",
+  candidatePhone: "אותו מספר טלפון",
+  candidateOrders: (n: number) => (n === 1 ? "הזמנה נקייה אחת" : `${n} הזמנות נקיות`),
+  candidateLast: (when: string) => `אחרונה: ${when}`,
+  candidateNoOrders: "אין הזמנות נקיות",
+  candidateUnnamed: "לקוח ללא שם",
+  chooseCandidate: "זה העסק",
+  confirmCustomer: "אשר את הלקוח",
+  rejectAll: "אף אחד מהם",
+  confirmChain: "אשר שיוך לרשת",
+  reviewBlocked: "אי אפשר להחליט מכאן: הלקוח שהעסק מחזיק לא נמצא בהעתק של Shopify. ההחלטה דורשת טעינה ידנית של הלקוח.",
+  linkTitle: (org: string, customer: string) => `לקשר את ${org} ל${customer}?`,
+  linkConsequence: "מרגע זה העסק ייחשב לקוח מאומת, ויוצגו לו ההזמנות והסכומים של הלקוח הזה ב־Shopify. אם הלקוח כבר שייך לעסק אחר, שני העסקים יאוחדו.",
+  linkConfirm: "כן, לקשר",
+  rejectTitle: (org: string) => `לקבוע שאף מועמד אינו ${org}?`,
+  rejectConsequence: "הקישור ל־Shopify יוסר מהעסק, והמועמדים יירשמו כנדחים. לא יוצגו לעסק הזמנות עד שתימצא התאמה.",
+  rejectConfirm: "כן, אף אחד מהם",
+  chainTitle: (org: string) => `לשייך את ${org} לרשת שמפת הרשתות מציעה?`,
+  chainConsequence: "העסק יוצג כסניף ברשת. השיוך נרשם כהחלטה שלך.",
+  chainConfirm: "כן, לשייך",
+  reviewLinked: (org: string) => `${org} קושר ✓`,
+  reviewMerged: (org: string) => `${org} אוחד עם העסק הקיים ✓`,
+  reviewRejected: (org: string) => `הקישור של ${org} הוסר`,
+  reviewChained: (org: string) => `${org} שויך לרשת ✓`,
+  exceptionsTitle: "חריגות בסנכרון",
+  exceptionsEmpty: "אין חריגות פתוחות",
+  openOrg: (name: string) => `פתח את ${name}`,
 } as const;
 
 export const NAV_LABELS = {
@@ -749,4 +814,16 @@ export const RULE_MESSAGES: Record<string, string> = {
   SALES_INVALID_STATUS: "סטטוס לא מוכר.",
   SALES_LEAD_NOT_FOUND: "הליד לא נמצא.",
   SALES_NOTE_EMPTY: "ההערה ריקה.",
+  // GT Pulse Unit B (gt-factory-os orgs_handler.ts)
+  SALES_ORG_NOT_FOUND: "העסק לא נמצא.",
+  SALES_ORG_RETIRED: "אחד העסקים סגור. אי אפשר לשייך לו בעלים.",
+  SALES_OWNER_UNKNOWN: "האדם הזה אינו איש מכירות פעיל.",
+  SALES_IDENTITY_NOTHING_OPEN: "ההחלטה כבר התקבלה בינתיים. רעננו את הרשימה.",
+  SALES_IDENTITY_NOT_REJECTABLE: "כאן השאלה היא הלקוח עצמו, ואין קישור לדחות.",
+  SALES_IDENTITY_ACTION_UNSUPPORTED: "הפעולה הזו לא מתאימה לעסק הזה.",
+  SALES_IDENTITY_CHAIN_AMBIGUOUS: "מפת הרשתות לא מציעה רשת אחת ברורה.",
+  SALES_IDENTITY_NEEDS_CUSTOMER: "צריך לבחור לקוח.",
+  SALES_IDENTITY_NOT_MIRRORED: "הלקוח לא נמצא בהעתק של Shopify.",
+  SALES_IDENTITY_NOT_A_CANDIDATE: "הלקוח הזה כבר אינו מועמד לעסק. רעננו את הרשימה.",
+  SALES_CONTACT_NOT_FOUND: "איש הקשר לא נמצא.",
 };
