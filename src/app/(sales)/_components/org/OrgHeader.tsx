@@ -55,9 +55,11 @@ export function OrgHeader({ org, view, ownerName, onSource }: OrgHeaderProps) {
           {ownerName ? UI.ownerLine(ownerName) : UI.orgNoOwner}
         </span>
         {historyShown(view) && org.as_of ? (
-          <button type="button" className="s-badge s-badge-glass s-badge-button" onClick={onSource} aria-haspopup="dialog">
-            <Info size={13} aria-hidden />
-            <span className="s-nums">{UI.freshness(fmtDateTime(org.as_of))}</span>
+          <button type="button" className="s-fresh" onClick={onSource} aria-haspopup="dialog">
+            <span className="s-badge s-badge-glass">
+              <Info size={13} aria-hidden />
+              <span className="s-nums">{UI.freshness(fmtDateTime(org.as_of))}</span>
+            </span>
           </button>
         ) : null}
       </div>

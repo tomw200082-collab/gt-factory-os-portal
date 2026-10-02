@@ -47,6 +47,9 @@ manifest:
   - tests/unit/sales/ring.test.ts
   - tests/unit/sales/business-circle.test.tsx
   - tests/unit/sales/identity-review.test.tsx
+  - tests/e2e/sales-orgs.spec.ts
+  - tests/e2e/_fixtures/salesOrgs.ts
+  - src/app/(sales)/_components/org/OrgHeader.tsx
 
 ## Gates
 
