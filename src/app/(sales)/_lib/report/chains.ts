@@ -13,6 +13,7 @@
 //     that moved to a distributor has not gone dark.
 
 import { REPORT_UI as L } from "../labels";
+import { monthYear } from "./format";
 import type { ChainMeta, ReportData, Unit } from "./types";
 
 export const DORMANT_DAYS = 90;
@@ -111,7 +112,7 @@ function badgesOf(meta: ChainMeta, branches: number, dormant: number): ChainBadg
     if (dormant) out.push({ kind: "sl", text: dormant === 1 ? L.badgeOneDormant : L.badgeDormant(dormant) });
   }
   if (meta.group) out.push({ kind: "gr", text: L.badgeGroup(meta.group) });
-  if (meta.status === "moved_to_distributor") out.push({ kind: "mv", text: L.badgeMoved(meta.movedTo ?? "", meta.movedOn ?? "") });
+  if (meta.status === "moved_to_distributor") out.push({ kind: "mv", text: L.badgeMoved(meta.movedTo ?? "", monthYear(meta.movedOn ?? "")) });
   return out;
 }
 

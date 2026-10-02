@@ -1,24 +1,35 @@
 "use client";
 
-// Tap tooltips for the report's charts. The Artifact's tooltips opened on hover only, which a
-// phone does not have. Here a touch or a click chooses a point, a drag along the chart scrubs
-// through points, the arrow keys step through them, and the tip closes on a tap outside the chart
-// or on Escape. A mouse passing over lights a point without choosing it.
+// Tap tooltips for the report's charts. The Artifact's tooltips opened on hover only, which a phone does
+// not have. Here a click or a still tap chooses a point, a drag along the chart scrubs through points, the
+// arrow keys step through them, and the tip closes on a tap outside the chart, on Escape, or when focus
+// leaves the chart. A page swipe that happens to start on the chart (the browser takes the gesture and
+// cancels the pointer) opens nothing. A mouse passing over lights a point without choosing it.
+//
+// The tip text lives in a live region that is always mounted: a region added together with its text is
+// often not announced.
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 export interface ChartTipBind {
   tabIndex: 0;
   onPointerDown: (e: PointerEvent<HTMLDivElement>) => void;
   onPointerMove: (e: PointerEvent<HTMLDivElement>) => void;
+  onPointerUp: (e: PointerEvent<HTMLDivElement>) => void;
+  onPointerCancel: () => void;
   onPointerLeave: (e: PointerEvent<HTMLDivElement>) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+  onBlur: (e: FocusEvent<HTMLDivElement>) => void;
 }
 
-/** `ref` is the chart's wrapper (the caller measures it too); `locate` turns an x within it into a point index. */
-export function useChartTip(ref: RefObject<HTMLDivElement>, count: number, locate: (x: number) => number) {
+const MOVE_SLOP = 8;
+
+/** `ref` is the chart's wrapper (the caller measures it too); `locate` turns an x within it into a point index; `resetKey` closes the tip when what the chart shows changes. */
+export function useChartTip(ref: RefObject<HTMLDivElement>, count: number, locate: (x: number) => number, resetKey?: unknown) {
   const [active, setActive] = useState<number | null>(null);
-  const pressed = useRef(false);
+  const press = useRef<{ x: number; y: number; scrubbing: boolean } | null>(null);
+
+  useEffect(() => setActive(null), [count, resetKey]);
 
   // an outside tap or Escape closes it
   useEffect(() => {
@@ -37,19 +48,6 @@ export function useChartTip(ref: RefObject<HTMLDivElement>, count: number, locat
     };
   }, [active, ref]);
 
-  // a finger lifted ends the scrub; the tip stays until an outside tap
-  useEffect(() => {
-    const up = () => {
-      pressed.current = false;
-    };
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
-    return () => {
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
-    };
-  }, []);
-
   const at = (e: PointerEvent<HTMLDivElement>) => {
     const box = ref.current?.getBoundingClientRect();
     if (!box) return null;
@@ -59,19 +57,41 @@ export function useChartTip(ref: RefObject<HTMLDivElement>, count: number, locat
   const bind: ChartTipBind = {
     tabIndex: 0,
     onPointerDown: (e) => {
-      pressed.current = true;
-      const i = at(e);
-      if (i !== null) setActive(i);
+      if (e.pointerType === "mouse") {
+        const i = at(e);
+        if (i !== null) setActive(i);
+        return;
+      }
+      press.current = { x: e.clientX, y: e.clientY, scrubbing: false };
     },
     onPointerMove: (e) => {
-      // a mouse lights what it passes over; a finger only scrubs while it is down
-      if (e.pointerType === "mouse" || pressed.current) {
+      if (e.pointerType === "mouse") {
+        const i = at(e);
+        if (i !== null) setActive(i);
+        return;
+      }
+      const p = press.current;
+      if (!p) return;
+      if (!p.scrubbing && Math.abs(e.clientX - p.x) > MOVE_SLOP && Math.abs(e.clientX - p.x) > Math.abs(e.clientY - p.y)) p.scrubbing = true;
+      if (p.scrubbing) {
         const i = at(e);
         if (i !== null) setActive(i);
       }
     },
+    onPointerUp: (e) => {
+      const p = press.current;
+      press.current = null;
+      if (e.pointerType === "mouse" || !p || p.scrubbing) return;
+      // a still tap chooses a point; a finger that travelled was a swipe
+      if (Math.abs(e.clientX - p.x) <= MOVE_SLOP && Math.abs(e.clientY - p.y) <= MOVE_SLOP) {
+        const i = at(e);
+        if (i !== null) setActive(i);
+      }
+    },
+    onPointerCancel: () => {
+      press.current = null;
+    },
     onPointerLeave: (e) => {
-      pressed.current = false;
       if (e.pointerType === "mouse") setActive(null);
     },
     onKeyDown: (e) => {
@@ -88,18 +108,39 @@ export function useChartTip(ref: RefObject<HTMLDivElement>, count: number, locat
         setActive(count - 1);
       }
     },
+    onBlur: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setActive(null);
+    },
   };
 
   return { active, setActive, bind };
 }
 
-/** The tooltip card: centred on `x` and kept inside the chart's width. */
-export function ChartTip({ x, width, top = 4, children }: { x: number; width: number; top?: number; children: ReactNode }) {
+/**
+ * The tooltip card: centred on `x` and kept inside the chart's width. Always mounted, empty and invisible
+ * until `show`, so a screen reader hears the text arrive.
+ */
+export function ChartTip({ show, x, width, top = 4, children }: { show: boolean; x: number; width: number; top?: number; children?: ReactNode }) {
   const half = 90;
   const left = Math.min(Math.max(x, half), Math.max(half, width - half));
   return (
-    <div className="s-rp-tip" role="status" aria-live="polite" data-testid="report-tip" style={{ left, top, transform: "translateX(-50%)" }}>
-      {children}
+    <div
+      className={show ? "s-rp-tip" : "sr-only"}
+      role="status"
+      aria-live="polite"
+      data-testid={show ? "report-tip" : undefined}
+      style={show ? { left, top, transform: "translateX(-50%)" } : undefined}
+    >
+      {show ? children : null}
     </div>
+  );
+}
+
+/** What a screen reader hears when the chart takes focus. */
+export function ChartKeysHint({ id, text }: { id: string; text: string }) {
+  return (
+    <span id={id} className="sr-only">
+      {text}
+    </span>
   );
 }

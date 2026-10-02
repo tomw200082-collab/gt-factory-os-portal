@@ -10,11 +10,13 @@ import { compact, money } from "../../_lib/report/format";
 import { useElementWidth } from "../../_lib/report/hooks";
 import type { ReportData } from "../../_lib/report/types";
 import { smoothPath } from "../../_lib/timeline";
-import { ChartTip, useChartTip } from "./ChartTip";
+import { useId } from "react";
+import { ChartKeysHint, ChartTip, useChartTip } from "./ChartTip";
 
 const NICE = [1, 2, 3, 5, 7, 10, 14, 21, 30, 60];
 
 export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; series: DailySeries }) {
+  const uid = useId().replace(/:/g, "");
   const [wrapRef, W] = useElementWidth<HTMLDivElement>(320);
   const H = W < 480 ? 240 : 290;
   const P = { t: 28, r: 10, b: 26, l: 10 };
@@ -26,7 +28,7 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
   const bw = Math.max(1.5, slot - (days > 120 ? 0.6 : 2));
   const X = (i: number) => +(P.l + slot * (i + 0.5)).toFixed(1);
   const Y = (v: number) => +(P.t + ih - (ih * v) / mx).toFixed(1);
-  const { active, bind } = useChartTip(wrapRef, days, (x) => Math.floor((x - P.l) / slot));
+  const { active, bind } = useChartTip(wrapRef, days, (x) => Math.floor((x - P.l) / slot), a0);
 
   const stepNeeded = Math.ceil(40 / slot);
   const step = NICE.find((n) => n >= stepNeeded) ?? 60;
@@ -39,7 +41,8 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
 
   return (
     <>
-    <div ref={wrapRef} className="s-rp-chart" role="group" aria-label={L.chartDailyAria} data-testid="daily-chart" {...bind}>
+    <div ref={wrapRef} className="s-rp-chart" role="group" aria-label={L.chartDailyAria} aria-describedby={`k${uid}`} data-testid="daily-chart" {...bind}>
+      <ChartKeysHint id={`k${uid}`} text={L.chartKeys} />
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={L.chartDailyAria}>
         {[1, 2, 3, 4].map((i) => {
           const yy = P.t + ih - (ih * i) / 4;
@@ -67,7 +70,7 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
                 height={h.toFixed(1)}
                 rx={Math.min(2, bw / 2).toFixed(1)}
                 fill={off ? "hsl(var(--s-fg-faint))" : "hsl(var(--s-accent))"}
-                opacity={a === i ? 0.9 : partial ? 0.35 : off ? 0.32 : 0.5}
+                fillOpacity={a === i ? 1 : partial ? 0.4 : off ? 0.7 : 0.75}
                 stroke={partial ? "hsl(var(--s-review))" : undefined}
                 strokeWidth={partial ? 1.2 : undefined}
                 strokeDasharray={partial ? "2 2" : undefined}
@@ -96,15 +99,17 @@ export function DailyChart({ d, daily, series }: { d: ReportData; daily: Daily; 
         ))}
         {a !== null ? <line x1={X(a)} x2={X(a)} y1={P.t} y2={P.t + ih} stroke="hsl(var(--s-border-strong))" strokeWidth={1} /> : null}
       </svg>
-      {a !== null ? (
-        <ChartTip x={X(a)} width={W} top={2}>
-          <b className="s-nums">{L.chartDailyTip(money(vals[a]), L.orders(daily.cnt[e - daily.first] || 0))}</b>
-          <br />
-          <span style={{ color: "hsl(var(--s-fg-muted))" }}>
-            {L.chartDailyTipSub(DOW_NAMES[dowOf(d, e)], `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}/${String(dd.getUTCFullYear()).slice(2)}`, e === last, money(ma[a]))}
-          </span>
-        </ChartTip>
-      ) : null}
+      <ChartTip show={a !== null} x={a !== null ? X(a) : 0} width={W} top={2}>
+        {a !== null ? (
+          <>
+            <b className="s-nums">{L.chartDailyTip(money(vals[a]), L.orders(daily.cnt[e - daily.first] || 0))}</b>
+            <br />
+            <span style={{ color: "hsl(var(--s-fg-muted))" }}>
+              {L.chartDailyTipSub(DOW_NAMES[dowOf(d, e)], `${dayLabel(d, e)}/${String(dd.getUTCFullYear()).slice(2)}`, e === last, money(ma[a]))}
+            </span>
+          </>
+        ) : null}
+      </ChartTip>
     </div>
     {clipped ? <p className="s-rp-note mt-1" data-testid="daily-clipped">{L.chartDailyClipped}</p> : null}
     </>

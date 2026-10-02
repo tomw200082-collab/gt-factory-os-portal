@@ -19,9 +19,10 @@ export function DailyTab({ d, range, onRange }: { d: ReportData; range: number; 
   const series = useMemo(() => dailySeries(d, daily, range), [d, daily, range]);
   const retro = useMemo(() => retroRows(d, daily, 14), [d, daily]);
 
-  const delta = (a: number, b: number | null): Tile["delta"] => {
+  // a change names what it is a change against: four different baselines sit side by side here
+  const delta = (a: number, b: number | null, against: string): Tile["delta"] => {
     const c = pctChip(pctChange(a, b));
-    return c ? { text: c.text, tone: c.tone } : null;
+    return c ? { text: `${c.text} ${against}`, tone: c.tone } : null;
   };
   // Today is partial, so it is never given a delta against full days; and the headline is the
   // last CLOSED business day, because "yesterday" on a Sunday is Shabbat.
@@ -29,15 +30,15 @@ export function DailyTab({ d, range, onRange }: { d: ReportData; range: number; 
     {
       label: L.dailyTileYest(DOW_NAMES[dowOf(d, h.yest)], dayLabel(d, h.yest)),
       value: money(h.yRev),
-      delta: h.yBase ? delta(h.yRev, h.yBase) : { text: L.dailyOrdersSub(h.yCnt), tone: "mt" },
+      delta: h.yBase ? delta(h.yRev, h.yBase, L.vsUsual) : { text: L.dailyOrdersSub(h.yCnt), tone: "mt" },
     },
     {
       label: L.dailyTileToday(d.pulledTime),
       value: money(h.tRev),
-      delta: h.tBase ? delta(h.tRev, h.tBase) : { text: L.dailyOrdersPartialSub(h.tCnt), tone: "mt" },
+      delta: h.tBase ? delta(h.tRev, h.tBase, L.vsSameHour) : { text: L.dailyOrdersPartialSub(h.tCnt), tone: "mt" },
     },
-    { label: L.dailyTileWeek, value: money(h.w1 / 7), delta: delta(h.w1, h.w0) },
-    { label: L.dailyTileMonth, value: money(h.mtd), delta: delta(h.mtd, h.pmSame) },
+    { label: L.dailyTileWeek, value: money(h.w1 / 7), delta: delta(h.w1, h.w0, L.vsPrevWeek) },
+    { label: L.dailyTileMonth, value: money(h.mtd), delta: delta(h.mtd, h.pmSame, L.vsPrevMonth) },
   ];
   const left = h.thisMonthLen - h.mDays;
   const mxd = Math.max(1, ...h.meds);
@@ -90,6 +91,10 @@ export function DailyTab({ d, range, onRange }: { d: ReportData; range: number; 
           <span>
             <span className="s-rp-sw s-rp-sw-off" aria-hidden />
             {L.chartDailyLegendOff}
+          </span>
+          <span>
+            <span className="s-rp-sw s-rp-sw-today" aria-hidden />
+            {L.chartDailyLegendToday}
           </span>
         </div>
         <DailyChart d={d} daily={daily} series={series} />

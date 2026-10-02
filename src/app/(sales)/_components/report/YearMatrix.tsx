@@ -2,20 +2,21 @@
 
 import { useRef } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
-import { useScrollToEnd } from "../../_lib/report/hooks";
-import { cell, signedPct } from "../../_lib/report/format";
+import { usePinnedScroller } from "../../_lib/report/hooks";
+import { cell, pctTone, signedPct } from "../../_lib/report/format";
 import { MONTH_SHORT } from "../../_lib/report/period";
 import type { YearRow } from "../../_lib/report/trend";
 import type { Unit } from "../../_lib/report/types";
-import { heatBackground } from "./GridTab";
+import { HeatMark, heatBackground } from "./GridTab";
 
 /** Years down, calendar months across. Growth is over months both years have in full: the one in progress never counts. */
 export function YearMatrix({ rows, unit }: { rows: readonly YearRow[]; unit: Unit }) {
   const scroller = useRef<HTMLDivElement>(null);
-  useScrollToEnd(scroller, rows.length);
+  usePinnedScroller(scroller, rows.length);
   return (
     <div ref={scroller} className="s-rp-scroll" data-testid="year-matrix">
       <table className="s-rp-table">
+        <caption className="sr-only">{L.matrixTitle}</caption>
         <thead>
           <tr>
             <th className="s-rp-first" scope="col" style={{ minInlineSize: 64 }}>
@@ -42,6 +43,7 @@ export function YearMatrix({ rows, unit }: { rows: readonly YearRow[]; unit: Uni
               </th>
               {r.cells.map((c) => (
                 <td key={c.month} className="s-rp-num" style={{ background: heatBackground(c.heat) }} data-testid="matrix-cell">
+                  <HeatMark h={c.heat} />
                   {c.v === null ? "" : c.v === 0 ? "0" : cell(c.v, unit)}
                   {c.partial ? ` ${L.partialMark}` : ""}
                 </td>
@@ -53,7 +55,7 @@ export function YearMatrix({ rows, unit }: { rows: readonly YearRow[]; unit: Uni
                 {r.growth === null ? (
                   <span className="s-rp-muted">—</span>
                 ) : (
-                  <span className={r.growth >= 0 ? "s-rp-up" : "s-rp-down"}>{signedPct(r.growth)}</span>
+                  <span className={pctTone(r.growth) === "up" ? "s-rp-up" : pctTone(r.growth) === "dn" ? "s-rp-down" : "s-rp-muted"}>{signedPct(r.growth)}</span>
                 )}
               </td>
             </tr>

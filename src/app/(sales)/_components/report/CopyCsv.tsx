@@ -5,7 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
 import { toCsv } from "../../_lib/report/csv";
 
-/** Copy the table on screen as CSV. Says so for a moment, and says when the browser refused. */
+/**
+ * Copy the table on screen as CSV: an icon button beside the search, with one stable name. What happened
+ * (copied, or the browser refused) goes to a separate live region that is always mounted, and shows as a
+ * check mark on the button for a moment.
+ */
 export function CopyCsv({ rows }: { rows: () => string[][] }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -42,9 +46,21 @@ export function CopyCsv({ rows }: { rows: () => string[][] }) {
   };
 
   return (
-    <button type="button" className="s-rp-tool" data-testid="report-csv" onClick={() => void copy()}>
-      {state === "done" ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}
-      <span role="status">{state === "done" ? L.copied : state === "failed" ? L.copyFailed : L.copyCsv}</span>
-    </button>
+    <>
+      <button
+        type="button"
+        className="s-rp-tool s-rp-icon"
+        aria-label={L.copyCsv}
+        title={state === "failed" ? L.copyFailed : L.copyCsv}
+        data-testid="report-csv"
+        data-state={state}
+        onClick={() => void copy()}
+      >
+        {state === "done" ? <Check size={18} aria-hidden /> : <Copy size={18} aria-hidden />}
+      </button>
+      <span className="sr-only" role="status" data-testid="report-csv-status">
+        {state === "done" ? L.copied : state === "failed" ? L.copyFailed : ""}
+      </span>
+    </>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
-import { REPORT_UI as L, UI } from "../../_lib/labels";
+import { REPORT_UI as L } from "../../_lib/labels";
 import type { Freshness } from "../../_lib/report/freshness";
 
 /** The petrol band: the title, the freshness pill, and what every figure excludes. */
-export function ReportHeader({ fresh }: { fresh: Freshness | null }) {
+export function ReportHeader({ fresh, scope = true }: { fresh: Freshness | null; scope?: boolean }) {
   const live = fresh && fresh.kind === "ready" && !fresh.stale && fresh.clock;
   return (
     <header className="s-opening s-opening-compact flex flex-col gap-2" data-testid="report-header">
@@ -22,16 +22,18 @@ export function ReportHeader({ fresh }: { fresh: Freshness | null }) {
           </span>
         ) : null}
       </div>
-      <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-        {L.exVat}
-      </p>
+      {scope ? (
+        <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+          {L.exVat}
+        </p>
+      ) : null}
     </header>
   );
 }
 
 /** Amber, above the report: what is on screen is the last verified version, and why it is not newer. */
 export function StaleBand({ fresh }: { fresh: Freshness }) {
-  const why = fresh.why === "failed" ? L.staleFailed : fresh.why === "running" ? L.staleRunning : L.staleDelayed;
+  const why = fresh.why === "gate" ? L.staleFailedGate : fresh.why === "failed" ? L.staleFailed : fresh.why === "running" ? L.staleRunning : L.staleDelayed;
   return (
     <div className="s-banner s-banner-review" role="status" data-testid="report-stale">
       <TriangleAlert size={18} aria-hidden />
@@ -51,14 +53,17 @@ export function StaleBand({ fresh }: { fresh: Freshness }) {
   );
 }
 
-/** A refresh that failed after one that worked: the numbers are still the last good ones, and it says so. */
-export function RefreshFailed({ clock, onRetry }: { clock: string | null; onRetry: () => void }) {
+/** A refresh that failed after one that worked: the numbers are still the last good ones, and it says so, and that the page keeps trying. */
+export function RefreshFailed({ clock, pending, onRetry }: { clock: string | null; pending: boolean; onRetry: () => void }) {
   return (
-    <div className="s-banner s-banner-retired items-center justify-between" role="status" data-testid="report-refresh-failed">
-      <p className="text-[13px]">{clock ? L.refreshFailed(clock) : L.staleBandNoTime}</p>
-      <button type="button" className="s-link" onClick={onRetry}>
-        {UI.retry}
-      </button>
+    <div className="s-banner s-banner-retired flex-col" role="status" data-testid="report-refresh-failed">
+      <div className="flex w-full flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px]">{clock ? L.refreshFailed(clock) : L.staleBandNoTime}</p>
+        <button type="button" className="s-btn s-btn-ghost s-btn-compact" disabled={pending} aria-busy={pending} onClick={onRetry} data-testid="report-recheck">
+          {pending ? L.rechecking : L.recheck}
+        </button>
+      </div>
+      <p className="s-rp-note">{L.refreshAuto}</p>
     </div>
   );
 }

@@ -16,6 +16,11 @@ import {
 } from "@/app/(sales)/_lib/report/daily";
 import { cust, makeD, order } from "./_d";
 
+const pulledOn = (date: string, time = "09:15") => {
+  const epoch = Math.round((Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) - Date.UTC(2024, 0, 1)) / 86_400_000);
+  return { todayEpoch: epoch, pulledTime: time };
+};
+
 // Epoch day 1000 = Sunday 2026-09-27, 09:15 (cut = 555 minutes). Day e is e - 1000 days from it.
 //   972 Aug 30 (Sun) | 976 Sep 3 (Thu) | 979 Sep 6 (Sun) | 983 Sep 10 (Thu) | 986 Sep 13 (Sun)
 //   990 Sep 17 (Thu) | 993 Sep 20 (Sun) | 995 Sep 22 (Tue) | 997 Sep 24 (Thu) | 1000 today
@@ -250,5 +255,55 @@ describe("retro table", () => {
     expect(rows.find((r) => r.e === 997)?.top).toEqual(["לקוח א", 30_000]);
     expect(rows.find((r) => r.e === 993)?.top).toEqual(["לקוח א", 40_000]);
     expect(rows.find((r) => r.e === 998)?.top).toBeNull();
+  });
+});
+
+describe("the month at its edges", () => {
+  // each case: one order on the pull day and one on each of the days that the month figures should count
+  const run = (date: string, orderDates: Array<[string, number]>) => {
+    const p = pulledOn(date);
+    const ds = orderDates.map(([d, rev]) => {
+      const e = Math.round((Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) - Date.UTC(2024, 0, 1)) / 86_400_000);
+      return order(0, e, rev, 24, 600);
+    });
+    const D2 = makeD({ ...p, cust: [cust("א")], orders: ds });
+    return dailyHero(D2, buildDaily(D2));
+  };
+
+  it("on the first of the month the month so far is one day, against one day of the month before", () => {
+    // pulled 2026-10-01: October 1 vs September 1 (30 days long)
+    const h = run("2026-10-01", [["2026-09-01", 500], ["2026-09-02", 900], ["2026-10-01", 300]]);
+    expect([h.mDays, h.thisMonthLen]).toEqual([1, 31]);
+    expect(h.mtd).toBe(300);
+    expect(h.pmSame).toBe(500); // September 2 is not one of the "same days"
+  });
+
+  it("on the last day of the month nothing is left to project", () => {
+    const h = run("2026-09-30", [["2026-09-10", 700], ["2026-09-30", 100]]);
+    expect([h.mDays, h.thisMonthLen]).toEqual([30, 30]);
+    expect(h.pace).toEqual({ rest: 0, total: h.mtd });
+  });
+
+  it("the same days of a shorter month before: March 31 against all of February", () => {
+    const h = run("2026-03-31", [["2026-02-01", 100], ["2026-02-28", 200], ["2026-03-01", 50]]);
+    expect(h.mDays).toBe(31);
+    // February has 28 days, so the comparison is capped at 28, not 31
+    expect(h.pmSame).toBe(300);
+  });
+
+  it("across a year boundary: January 3 against December 1 to 3", () => {
+    const h = run("2027-01-03", [["2026-12-01", 40], ["2026-12-03", 60], ["2026-12-04", 999], ["2027-01-02", 7]]);
+    expect([h.mDays, h.thisMonthLen]).toEqual([3, 31]);
+    expect(h.pmSame).toBe(100);
+    expect(h.mtd).toBe(7);
+  });
+
+  it("walks the last business day back across the weekend even over a month boundary", () => {
+    // Sunday 2026-11-01: Saturday Oct 31 and Friday Oct 30 are rest days, so the headline is Thursday Oct 29
+    const p = pulledOn("2026-11-01");
+    const D2 = makeD({ ...p, cust: [cust("א")], orders: [order(0, p.todayEpoch - 3, 800, 24, 600)] });
+    const h = dailyHero(D2, buildDaily(D2));
+    expect(h.yest).toBe(p.todayEpoch - 3);
+    expect(h.yRev).toBe(800);
   });
 });

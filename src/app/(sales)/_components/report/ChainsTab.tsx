@@ -8,16 +8,17 @@
 // the chains sheet, so typing there did nothing visible.)
 
 import { ChevronLeft } from "lucide-react";
-import { Fragment, useMemo, useRef } from "react";
+import { Fragment, useDeferredValue, useId, useMemo, useRef } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
 import { buildChains, DORMANT_DAYS, type ChainBadge, type ChainBranch, type ChainNode, type ChainsModel } from "../../_lib/report/chains";
 import { chainsCsvRows } from "../../_lib/report/csv";
-import { amount, cell, shortDate } from "../../_lib/report/format";
-import { useScrollToEnd } from "../../_lib/report/hooks";
+import { amountUnit, cell, shortDate } from "../../_lib/report/format";
+import { usePinnedScroller } from "../../_lib/report/hooks";
 import { monthLabel, periodMonths, periodYears } from "../../_lib/report/period";
 import type { Period, ReportData, Unit } from "../../_lib/report/types";
 import { ListEmpty } from "../EmptyStates";
 import { CopyCsv } from "./CopyCsv";
+import { partialNote } from "./GridTab";
 import { ControlsBar, PeriodControl, SearchBox, UnitControl, ViewControl, type ViewMode } from "./ReportControls";
 
 export interface ChainsTabProps {
@@ -64,24 +65,27 @@ function BranchBadges({ b }: { b: ChainBranch }) {
 }
 
 export function chainsSummaryLine(c: ChainsModel, unit: Unit, filtered: boolean): string {
-  if (filtered) return L.sumChainsFiltered(amount(c.totals.tot, unit), L.chainsWord(c.shown.length));
-  const base = L.sumChains(amount(c.kpi.turnover, unit), L.chainsWord(c.kpi.chainCount), L.branchesWord(c.kpi.branchCount));
+  if (filtered) return L.sumChainsFiltered(amountUnit(c.totals.tot, unit), L.chainsWord(c.shown.length));
+  const base = L.sumChains(amountUnit(c.kpi.turnover, unit), L.chainsWord(c.kpi.chainCount), L.branchesWord(c.kpi.branchCount));
   return c.kpi.dormantCount ? `${base} · ${L.sumChainsDormant(c.kpi.dormantCount)}` : base;
 }
 
 export function ChainsTab(p: ChainsTabProps) {
-  const { d, period, unit, q } = p;
+  const { d, period, unit } = p;
+  // typing stays instant; the tree catches up a moment later
+  const q = useDeferredValue(p.q);
   const ms = useMemo(() => periodMonths(d.months, period), [d.months, period]);
   const years = useMemo(() => periodYears(d.months), [d.months]);
   const model = useMemo(() => buildChains(d, ms, unit, q), [d, ms, unit, q]);
   const filtered = q.trim().length > 0;
+  const partial = partialNote(d, ms);
   const k = model.kpi;
 
   const kpis: Array<{ key: string; label: string; value: string; sub: string; alert: boolean }> = [
-    { key: "turnover", label: L.chainsKpiTurnover, value: amount(k.turnover, unit), sub: L.chainsKpiShare(k.turnoverShare), alert: false },
+    { key: "turnover", label: unit === "rev" ? L.chainsKpiTurnover : L.chainsKpiTurnoverUnits, value: amountUnit(k.turnover, unit), sub: L.chainsKpiShare(k.turnoverShare), alert: false },
     { key: "chains", label: L.chainsKpiChains, value: String(k.chainCount), sub: L.chainsKpiBranches(k.branchCount), alert: false },
     { key: "dormant", label: L.chainsKpiDormant, value: String(k.dormantCount), sub: L.chainsKpiDormantSub(DORMANT_DAYS), alert: k.dormantCount > 0 },
-    { key: "dormantRev", label: L.chainsKpiDormantRev, value: amount(k.dormantRev, unit), sub: L.chainsKpiDormantRevSub, alert: k.dormantRev > 0 },
+    { key: "dormantRev", label: unit === "rev" ? L.chainsKpiDormantRev : L.chainsKpiDormantRevUnits, value: amountUnit(k.dormantRev, unit), sub: L.chainsKpiDormantRevSub, alert: k.dormantRev > 0 },
     { key: "quiet", label: L.chainsKpiQuiet, value: k.quiet ? k.quiet.name : "—", sub: k.quiet ? L.chainsKpiQuietSub(k.quiet.branches) : L.chainsKpiQuietNone, alert: Boolean(k.quiet) },
   ];
 
@@ -91,8 +95,9 @@ export function ChainsTab(p: ChainsTabProps) {
         <PeriodControl years={years} value={period} onChange={p.onPeriod} />
         <UnitControl value={unit} onChange={p.onUnit} />
         <ViewControl value={p.view} onChange={p.onView} />
-        <SearchBox value={q} onChange={p.onQ} placeholder={L.searchChain} />
-        <CopyCsv rows={() => chainsCsvRows(d, model, ms, unit)} />
+        <SearchBox value={p.q} onChange={p.onQ} placeholder={L.searchChain}>
+          <CopyCsv rows={() => chainsCsvRows(d, model, ms, unit)} />
+        </SearchBox>
       </ControlsBar>
 
       <div className="s-rp-kpis" data-testid="chains-kpis">
@@ -107,8 +112,9 @@ export function ChainsTab(p: ChainsTabProps) {
         ))}
       </div>
 
-      <p className="s-nums text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }} data-testid="report-summary" aria-live="polite">
+      <p className="s-nums text-[13px] font-medium" style={{ color: "hsl(var(--s-fg-muted))" }} data-testid="report-summary" role="group" aria-label={L.summaryLabel} aria-live="polite">
         {chainsSummaryLine(model, unit, filtered)}
+        {partial ? ` · ${partial}` : ""}
       </p>
 
       {model.shown.length === 0 ? (
@@ -118,6 +124,7 @@ export function ChainsTab(p: ChainsTabProps) {
       ) : (
         <ChainsList {...p} model={model} />
       )}
+      {p.view === "months" && ms.includes(d.partialIdx) ? <p className="s-rp-note" data-testid="partial-key">* {L.partialKey(monthLabel(d.months, d.partialIdx), d.pulledShort)}</p> : null}
     </div>
   );
 }
@@ -132,10 +139,11 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
       </td>
     ));
   const scroller = useRef<HTMLDivElement>(null);
-  useScrollToEnd(scroller, ms.length);
+  usePinnedScroller(scroller, ms.length);
   return (
     <div ref={scroller} className="s-card s-rp-scroll s-rp-scroll-tall" data-testid="report-table">
       <table className="s-rp-table">
+        <caption className="sr-only">{L.chainsColName}</caption>
         <thead>
           <tr>
             <th className="s-rp-first" scope="col">
@@ -163,7 +171,7 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
               <Fragment key={c.name}>
                 <tr className="s-rp-main" data-testid="chain-row" data-chain={c.name}>
                   <td className="s-rp-first s-rp-first-wrap">
-                    <button type="button" className="s-rp-rowbtn" style={{ alignItems: "flex-start" }} aria-expanded={cOpen} aria-label={L.chainsToggle(c.name, cOpen)} onClick={() => onToggle(ck)}>
+                    <button type="button" className="s-rp-rowbtn" style={{ alignItems: "flex-start" }} aria-expanded={cOpen} onClick={() => onToggle(ck)}>
                       <ChevronLeft size={14} className="s-rp-chev" style={{ marginBlockStart: 4 }} aria-hidden />
                       <span className="s-rp-wrapname">
                         <span>{c.name}</span>
@@ -187,7 +195,7 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
                         <Fragment key={b.ci}>
                           <tr className={`s-rp-child ${b.isDormant ? "s-rp-quiet" : ""}`} data-testid="branch-row">
                             <td className="s-rp-first s-rp-first-wrap" style={{ paddingInlineStart: 22 }}>
-                              <button type="button" className="s-rp-rowbtn" style={{ alignItems: "flex-start" }} aria-expanded={bOpen} aria-label={L.branchToggle(b.name, bOpen)} onClick={() => onToggle(bk)}>
+                              <button type="button" className="s-rp-rowbtn" style={{ alignItems: "flex-start" }} aria-expanded={bOpen} onClick={() => onToggle(bk)}>
                                 <ChevronLeft size={13} className="s-rp-chev" style={{ marginBlockStart: 4 }} aria-hidden />
                                 <span className="s-rp-wrapname">
                                   <span>{b.name}</span>
@@ -238,6 +246,49 @@ function ChainsTable({ d, unit, open, onToggle, model, ms }: Inner & { ms: numbe
   );
 }
 
+/** A chain's name is its button's name; its total, badges and segment are the description. */
+function ChainButton({ chain: c, unit, isOpen, onToggle }: { chain: ChainNode; unit: Unit; isOpen: boolean; onToggle: () => void }) {
+  const id = useId();
+  return (
+    <button type="button" className="s-rp-item" aria-expanded={isOpen} aria-labelledby={`${id}n`} aria-describedby={`${id}t ${id}m`} onClick={onToggle}>
+      <span className="s-rp-item-name">
+        <ChevronLeft size={14} className="s-rp-chev" aria-hidden />
+        <span id={`${id}n`}>{c.name}</span>
+      </span>
+      <span className="s-rp-item-total" id={`${id}t`} data-testid="cell-total">
+        {amountUnit(c.tot, unit)}
+      </span>
+      <span className="s-rp-item-meta" id={`${id}m`} style={{ gridColumn: "1 / -1" }}>
+        <Badges badges={c.badges} />
+        {c.seg ? <span>{c.seg}</span> : null}
+      </span>
+    </button>
+  );
+}
+
+function BranchButton({ branch: b, unit, isOpen, onToggle }: { branch: ChainBranch; unit: Unit; isOpen: boolean; onToggle: () => void }) {
+  const id = useId();
+  return (
+    <button type="button" className="s-rp-item s-rp-item-child" aria-expanded={isOpen} aria-labelledby={`${id}n`} aria-describedby={`${id}t ${id}m`} onClick={onToggle}>
+      <span className="s-rp-item-name">
+        <ChevronLeft size={13} className="s-rp-chev" aria-hidden />
+        <span id={`${id}n`}>{b.name}</span>
+      </span>
+      <span className="s-rp-item-total" id={`${id}t`} style={{ fontSize: 13 }}>
+        {amountUnit(b.tot, unit)}
+      </span>
+      <span className="s-rp-item-meta" id={`${id}m`} style={{ gridColumn: "1 / -1" }}>
+        <BranchBadges b={b} />
+        {b.last ? (
+          <span className="s-nums">
+            {L.branchLast} {shortDate(b.last)}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
 function ChainsList({ d, unit, open, onToggle, model }: Inner) {
   return (
     <div className="s-card overflow-hidden" data-testid="report-summary-list">
@@ -247,19 +298,7 @@ function ChainsList({ d, unit, open, onToggle, model }: Inner) {
           const cOpen = open.has(ck);
           return (
             <li key={c.name} data-testid="chain-row" data-chain={c.name}>
-              <button type="button" className="s-rp-item" aria-expanded={cOpen} aria-label={L.chainsToggle(c.name, cOpen)} onClick={() => onToggle(ck)}>
-                <span className="s-rp-item-name">
-                  <ChevronLeft size={14} className="s-rp-chev" aria-hidden />
-                  <span>{c.name}</span>
-                </span>
-                <span className="s-rp-item-total" data-testid="cell-total">
-                  {amount(c.tot, unit)}
-                </span>
-                <span className="s-rp-item-meta" style={{ gridColumn: "1 / -1" }}>
-                  <Badges badges={c.badges} />
-                  {c.seg ? <span>{c.seg}</span> : null}
-                </span>
-              </button>
+              <ChainButton chain={c} unit={unit} isOpen={cOpen} onToggle={() => onToggle(ck)} />
               {cOpen ? (
                 <ul className="s-rp-list">
                   {c.branches.map((b) => {
@@ -267,19 +306,7 @@ function ChainsList({ d, unit, open, onToggle, model }: Inner) {
                     const bOpen = open.has(bk);
                     return (
                       <li key={b.ci} data-testid="branch-row">
-                        <button type="button" className="s-rp-item s-rp-item-child" aria-expanded={bOpen} aria-label={L.branchToggle(b.name, bOpen)} onClick={() => onToggle(bk)}>
-                          <span className="s-rp-item-name">
-                            <ChevronLeft size={13} className="s-rp-chev" aria-hidden />
-                            <span>{b.name}</span>
-                          </span>
-                          <span className="s-rp-item-total" style={{ fontSize: 13 }}>
-                            {amount(b.tot, unit)}
-                          </span>
-                          <span className="s-rp-item-meta" style={{ gridColumn: "1 / -1" }}>
-                            <BranchBadges b={b} />
-                            {b.last ? <span className="s-nums">{shortDate(b.last)}</span> : null}
-                          </span>
-                        </button>
+                        <BranchButton branch={b} unit={unit} isOpen={bOpen} onToggle={() => onToggle(bk)} />
                         {bOpen ? (
                           <ul className="s-rp-list">
                             {b.products.map((pr) => (
@@ -291,7 +318,7 @@ function ChainsList({ d, unit, open, onToggle, model }: Inner) {
                                     </span>
                                   </span>
                                   <span className="s-rp-item-total" style={{ fontSize: 13 }}>
-                                    {amount(pr.tot, unit)}
+                                    {amountUnit(pr.tot, unit)}
                                   </span>
                                   <span className="s-rp-item-meta">{d.sku[pr.si][3]}</span>
                                 </div>
@@ -313,7 +340,7 @@ function ChainsList({ d, unit, open, onToggle, model }: Inner) {
           {L.chainsTotalRow}
         </span>
         <span className="s-rp-item-total" data-testid="total-tot">
-          {amount(model.totals.tot, unit)}
+          {amountUnit(model.totals.tot, unit)}
         </span>
       </div>
     </div>

@@ -44,7 +44,7 @@ export function TrendTab({ d, unit, onUnit }: { d: ReportData; unit: Unit; onUni
 
       <section className="s-card flex flex-col gap-2 p-4" aria-labelledby="rp-monthly">
         <h2 id="rp-monthly" className="s-section-heading">
-          {L.chartMonthlyTitle(np)}
+          {unit === "rev" ? L.chartMonthlyTitle(np) : L.chartMonthlyTitleUnits(np)}
         </h2>
         <div className="s-rp-legend">
           <span>

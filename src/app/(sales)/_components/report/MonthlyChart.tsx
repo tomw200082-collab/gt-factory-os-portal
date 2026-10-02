@@ -6,12 +6,12 @@
 
 import { useId } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
-import { amount, compact, signedPct } from "../../_lib/report/format";
+import { amount, compact, pctTone, signedPct } from "../../_lib/report/format";
 import { monthLabel } from "../../_lib/report/period";
 import type { Unit } from "../../_lib/report/types";
 import { smoothPath } from "../../_lib/timeline";
 import { useElementWidth } from "../../_lib/report/hooks";
-import { ChartTip, useChartTip } from "./ChartTip";
+import { ChartKeysHint, ChartTip, useChartTip } from "./ChartTip";
 
 export function MonthlyChart({ months, all, unit, partialIdx }: { months: readonly string[]; all: readonly number[]; unit: Unit; partialIdx: number }) {
   const uid = useId().replace(/:/g, "");
@@ -26,7 +26,7 @@ export function MonthlyChart({ months, all, unit, partialIdx }: { months: readon
   const X = (i: number) => +(P.l + (iw * i) / (NP - 1)).toFixed(1);
   const Y = (v: number) => +(P.t + ih - (ih * v) / mx).toFixed(1);
   const base = P.t + ih;
-  const { active, bind } = useChartTip(wrapRef, NP, (x) => Math.round(((x - P.l) / iw) * (NP - 1)));
+  const { active, bind } = useChartTip(wrapRef, NP, (x) => Math.round(((x - P.l) / iw) * (NP - 1)), unit);
 
   const step = Math.max(1, Math.ceil(46 / (iw / (NP - 1))));
   const xLabels: number[] = [];
@@ -44,16 +44,11 @@ export function MonthlyChart({ months, all, unit, partialIdx }: { months: readon
 
   const a = active;
   const pv = a !== null && a >= 12 ? all[a - 12] : null;
+  const pct = a !== null && pv ? (100 * (all[a] - pv)) / pv : null;
 
   return (
-    <div
-      ref={wrapRef}
-      className="s-rp-chart"
-      role="group"
-      aria-label={L.chartMonthlyAria}
-      data-testid="monthly-chart"
-      {...bind}
-    >
+    <div ref={wrapRef} className="s-rp-chart" role="group" aria-label={L.chartMonthlyAria} aria-describedby={`k${uid}`} data-testid="monthly-chart" {...bind}>
+      <ChartKeysHint id={`k${uid}`} text={L.chartKeys} />
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={L.chartMonthlyAria}>
         <defs>
           <linearGradient id={`g${uid}`} x1="0" y1="0" x2="0" y2="1">
@@ -77,7 +72,7 @@ export function MonthlyChart({ months, all, unit, partialIdx }: { months: readon
             {monthLabel(months, i)}
           </text>
         ))}
-        {prior.length > 1 ? <path d={smoothPath(prior)} fill="none" stroke="hsl(var(--s-fg-faint))" strokeWidth={2} strokeDasharray="6 5" opacity={0.7} /> : null}
+        {prior.length > 1 ? <path d={smoothPath(prior)} fill="none" stroke="hsl(var(--s-fg-faint))" strokeWidth={2} strokeDasharray="6 5" /> : null}
         <path d={`${solid} L${X(lastFull)} ${base} L${X(0)} ${base} Z`} fill={`url(#g${uid})`} stroke="none" />
         <path d={solid} fill="none" stroke="hsl(var(--s-accent))" strokeWidth={2.6} strokeLinejoin="round" />
         <path d={`M${X(lastFull)} ${Y(all[lastFull])} L${X(NP - 1)} ${Y(all[NP - 1])}`} fill="none" stroke="hsl(var(--s-review))" strokeWidth={2.6} strokeDasharray="5 5" />
@@ -99,29 +94,33 @@ export function MonthlyChart({ months, all, unit, partialIdx }: { months: readon
           </g>
         ) : null}
       </svg>
-      {a !== null ? (
-        <ChartTip x={X(a)} width={W} top={Math.max(0, Math.min(Y(all[a]) - 74, H - 110))}>
-          <b>{L.chartMonthTip(monthLabel(months, a), a === partialIdx)}</b>
-          <br />
-          <span className="s-nums" dir="ltr">{amount(all[a], unit)}</span>
-          {pv !== null ? (
-            <>
-              <br />
-              <span style={{ color: "hsl(var(--s-fg-muted))" }} dir="ltr">
-                {monthLabel(months, a - 12)}: {amount(pv, unit)}
-              </span>
-              {pv ? (
-                <>
-                  <br />
-                  <span className={`s-rp-chip ${all[a] >= pv ? "s-rp-chip-up" : "s-rp-chip-dn"}`} dir="ltr">
-                    {signedPct((100 * (all[a] - pv)) / pv)}
-                  </span>
-                </>
-              ) : null}
-            </>
-          ) : null}
-        </ChartTip>
-      ) : null}
+      <ChartTip show={a !== null} x={a !== null ? X(a) : 0} width={W} top={a !== null ? Math.max(0, Math.min(Y(all[a]) - 74, H - 110)) : 0}>
+        {a !== null ? (
+          <>
+            <b>{L.chartMonthTip(monthLabel(months, a), a === partialIdx)}</b>
+            <br />
+            <span className="s-nums" dir="ltr">
+              {amount(all[a], unit)}
+            </span>
+            {pv !== null ? (
+              <>
+                <br />
+                <span style={{ color: "hsl(var(--s-fg-muted))" }} dir="ltr">
+                  {monthLabel(months, a - 12)}: {amount(pv, unit)}
+                </span>
+                {pct !== null ? (
+                  <>
+                    <br />
+                    <span className={`s-rp-chip s-rp-chip-${pctTone(pct)}`} dir="ltr">
+                      {signedPct(pct)}
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </ChartTip>
     </div>
   );
 }

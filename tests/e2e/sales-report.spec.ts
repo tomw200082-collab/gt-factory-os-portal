@@ -66,7 +66,10 @@ test.describe("sales report @mocked", () => {
     await expect(page.getByTestId("sales-tab-/sales/today")).toBeVisible();
     await expect(page.getByTestId("sales-tab-/sales/report")).toHaveCount(0);
     await page.goto("/sales/report");
-    await expect(page.getByTestId("report-manager-only")).toHaveText("דוח המכירות זמין רק למנהל המכירות");
+    await expect(page.getByTestId("report-manager-only")).toContainText("דוח המכירות מיועד למנהל המכירות");
+    // a way out, not a dead end; and no claim about VAT or cancellations over a screen with no figures
+    await expect(page.getByTestId("report-manager-only").getByRole("link", { name: "חזרה להיום" })).toHaveAttribute("href", "/sales/today");
+    await expect(page.getByTestId("report-header")).not.toContainText("ללא מע״מ");
     // no data, and not so much as a request for it
     await expect(page.getByTestId("report-tabs")).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText("₪");
@@ -77,10 +80,16 @@ test.describe("sales report @mocked", () => {
     await open(page, { mode: "stale_failed" }, NOW_STALE);
     const band = page.getByTestId("report-stale");
     await expect(band).toContainText("מוצגת הגרסה המאומתת האחרונה · נתונים עד 27/09 09:15");
-    await expect(band).toContainText("העדכון האחרון לא עבר בדיקת התאמה מול שופיפיי");
+    await expect(band).toContainText("העדכון האחרון לא עבר בדיקת התאמה מול Shopify");
     await expect(page.getByTestId("report-tabs")).toBeVisible();
     await expect(page.getByTestId("report-row").first()).toBeVisible();
     await expect(page.getByTestId("report-fresh")).toHaveCount(0);
+  });
+
+  test("any other failed build says only that it failed", async ({ page }) => {
+    await open(page, { mode: "stale_failed_other" }, NOW_STALE);
+    await expect(page.getByTestId("report-stale")).toContainText("העדכון האחרון נכשל");
+    await expect(page.getByTestId("report-stale")).not.toContainText("Shopify");
   });
 
   test("a late refresh says it is late", async ({ page }) => {
@@ -93,6 +102,56 @@ test.describe("sales report @mocked", () => {
     await expect(page.getByTestId("report-never")).toContainText("הדוח עוד לא נבנה");
     await expect(page.getByTestId("report-tabs")).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText("₪");
+  });
+
+  test("a report never built, with a failed build behind it, says that too", async ({ page }) => {
+    await open(page, { mode: "never_failed" });
+    await expect(page.getByTestId("report-never-why")).toContainText("לא עברה בדיקת התאמה מול Shopify");
+  });
+
+  test("a hollow blob (every key, nothing in them) is an error, not a report of zeros", async ({ page }) => {
+    await open(page, { mode: "hollow" });
+    await expect(page.getByTestId("report-invalid")).toContainText("אם זה חוזר, פנה למנהל המערכת");
+    await expect(page.getByTestId("report-tabs")).toHaveCount(0);
+    // and no "updated N minutes ago" pill over it
+    await expect(page.getByTestId("report-fresh")).toHaveCount(0);
+  });
+
+  test("a signed-out viewer is asked to sign in again, not to retry", async ({ page }) => {
+    await open(page, { status: 401 });
+    await expect(page.getByTestId("report-signed-out")).toContainText("ההתחברות פגה");
+    await expect(page.getByRole("button", { name: "נסה שוב" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "טעינה מחדש" })).toBeVisible();
+  });
+
+  test("a refusal (403) reads as not yours, and is not retried", async ({ page }) => {
+    const requests: string[] = [];
+    await open(page, { status: 403, requests });
+    await expect(page.getByTestId("report-manager-only")).toBeVisible();
+    expect(requests).toHaveLength(1);
+  });
+
+  test("a refresh that fails after a good load says so, and that the page keeps trying", async ({ page }) => {
+    await setFakeRole(page, "admin");
+    await stubSalesReport(page, { failAfterFirst: true });
+    await page.clock.install({ time: new Date(NOW_FRESH) });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/sales/report");
+    await expect(page.getByTestId("report-tabs")).toBeVisible();
+    // five minutes later the page re-reads by itself, and the read breaks
+    await page.clock.fastForward(5 * 60_000 + 2_000);
+    const strip = page.getByTestId("report-refresh-failed");
+    await expect(strip).toContainText("הרענון האחרון נכשל");
+    await expect(strip).toContainText("הדף בודק שוב מעצמו כל 5 דקות");
+    await expect(page.getByTestId("report-recheck")).toHaveText("בדוק שוב");
+    // the last good numbers are still there
+    await expect(page.getByTestId("report-tabs")).toBeVisible();
+    await expect(page.getByTestId("report-row").first()).toBeVisible();
+  });
+
+  test("the build note about products outside the price list is one neutral line", async ({ page }) => {
+    await open(page, { mode: "noted" });
+    await expect(page.getByTestId("report-note-historic")).toHaveText("באוגוסט ₪12,345 ממכירות מוצרים שאינם במחירון (מסווגים לפי שם המוצר)");
   });
 
   test("a failed read is an error card with a retry, never a screen of zeros", async ({ page }) => {
@@ -254,7 +313,10 @@ test.describe("sales report @mocked", () => {
     await open(page);
     await page.getByTestId("report-tabbtn-daily").click();
     await expect(page.getByTestId("daily-tiles").getByTestId("report-tile")).toHaveCount(4);
-    await expect(page.getByTestId("daily-tiles")).toContainText("היום עד עכשיו · עד 09:15");
+    await expect(page.getByTestId("daily-tiles")).toContainText("היום עד 09:15");
+    // every change names what it is a change against
+    const deltas = await page.getByTestId("daily-tiles").getByTestId("tile-delta").allInnerTexts();
+    for (const base of ["מול רגיל", "מול אותה שעה", "מול 7 הימים הקודמים", "מול החודש שעבר"]) expect(deltas.join("|")).toContain(base);
     await expect(page.getByTestId("report-pace")).toContainText("צפי לסוף החודש");
     await expect(page.getByTestId("report-pace")).toContainText("הטלה, לא תחזית");
     await page.getByTestId("report-range-90").click();
@@ -322,4 +384,178 @@ test.describe("sales report @mocked", () => {
     await expect(page.getByTestId("report-view-months")).toHaveAttribute("aria-pressed", "true");
     await noSidewaysScroll(page, "customers at 1280");
   });
+
+  test("a sort the period cannot honour falls back to the default, and the phone says what it is sorted by", async ({ page }) => {
+    await open(page, {}, NOW_FRESH, 1280);
+    await page.getByTestId("report-period-all").click();
+    const th = page.locator("th[aria-sort] button").filter({ hasText: "ספט׳ 24" }).first();
+    await th.click();
+    await page.getByTestId("report-period-2026").click();
+    // that month is not in 2026: no orphaned sort, no header claiming one
+    await expect(page.locator('th[aria-sort="ascending"], th[aria-sort="descending"]')).toHaveCount(1);
+    await expect(page.locator("th[aria-sort]").filter({ hasText: "סה״כ" })).toHaveAttribute("aria-sort", "descending");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("report-view-summary").click();
+    await expect(page.getByTestId("report-sorted-by")).toHaveText("ממוין לפי סה״כ · יורד");
+  });
+
+  test("a sort is kept per tab across a tab switch", async ({ page }) => {
+    await open(page, {}, NOW_FRESH, 1280);
+    await page.locator("th[aria-sort] button").filter({ hasText: "לקוח" }).first().click();
+    await page.getByTestId("report-tabbtn-prod").click();
+    await page.getByTestId("report-tabbtn-cust").click();
+    await expect(page.locator("th[aria-sort]").first()).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  test("on a phone the tab bar stays under the app bar while scrolling, and a way back to the top appears", async ({ page }) => {
+    await open(page);
+    await expect(page.getByTestId("report-tabs")).toBeVisible();
+    await expect(page.getByTestId("report-to-top")).toHaveCount(0);
+    await page.evaluate(() => window.scrollTo(0, 2600));
+    const top = await page.getByTestId("report-tabs").evaluate((e) => Math.round(e.getBoundingClientRect().top));
+    expect(top).toBeGreaterThanOrEqual(56);
+    expect(top).toBeLessThan(120);
+    await expect(page.getByTestId("report-to-top")).toBeVisible();
+    // switching tab from down there opens the new tab at its top
+    await page.getByTestId("report-tabbtn-trend").click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(400);
+    await page.evaluate(() => window.scrollTo(0, 2600));
+    await page.getByTestId("report-tabbtn-cust").click();
+    await page.evaluate(() => window.scrollTo(0, 2600));
+    await page.getByTestId("report-to-top").click();
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test("a phone's month table keeps its headers in view while its rows scroll", async ({ page }) => {
+    await open(page);
+    await page.getByTestId("report-view-months").click();
+    const box = page.getByTestId("report-table");
+    const h = await box.evaluate((e) => ({ client: e.clientHeight, scroll: e.scrollHeight }));
+    expect(h.scroll).toBeGreaterThan(h.client); // it scrolls inside itself
+    expect(h.client).toBeLessThan(844);
+    await box.evaluate((e) => (e.scrollTop = 600));
+    const head = await box.locator("thead th").first().evaluate((e) => Math.round(e.getBoundingClientRect().top - (e.closest("[data-testid=report-table]") as HTMLElement).getBoundingClientRect().top));
+    expect(head).toBeLessThanOrEqual(1);
+  });
+
+  test("the partial month is keyed under the month table, in the chains table and in the summary line", async ({ page }) => {
+    await open(page);
+    await expect(page.getByTestId("report-summary")).toContainText("כולל ספטמבר חלקי (עד 27/09)");
+    await page.getByTestId("report-view-months").click();
+    await expect(page.getByTestId("partial-key")).toContainText("ספט׳ 26 חלקי (עד 27/09)");
+    await page.getByTestId("report-tabbtn-chain").click();
+    await expect(page.getByTestId("partial-key")).toContainText("חלקי");
+    await expect(page.getByTestId("report-summary")).toContainText("כולל ספטמבר חלקי");
+    await page.getByTestId("report-period-12").click();
+    await expect(page.getByTestId("partial-key")).toHaveCount(0);
+  });
+
+  test("units are named where the figures are units: chains KPIs, summary and the trend chart title", async ({ page }) => {
+    await open(page);
+    await page.getByTestId("report-tabbtn-chain").click();
+    await page.getByTestId("report-unit-units").click();
+    await expect(page.locator('[data-kpi="turnover"]')).toContainText("יחידות ברשתות");
+    await expect(page.locator('[data-kpi="turnover"]')).toContainText("יח׳");
+    await expect(page.locator('[data-kpi="dormantRev"]')).toContainText("יחידות בסניפים הישנים");
+    await expect(page.getByTestId("report-summary")).toContainText("יח׳");
+    await page.getByTestId("report-tabbtn-trend").click();
+    await expect(page.getByRole("heading", { name: /יחידות לחודש/ })).toBeVisible();
+  });
+
+  test("a figure is never broken across lines at 320px", async ({ page }) => {
+    await open(page, {}, NOW_FRESH, 320);
+    await page.getByTestId("report-tabbtn-chain").click();
+    for (const k of await page.locator('[data-testid="kpi-value"]').all()) {
+      const lines = await k.evaluate((e) => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+      expect(lines).toBe(1);
+    }
+  });
+
+  test("the CSV button has one stable name, and what happened is announced separately", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await open(page);
+    const btn = page.getByTestId("report-csv");
+    await expect(btn).toHaveAccessibleName("העתקת CSV");
+    await btn.click();
+    await expect(page.getByTestId("report-csv-status")).toHaveText("הטבלה הועתקה");
+    await expect(btn).toHaveAccessibleName("העתקת CSV");
+  });
+
+  test("a summary row's name is its button's name; its figures are the description", async ({ page }) => {
+    await open(page);
+    const btn = page.getByTestId("report-row").first().getByRole("button");
+    const key = await page.getByTestId("report-row").first().getAttribute("data-key");
+    await expect(btn).toHaveAccessibleName(key!);
+    await expect(btn).toHaveAttribute("aria-expanded", "false");
+    expect(await btn.getAttribute("aria-label")).toBeNull();
+    expect(await btn.getAttribute("aria-describedby")).toBeTruthy();
+  });
+
+  test("a chart tip closes when the range changes and when focus leaves the chart", async ({ page }) => {
+    await open(page, {}, NOW_FRESH, 1280);
+    await page.getByTestId("report-tabbtn-daily").click();
+    const chart = page.getByTestId("daily-chart");
+    await chart.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByTestId("report-tip")).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("report-tip")).toHaveCount(0);
+    await chart.focus();
+    await page.keyboard.press("End");
+    await expect(page.getByTestId("report-tip")).toBeVisible();
+    await page.getByTestId("report-range-90").dispatchEvent("click");
+    await expect(page.getByTestId("report-tip")).toHaveCount(0);
+  });
+
+  test("Home and End move between tabs", async ({ page }) => {
+    await open(page);
+    await page.getByTestId("report-tabbtn-cust").focus();
+    await page.keyboard.press("End");
+    await expect(page.getByTestId("report-tabbtn-trend")).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Home");
+    await expect(page.getByTestId("report-tabbtn-daily")).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("the navigation rail does not move between the report and the other screens", async ({ page }) => {
+    await open(page, {}, NOW_FRESH, 1440);
+    const railOnReport = await page.getByTestId("sales-rail-/sales/today").boundingBox();
+    await page.goto("/sales/today");
+    const railOnToday = await page.getByTestId("sales-rail-/sales/today").boundingBox();
+    expect(Math.round(railOnReport!.x)).toBe(Math.round(railOnToday!.x));
+  });
+
+  test("every report control is at least 44px: row buttons, sort heads, segments", async ({ page }) => {
+    await open(page, {}, NOW_FRESH, 1280);
+    for (const sel of ['[data-testid="report-row"] button', "th button", '[data-testid="report-period"] button', '[data-testid="report-csv"]', '[data-testid="report-heat"]']) {
+      const b = (await page.locator(sel).first().boundingBox())!;
+      expect(b.height, sel).toBeGreaterThanOrEqual(43.5);
+    }
+  });
+
+  for (const width of [320, 390, 430]) {
+    test(`no month figure is ever cut by the pinned column or the edge at ${width}px, on open or after a scroll`, async ({ page }) => {
+      await open(page, {}, NOW_FRESH, width);
+      await page.getByTestId("report-view-months").click();
+      const check = async (label: string) => {
+        const cut = await page.getByTestId("report-table").evaluate((box) => {
+          const b = box.getBoundingClientRect();
+          const pin = box.querySelector("th.s-rp-first")!.getBoundingClientRect();
+          const bad: string[] = [];
+          box.querySelectorAll("thead th:not(.s-rp-first)").forEach((th) => {
+            const r = th.getBoundingClientRect();
+            if (r.width === 0) return;
+            // under the pinned column, or hanging off the far edge
+            if (r.right > pin.left + 1 && r.left < pin.left - 1) bad.push(`${th.textContent} under the pinned column`);
+            if (r.left < b.left - 1 && r.right > b.left + 1) bad.push(`${th.textContent} at the far edge`);
+          });
+          return bad;
+        });
+        expect(cut, label).toEqual([]);
+      };
+      await check("on open");
+      await page.getByTestId("report-table").evaluate((e) => e.scrollBy({ left: 140 }));
+      await page.waitForTimeout(500); // the snap settles
+      await check("after a scroll");
+    });
+  }
 });

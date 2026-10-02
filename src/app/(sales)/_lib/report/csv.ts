@@ -13,11 +13,18 @@ import { monthLabel, MONTH_SHORT } from "./period";
 import type { YearRow } from "./trend";
 import { AG, type ReportData, type Unit } from "./types";
 
-/** Every cell quoted, quotes doubled, whitespace flattened, and a byte-order mark so Excel reads Hebrew. */
+const NUMBER_LIKE = /^[+-]?[\d,.]+%?$/;
+
+/** A text cell that starts like a formula would be run by a spreadsheet; a quote in front makes it text. Real numbers stay numbers. */
+function defuse(c: string): string {
+  return /^[=+\-@]/.test(c) && !NUMBER_LIKE.test(c) ? `'${c}` : c;
+}
+
+/** Every cell quoted, quotes doubled, whitespace flattened, formulas defused, and a byte-order mark so Excel reads Hebrew. */
 export function toCsv(rows: readonly (readonly string[])[]): string {
   return (
-    "﻿" +
-    rows.map((r) => r.map((c) => `"${c.replace(/\s+/g, " ").trim().replace(/"/g, '""')}"`).join(",")).join("\n")
+    "\ufeff" +
+    rows.map((r) => r.map((c) => `"${defuse(c.replace(/\s+/g, " ").trim()).replace(/"/g, '""')}"`).join(",")).join("\n")
   );
 }
 

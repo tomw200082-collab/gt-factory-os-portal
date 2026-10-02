@@ -23,7 +23,7 @@ export const NOW_FRESH = Date.parse(DATA_AT) + 12 * MIN;
 /** The same viewer, three hours later. */
 export const NOW_STALE = Date.parse(DATA_AT) + 180 * MIN;
 
-export type ReportMode = "fresh" | "stale_failed" | "stale_late" | "never" | "error" | "malformed";
+export type ReportMode = "fresh" | "stale_failed" | "stale_failed_other" | "stale_late" | "never" | "never_failed" | "error" | "malformed" | "hollow" | "noted";
 
 export function reportPayload(mode: ReportMode = "fresh"): ReportPayload {
   const base: ReportPayload = {
@@ -36,7 +36,17 @@ export function reportPayload(mode: ReportMode = "fresh"): ReportPayload {
     data: REPORT_D,
   };
   if (mode === "stale_failed") {
-    return { ...base, stale: true, last_attempt: { at: new Date(Date.parse(DATA_AT) + 150 * MIN).toISOString(), status: "failed", error_code: "recon_mismatch" } };
+    return { ...base, stale: true, last_attempt: { at: new Date(Date.parse(DATA_AT) + 150 * MIN).toISOString(), status: "failed", error_code: "SALES_REPORT_GATE" } };
+  }
+  if (mode === "stale_failed_other") {
+    return { ...base, stale: true, last_attempt: { at: new Date(Date.parse(DATA_AT) + 150 * MIN).toISOString(), status: "failed", error_code: "boom" } };
+  }
+  if (mode === "never_failed") {
+    return { ...base, state: "never", data_at: null, published_at: null, last_attempt: { at: DATA_AT, status: "failed", error_code: "SALES_REPORT_GATE" }, data: null };
+  }
+  if (mode === "hollow") return { ...base, data: { ...REPORT_D, rows: [], orders: [], cust: [], sku: [] } };
+  if (mode === "noted") {
+    return { ...base, notes: { historic_sku_over_threshold: { month: "2026-08", amount_ag: 1_234_500, threshold_ag: 500_000, top: [{ sku: "GT-OLD-EXT-0.3L", title: "תמצית תה ישנה 0.3 ליטר", rev_ag: 900_000 }] } } };
   }
   if (mode === "stale_late") return { ...base, stale: true, last_attempt: { at: DATA_AT, status: "skipped", error_code: null } };
   if (mode === "never") return { ...base, state: "never", data_at: null, published_at: null, last_attempt: null, data: null };
@@ -51,6 +61,10 @@ export interface ReportStubOptions {
   requests?: string[];
   /** make the first N reads fail with a 500 before answering */
   failFirst?: number;
+  /** answer this status (401 signed out, 403 not allowed) instead of the report */
+  status?: number;
+  /** answer the first read, then fail every later one: a refresh that breaks after a good load */
+  failAfterFirst?: boolean;
   /** hold the read open this long, to see the loading state */
   delayMs?: number;
 }
@@ -59,9 +73,13 @@ export interface ReportStubOptions {
 export async function stubSalesReport(page: Page, opts: ReportStubOptions = {}) {
   await stubSalesOrgs(page, { role: opts.role === "rep" ? "rep" : "manager" });
   let failures = opts.failFirst ?? 0;
+  let reads = 0;
   await page.route("**/api/sales/report**", async (route) => {
     opts.requests?.push(new URL(route.request().url()).pathname);
     if (opts.role === "rep") return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Not authorised" }) });
+    if (opts.status) return route.fulfill({ status: opts.status, contentType: "application/json", body: JSON.stringify({ error: "refused" }) });
+    reads += 1;
+    if (opts.failAfterFirst && reads > 1) return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom" }) });
     if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
     if (opts.mode === "error" || failures > 0) {
       failures -= 1;

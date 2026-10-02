@@ -6,10 +6,14 @@ import { proxyRequest } from "@/lib/api-proxy";
 // never asks on a rep's behalf.
 
 export async function GET(req: Request): Promise<Response> {
-  return proxyRequest(req, {
+  const res = await proxyRequest(req, {
     method: "GET",
     upstreamPath: "/api/v1/queries/sales/report",
     forwardQuery: false,
     errorLabel: "sales report",
   });
+  // The blob is the whole customer book: no shared cache or browser history may keep a copy.
+  const headers = new Headers(res.headers);
+  headers.set("Cache-Control", "private, no-store");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }

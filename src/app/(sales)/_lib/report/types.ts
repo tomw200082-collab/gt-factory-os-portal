@@ -57,6 +57,15 @@ export interface ReportAttempt {
   error_code: string | null;
 }
 
+/** Non-blocking: products that fell outside the price list and still sold in the last full month (the backend's build notes). */
+export interface HistoricSkuNote {
+  /** "YYYY-MM", the last full month */
+  month: string;
+  amount_ag: number;
+  threshold_ag: number;
+  top: Array<{ sku: string; title: string; rev_ag: number }>;
+}
+
 export interface ReportPayload {
   state: ReportState;
   /** the Shopify data time of what is served */
@@ -65,7 +74,7 @@ export interface ReportPayload {
   last_attempt: ReportAttempt | null;
   /** server says: now - data_at > 45 minutes */
   stale: boolean;
-  notes: { historic_sku_over_threshold?: number };
+  notes: { historic_sku_over_threshold?: HistoricSkuNote };
   data: ReportData | null;
 }
 

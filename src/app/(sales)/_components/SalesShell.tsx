@@ -68,7 +68,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const canManageSales = session?.role === "admin" || session?.role === "planner";
   const destinations = canManageSales ? [...DESTINATIONS, REPORT_DESTINATION] : DESTINATIONS;
   const pathname = usePathname() ?? "";
-  // The report's month tables are the widest thing in the workspace: they get the room.
+  // The report's month tables are the widest thing in the workspace: its body takes the room the page has
+  // beyond the usual column, toward the far edge. The rail and the app bar stay exactly where they are on
+  // every screen, so moving between screens never moves the navigation.
   const wide = pathname === REPORT_DESTINATION.href;
   const [searchOpen, setSearchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -112,10 +114,10 @@ export function SalesShell({ children }: { children: ReactNode }) {
       </a>
 
       <header className="s-appbar sticky top-0 z-30 backdrop-blur-md">
-        <div className={`mx-auto flex h-14 ${wide ? "max-w-[1400px]" : "max-w-5xl"} items-center gap-3 px-4`}>
+        <div className={`mx-auto flex h-14 max-w-5xl items-center gap-3 px-4`}>
           <Link
             href="/sales/today"
-            className="s-brand text-[15px] font-semibold tracking-tight"
+            className="s-brand inline-flex min-h-[44px] items-center text-[15px] font-semibold tracking-tight"
             style={{ color: "hsl(var(--s-fg))" }}
           >
             <span className="s-brand-mark" aria-hidden />
@@ -165,7 +167,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className={`mx-auto flex ${wide ? "max-w-[1400px]" : "max-w-5xl"} gap-6 px-4 pt-4`}>
+      <div className="mx-auto flex max-w-5xl gap-6 px-4 pt-4">
         {/* Desktop rail. Hidden on phones, where the tab bar takes over. */}
         <nav
           aria-label={UI.navMain}
@@ -202,6 +204,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         <main
           id="sales-main"
           className="min-w-0 flex-1 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] md:pb-24"
+          style={wide ? { marginInlineEnd: "calc(-1 * clamp(0px, (100vw - 1024px) / 2 - 16px, 360px))" } : undefined}
         >
           {children}
         </main>

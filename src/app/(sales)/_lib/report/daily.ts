@@ -25,10 +25,10 @@ export const dateOf = (d: Pick<ReportData, "epoch0">, e: number): Date => new Da
 export const dowOf = (d: Pick<ReportData, "epoch0">, e: number): number => dateOf(d, e).getUTCDay();
 /** Friday and Saturday. */
 export const isOff = (d: Pick<ReportData, "epoch0">, e: number): boolean => dowOf(d, e) >= 5;
-/** "27/9" */
+/** "27/09": one numeric date style across the report (day and month, two digits each). */
 export const dayLabel = (d: Pick<ReportData, "epoch0">, e: number): string => {
   const x = dateOf(d, e);
-  return `${x.getUTCDate()}/${x.getUTCMonth() + 1}`;
+  return `${String(x.getUTCDate()).padStart(2, "0")}/${String(x.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
 export interface Daily {

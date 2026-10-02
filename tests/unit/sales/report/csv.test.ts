@@ -12,6 +12,11 @@ describe("CSV", () => {
     expect(toCsv([["a", 'b"c'], ["1", "2 \n  3"]])).toBe('﻿"a","b""c"\n"1","2 3"');
   });
 
+  it("defuses a text cell a spreadsheet would run as a formula, and leaves real numbers alone", () => {
+    const out = toCsv([['=HYPERLINK("x")', "+SUM(A1)", "-cmd", "@x", "-1234", "+12%", "12.5%", "-0.5", "קפה"]]);
+    expect(out.slice(1)).toBe('"\'=HYPERLINK(""x"")","\'+SUM(A1)","\'-cmd","\'@x","-1234","+12%","12.5%","-0.5","קפה"');
+  });
+
   const D = makeD({
     cust: [cust("קפה א"), cust("קפה ב", "רשת X")],
     sku: [sku("S1", "תה", "FRESH")],
@@ -29,6 +34,12 @@ describe("CSV", () => {
     expect(rows[2][0]).toBe("קפה ב");
     expect(rows[2].slice(-1)).toEqual(["חדש"]);
     expect(rows.at(-1)?.[0]).toBe("סה״כ");
+    // a rectangle: every row as wide as the header, and the total row adds up the month columns
+    expect(new Set(rows.map((r) => r.length))).toEqual(new Set([rows[0].length]));
+    const monthCols = rows[0].length - 4;
+    const sum = rows.slice(1, -1).reduce((a, r) => a + r.slice(1, 1 + monthCols).reduce((x, v) => x + Number(v), 0), 0);
+    expect(rows.at(-1)!.slice(1, 1 + monthCols).reduce((x, v) => x + Number(v), 0)).toBe(sum);
+    expect(rows.at(-1)?.slice(-3)).toEqual(["2800", "100%", "+180%"]);
   });
 
   it("writes the chains tree flattened with its level, and the matrix and retro table", () => {
@@ -43,6 +54,6 @@ describe("CSV", () => {
     const d2 = makeD({ cust: [cust("א")], orders: [order(0, 995, 10_000, 24, 600), order(0, 1000, 5_000, 24, 500)] });
     const r = retroCsvRows(retroRows(d2, buildDaily(d2), 14), d2);
     expect(r[0]).toEqual(["תאריך", "יום", "מחזור", "הזמנות", "ממוצע להזמנה", "מול רגיל", "הלקוח הגדול של היום"]);
-    expect(r[1].slice(0, 2)).toEqual(["27/9", "ראשון"]);
+    expect(r[1].slice(0, 2)).toEqual(["27/09", "ראשון"]);
   });
 });

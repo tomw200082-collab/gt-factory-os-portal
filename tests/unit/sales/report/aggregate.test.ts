@@ -199,6 +199,18 @@ describe("the customers grid", () => {
     expect(g.total.tot).toBe(483_500 + 1_000 + 1_001 + 1_002 + 1_003 + 1_004);
   });
 
+  it("falls back to the default order when the chosen sort has no column in this period", () => {
+    // month 3 is not in 2026, and 'all' has no year-over-year column: the sort is dropped, not left orphaned
+    const g = buildGrid(aggD(), { ...base, sort: { col: 3, dir: "asc" } });
+    expect(g.sort).toEqual({ col: "tot", dir: "desc" });
+    expect(g.rows.map((r) => r.k)).toEqual(["קפה א", "קפה ב"]);
+    const all = buildGrid(aggD(), { ...base, period: "all", sort: { col: "yoy", dir: "asc" } });
+    expect(all.sort).toEqual({ col: "tot", dir: "desc" });
+    // a sort that does apply is kept
+    expect(buildGrid(aggD(), { ...base, sort: { col: 17, dir: "asc" } }).sort).toEqual({ col: 17, dir: "asc" });
+    expect(buildGrid(aggD(), { ...base, sort: { col: "k", dir: "desc" } }).sort).toEqual({ col: "k", dir: "desc" });
+  });
+
   it("walks the sort states: a name starts ascending, a number starts descending, a second press flips", () => {
     expect(nextSort({ col: "tot", dir: "desc" }, "k")).toEqual({ col: "k", dir: "asc" });
     expect(nextSort({ col: "k", dir: "asc" }, "k")).toEqual({ col: "k", dir: "desc" });

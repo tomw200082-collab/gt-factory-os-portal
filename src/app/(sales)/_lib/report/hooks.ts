@@ -24,12 +24,26 @@ export function useMediaQuery(query: string): boolean {
   );
 }
 
-/** The current time, ticking every `intervalMs` (a minute by default, for "updated N minutes ago"). */
+/**
+ * The current time, ticking every `intervalMs` (a minute by default, for "updated N minutes ago").
+ * A phone that slept, or a tab that was in the background, throttles timers: the clock is read again the
+ * moment the viewer comes back, so "updated 12 minutes ago" is never an hour stale.
+ */
 export function useNow(intervalMs = 60_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
+    const tick = () => setNow(Date.now());
+    const id = setInterval(tick, intervalMs);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [intervalMs]);
   return now;
 }
@@ -54,14 +68,44 @@ export function useElementWidth<T extends HTMLElement>(fallback: number): [RefOb
   return [ref as RefObject<T>, width];
 }
 
-/** Scrolls a wide table to its newest end (the left, in a right-to-left page) when it mounts or `key` changes. */
-export function useScrollToEnd(ref: RefObject<HTMLElement>, key: unknown): void {
+/**
+ * A wide month table with a pinned first column. A month figure must never sit half under the pinned
+ * column, so the table is tiled: the room beside the pinned column is divided into a whole number of equal
+ * columns (`--s-rp-col`), the scroller snaps on their edges, and `--s-rp-pin` is the pinned column's
+ * measured width (the snap line and scroll-padding). It opens on the newest end, which is a tile edge.
+ */
+export function usePinnedScroller(ref: RefObject<HTMLElement>, key: unknown): void {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const first = el.querySelector<HTMLElement>("th.s-rp-first");
+    if (!first) return;
+    const fit = () => {
+      el.style.removeProperty("--s-rp-col");
+      const pin = first.getBoundingClientRect().width;
+      el.style.setProperty("--s-rp-pin", `${Math.round(pin)}px`);
+      const heads = [...el.querySelectorAll<HTMLElement>("thead th:not(.s-rp-first)")];
+      if (!heads.length) return;
+      const widths = heads.map((h) => h.getBoundingClientRect().width);
+      const room = el.clientWidth - pin;
+      if (pin + widths.reduce((a, w) => a + w, 0) <= el.clientWidth + 1 || room <= 0) return; // it fits: nothing to tile
+      const k = Math.max(1, Math.floor(room / Math.max(...widths)));
+      const col = `${Math.round((room / k) * 100) / 100}px`;
+      el.style.setProperty("--s-rp-col", col);
+    };
+    fit();
     const max = el.scrollWidth - el.clientWidth;
-    if (max <= 0) return;
-    el.scrollLeft = getComputedStyle(el).direction === "rtl" ? -max : max;
+    if (max > 0) el.scrollLeft = getComputedStyle(el).direction === "rtl" ? -max : max;
+    if (typeof ResizeObserver === "undefined") return;
+    // only the scroller's own width matters (a rotation, a resized window); the pinned column's width follows from it
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === w) return;
+      w = el.clientWidth;
+      fit();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [ref, key]);
 }
 
@@ -74,13 +118,13 @@ function readTab(): ReportTab | null {
   }
 }
 
-/** The tab the viewer last had open, remembered on this device. Falls back to the Artifact's default. */
+/**
+ * The tab the viewer last had open, remembered on this device. Falls back to the Artifact's default.
+ * Read once, before the first paint of the report: the report only mounts after its data arrives, so the
+ * server render never depends on it, and there is no frame on the wrong tab.
+ */
 export function useReportTab(): [ReportTab, (tab: ReportTab) => void] {
-  const [tab, setTab] = useState<ReportTab>(DEFAULT_TAB);
-  useEffect(() => {
-    const saved = readTab();
-    if (saved) setTab(saved);
-  }, []);
+  const [tab, setTab] = useState<ReportTab>(() => (typeof window === "undefined" ? DEFAULT_TAB : (readTab() ?? DEFAULT_TAB)));
   const choose = (next: ReportTab) => {
     setTab(next);
     try {

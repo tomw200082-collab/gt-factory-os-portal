@@ -338,9 +338,15 @@ export function useSalesReport(enabled = true): UseQueryResult<ReportPayload, Sa
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
-    retry: (count, error) => !(error.status && error.status < 500) && count < 1,
+    retry: shouldRetryReport,
     retryDelay: 600,
   });
+}
+
+/** One quick retry for a server error or a dropped connection; a refusal (401 signed out, 403 not a manager) is an answer. */
+export function shouldRetryReport(count: number, error: SalesApiError): boolean {
+  if (error.status && error.status < 500) return false;
+  return count < 1;
 }
 
 // ---- writes ----------------------------------------------------------------

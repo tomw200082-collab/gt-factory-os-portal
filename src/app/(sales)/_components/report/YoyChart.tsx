@@ -1,17 +1,19 @@
 "use client";
 
 // Growth against the same month a year earlier, one bar per month. Green is above last year, red is
-// below, and the month in progress is drawn faint with a star. A bar's figure is printed when the bar
-// is wide enough to carry it; otherwise a tap on the bar says it.
+// below, and the month in progress is drawn with a dashed outline and a star. A bar's figure is printed
+// when the bar is wide enough to carry it; otherwise a tap on the bar says it.
 
+import { useId } from "react";
 import { REPORT_UI as L } from "../../_lib/labels";
-import { signedPct } from "../../_lib/report/format";
+import { pctTone, signedPct } from "../../_lib/report/format";
 import { monthLabel } from "../../_lib/report/period";
 import type { YoyBar } from "../../_lib/report/trend";
 import { useElementWidth } from "../../_lib/report/hooks";
-import { ChartTip, useChartTip } from "./ChartTip";
+import { ChartKeysHint, ChartTip, useChartTip } from "./ChartTip";
 
 export function YoyChart({ months, bars }: { months: readonly string[]; bars: readonly YoyBar[] }) {
+  const uid = useId().replace(/:/g, "");
   const [wrapRef, W] = useElementWidth<HTMLDivElement>(320);
   const H = 150;
   const Q = { t: 18, r: 8, b: 22, l: 8 };
@@ -29,7 +31,8 @@ export function YoyChart({ months, bars }: { months: readonly string[]; bars: re
   const a = active !== null ? bars[active] : null;
 
   return (
-    <div ref={wrapRef} className="s-rp-chart" role="group" aria-label={L.chartYoyAria} data-testid="yoy-chart" {...bind}>
+    <div ref={wrapRef} className="s-rp-chart" role="group" aria-label={L.chartYoyAria} aria-describedby={`k${uid}`} data-testid="yoy-chart" {...bind}>
+      <ChartKeysHint id={`k${uid}`} text={L.chartKeys} />
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={L.chartYoyAria}>
         <line x1={Q.l} x2={W - Q.r} y1={zero} y2={zero} stroke="hsl(var(--s-border-strong))" />
         {bars.map((b, j) => {
@@ -39,7 +42,7 @@ export function YoyChart({ months, bars }: { months: readonly string[]; bars: re
           const x = Q.l + j * bw + bw * 0.18;
           const w = bw * 0.64;
           const y = v >= 0 ? zero - h : zero;
-          const lit = active === j;
+          const color = v >= 0 ? "hsl(var(--s-status-won))" : "hsl(var(--s-sla-overdue))";
           return (
             <g key={b.i}>
               <rect
@@ -48,8 +51,11 @@ export function YoyChart({ months, bars }: { months: readonly string[]; bars: re
                 width={w.toFixed(1)}
                 height={Math.max(1, h).toFixed(1)}
                 rx={2.5}
-                fill={v >= 0 ? "hsl(var(--s-status-won))" : "hsl(var(--s-sla-overdue))"}
-                opacity={b.partial ? 0.4 : lit ? 1 : 0.88}
+                fill={color}
+                fillOpacity={b.partial ? 0.3 : active === j ? 1 : 0.88}
+                stroke={b.partial ? color : undefined}
+                strokeWidth={b.partial ? 1.5 : undefined}
+                strokeDasharray={b.partial ? "3 2" : undefined}
               />
               {labelValues ? (
                 <text
@@ -75,15 +81,17 @@ export function YoyChart({ months, bars }: { months: readonly string[]; bars: re
           ) : null,
         )}
       </svg>
-      {a && a.pct !== null && active !== null ? (
-        <ChartTip x={Q.l + active * bw + bw / 2} width={W} top={2}>
-          <b>{L.chartMonthTip(monthLabel(months, a.i), a.partial)}</b>
-          <br />
-          <span className={`s-rp-chip ${a.pct >= 0 ? "s-rp-chip-up" : "s-rp-chip-dn"}`} dir="ltr">
-            {signedPct(a.pct)}
-          </span>
-        </ChartTip>
-      ) : null}
+      <ChartTip show={Boolean(a && a.pct !== null)} x={active !== null ? Q.l + active * bw + bw / 2 : 0} width={W} top={2}>
+        {a && a.pct !== null ? (
+          <>
+            <b>{L.chartMonthTip(monthLabel(months, a.i), a.partial)}</b>
+            <br />
+            <span className={`s-rp-chip s-rp-chip-${pctTone(a.pct)}`} dir="ltr">
+              {signedPct(a.pct)}
+            </span>
+          </>
+        ) : null}
+      </ChartTip>
     </div>
   );
 }

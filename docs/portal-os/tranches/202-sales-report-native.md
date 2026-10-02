@@ -1,7 +1,7 @@
-# Tranche 202 — The sales report as a native GT Pulse screen
+# Tranche 202 — The sales report as a native screen
 
 **Status:** in progress on `claude/sales-report-native`.
-**Origin:** Tom, 2026-10-02. The sales-report Artifact becomes a first-class GT Pulse screen, "דוח מכירות". The Artifact stays active and untouched during an overlap period.
+**Origin:** Tom, 2026-10-02. The sales-report Artifact becomes a first-class screen of the sales workspace, "דוח מכירות". The Artifact stays active and untouched during an overlap period.
 
 ## Before
 
@@ -78,3 +78,15 @@ Unit tests live under `tests/unit/sales/report/` (one file per ported module, pl
 ## Rollback
 
 Revert the merge commit. The Artifact was never touched.
+
+## UX gate round 1 (fixes on this branch)
+
+Red-first where testable. Tests: 1885 unit (full run), 75 e2e (report 44, today 7, orgs 24), parity against the Artifact 154/154, the review's differential harness 0 logic mismatches on every world except the 2027 and 2028 pulls, where only the years x months matrix differs on purpose (the Artifact hard-codes 2024 to 2026).
+
+- A hollow blob (keys, no rows, orders, customers or SKUs) or a month in progress that is not the last month reads as an error; no freshness pill over it.
+- A sort the period cannot honour falls back to the default; a sort is kept per tab; the phone list says what it is sorted by.
+- Phone: tab bar sticky under the app bar, back-to-top after two screens, a new tab opens at its top; the month table scrolls inside a screen-bound box so its headers hold; the room beside the pinned column is tiled in whole columns and snapped, so no month figure is cut.
+- Wording: every daily change names its baseline; "12 חודשים מלאים"; units follow the unit; the partial month is keyed under every month table and in the summary; "Shopify" only for the reconciliation gate; singular forms; one date style; build note about products outside the price list.
+- Access: a 401 asks to sign in again (reload), a 403 is the not-yours card, neither is retried; non-managers get a card with a way back and no VAT claim; the proxy answers `Cache-Control: private, no-store`.
+- Accessibility: stable names (CSV button, summary rows with aria-describedby), always-mounted live regions for chart tips and the CSV result, tips close on blur, range change and outside tap, a swipe that starts on a chart opens nothing, heat cells carry an arrow, 44px targets, non-text contrast of bars and badges.
+- Not changed, by decision: "צפי לסוף החודש", "ישנים/שקט", K/M suffixes (Artifact wording).

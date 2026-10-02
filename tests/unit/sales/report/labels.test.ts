@@ -3,7 +3,7 @@ import { NAV_LABELS, REPORT_UI } from "@/app/(sales)/_lib/labels";
 
 const HEBREW = /[֐-׿]/;
 // Latin that may stand on a Hebrew screen: the product's own names, and the CSV button's format name.
-const ALLOWED_LATIN = ["CSV", "GT"];
+const ALLOWED_LATIN = ["CSV", "GT", "Shopify", "Escape"];
 
 function strip(value: string): string {
   return ALLOWED_LATIN.reduce((acc, token) => acc.split(token).join(""), value);
@@ -42,6 +42,10 @@ describe("sales report labels", () => {
     expect(REPORT_UI.orders(1234)).toBe("1,234 הזמנות");
     expect(REPORT_UI.customers(1)).toBe("לקוח אחד");
     expect(REPORT_UI.paceExplain(1)).toContain("יום אחד שנותר");
+    expect(REPORT_UI.weekdayDays(1)).toBe("יום אחד");
+    expect(REPORT_UI.weekdayDays(8)).toBe("8 ימים");
+    expect(REPORT_UI.badgeQuiet(1)).toBe("שקט יום אחד");
+    expect(REPORT_UI.paceSameDays(1)).toBe("אותו יום בחודש שעבר");
     expect(REPORT_UI.paceExplain(3)).toContain("3 הימים שנותרו");
     expect(REPORT_UI.paceExplain(0)).toContain("לא נותרו ימים");
   });

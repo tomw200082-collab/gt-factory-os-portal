@@ -42,5 +42,5 @@ export function makeD(over: Partial<ReportData> = {}): ReportData {
 export function rampD(): ReportData {
   const rows: FactRow[] = [];
   for (let i = 0; i < 25; i++) rows.push(fact(i, 0, 0, i + 1, (i + 1) * 100_000));
-  return makeD({ cust: [cust("לקוח א")], sku: [sku("S1", "מוצר א", "FRESH")], rows });
+  return makeD({ cust: [cust("לקוח א")], sku: [sku("S1", "מוצר א", "FRESH")], rows, orders: [order(0, 990, 100_000, 24, 600)] });
 }

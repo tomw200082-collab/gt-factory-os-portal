@@ -158,7 +158,16 @@ export interface GridSummary {
   rows: number;
 }
 
+/** The sort that applies to this period: a month the period lacks, or year over year without a prior year, falls back to the default. */
+export function effectiveSort(sort: SortState, ms: readonly number[], hasYoy: boolean): SortState {
+  if (typeof sort.col === "number" && !ms.includes(sort.col)) return DEFAULT_SORT;
+  if (sort.col === "yoy" && !hasYoy) return DEFAULT_SORT;
+  return sort;
+}
+
 export interface GridModel {
+  /** the sort actually applied (see effectiveSort) */
+  sort: SortState;
   ms: number[];
   hasYoy: boolean;
   rows: GridRow[];
@@ -186,9 +195,10 @@ function matcher(d: ReportData, dim: "cust" | "fam", needle: string, ms: readonl
 }
 
 export function buildGrid(d: ReportData, opts: GridOpts): GridModel {
-  const { dim, period, unit, sort, cap = 400 } = opts;
+  const { dim, period, unit, cap = 400 } = opts;
   const ms = periodMonths(d.months, period);
   const pmap = priorMap(d.months, ms);
+  const sort = effectiveSort(opts.sort, ms, pmap !== null);
   const needle = opts.q.trim().toLowerCase();
 
   let list = aggregate(d, dim, ms, unit);
@@ -253,6 +263,7 @@ export function buildGrid(d: ReportData, opts: GridOpts): GridModel {
   for (const r of d.rows) if (mset.has(r[0])) custs.add(r[1]);
 
   return {
+    sort,
     ms,
     hasYoy: pmap !== null,
     rows,

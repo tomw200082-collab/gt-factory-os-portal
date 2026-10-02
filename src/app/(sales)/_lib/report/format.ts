@@ -4,6 +4,7 @@
 // information, and a blank beside a currency sign reads as a rendering fault, so zero
 // prints as zero here.
 
+import { REPORT_UI as L } from "../labels";
 import { AG, type Unit } from "./types";
 
 const intFmt = new Intl.NumberFormat("he-IL");
@@ -26,17 +27,36 @@ export function compact(v: number, unit: Unit): string {
   return `${sym}${Math.round(x)}`;
 }
 
-/** +12% / -9% / 0%: whole percent, the sign from the true value, never "-0". */
+/** +12% / -9% / 0%: whole percent. Sign and tone come from the ROUNDED figure, so "0%" is neither up nor down. */
+/** Halves round away from zero, so -0.5 and +0.5 are each one percent. */
+const round = (p: number): number => Math.sign(p) * Math.round(Math.abs(p));
+
 export function signedPct(p: number): string {
-  const t = p.toFixed(0);
-  return `${p >= 0 ? "+" : ""}${t === "-0" ? "0" : t}%`;
+  const r = round(p);
+  return r === 0 ? "0%" : `${r > 0 ? "+" : "-"}${Math.abs(r)}%`;
 }
 
 export type ChipTone = "up" | "dn";
 
-export function pctChip(p: number | null): { text: string; tone: ChipTone } | null {
+/** up, down, or "mt" (quiet) when the rounded figure is zero. */
+export function pctTone(p: number): ChipTone | "mt" {
+  const r = round(p);
+  return r === 0 ? "mt" : r > 0 ? "up" : "dn";
+}
+
+export function pctChip(p: number | null): { text: string; tone: ChipTone | "mt" } | null {
   if (p === null) return null;
-  return { text: signedPct(p), tone: p >= 0 ? "up" : "dn" };
+  return { text: signedPct(p), tone: pctTone(p) };
+}
+
+/** Shekels with their sign, units with their word: a figure always says what it counts. */
+export const amountUnit = (v: number, unit: Unit): string => (unit === "rev" ? money(v) : `${fmtInt(v)} ${L.unitShort}`);
+
+/** "2026-02" as "פבר׳ 26", the way the month headers write it. */
+export function monthYear(ym: string): string {
+  if (!ym) return "";
+  const [y, m] = ym.split("-");
+  return `${L.monthsShort[+m - 1]}׳ ${y.slice(2)}`;
 }
 
 /** A table cell: the number alone, blank for zero (the header and the summary line carry the unit). */

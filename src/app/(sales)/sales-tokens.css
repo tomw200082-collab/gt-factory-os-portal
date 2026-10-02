@@ -2666,7 +2666,7 @@
 }
 [data-app="sales"] .s-rp-seg > button {
   flex: 1 1 0;
-  min-inline-size: 0;
+  min-inline-size: 44px;
   min-block-size: 44px;
   padding-inline: 10px;
   border: 0;
@@ -2836,11 +2836,28 @@
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
+/* A month table scrolls inside a box bound to the screen, so its headers (and the total row) hold
+   still while the rows move: a phone's box is the screen less the two bars and the controls' room. */
+[data-app="sales"] .s-rp-scroll-tall {
+  max-block-size: calc(100dvh - 190px);
+  overflow-y: auto;
+}
 @media (min-width: 1024px) {
   [data-app="sales"] .s-rp-scroll-tall {
     max-block-size: min(76vh, 920px);
-    overflow-y: auto;
   }
+}
+/* A month figure is never half under the pinned column: cells snap to its edge (its measured width is
+   --s-rp-pin), and keyboard focus keeps clear of the sticky header and total row. */
+[data-app="sales"] .s-rp-scroll {
+  scroll-snap-type: x proximity;
+  scroll-padding-inline-start: var(--s-rp-pin, 112px);
+  scroll-padding-block: 44px;
+}
+[data-app="sales"] .s-rp-table .s-rp-num,
+[data-app="sales"] .s-rp-table .s-rp-mid {
+  scroll-snap-align: start;
+  min-inline-size: var(--s-rp-col, 0);
 }
 [data-app="sales"] .s-rp-table {
   border-collapse: separate;
@@ -2858,7 +2875,7 @@
   border-block-end: 1px solid hsl(var(--s-border));
 }
 [data-app="sales"] .s-rp-table td {
-  block-size: 38px;
+  block-size: 44px;
 }
 [data-app="sales"] .s-rp-table thead th {
   position: sticky;
@@ -2956,7 +2973,7 @@
 }
 [data-app="sales"] .s-rp-rowbtn {
   max-inline-size: 100%;
-  min-block-size: 38px;
+  min-block-size: 44px;
   text-align: start;
 }
 [data-app="sales"] .s-rp-rowbtn > span {
@@ -3124,11 +3141,18 @@
   font-weight: 500;
   color: hsl(var(--s-fg-muted));
 }
+/* a figure is never broken across lines: it shrinks to the card instead */
 [data-app="sales"] .s-rp-kpi-value {
-  font-size: 19px;
+  font-size: clamp(15px, 4.6vw, 19px);
   font-weight: 600;
   line-height: 1.2;
-  overflow-wrap: break-word;
+  white-space: nowrap;
+  max-inline-size: 100%;
+}
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-kpi-value {
+    font-size: clamp(15px, 1.6vw, 19px);
+  }
 }
 [data-app="sales"] .s-rp-kpi-sub {
   font-size: 12px;
@@ -3201,14 +3225,21 @@
   block-size: 12px;
   border: 0;
   border-radius: 3px;
-  background: hsl(var(--s-accent) / 0.45);
+  background: hsl(var(--s-accent) / 0.75);
 }
 [data-app="sales"] .s-rp-sw-off {
   inline-size: 12px;
   block-size: 12px;
   border: 0;
   border-radius: 3px;
-  background: hsl(var(--s-fg-faint) / 0.4);
+  background: hsl(var(--s-fg-faint) / 0.7);
+}
+[data-app="sales"] .s-rp-sw-today {
+  inline-size: 12px;
+  block-size: 12px;
+  border: 1.5px dashed hsl(var(--s-review));
+  border-radius: 3px;
+  background: hsl(var(--s-accent) / 0.4);
 }
 
 /* the weekday rhythm */
@@ -3231,10 +3262,10 @@
   display: block;
   block-size: 100%;
   border-radius: 4px;
-  background: hsl(var(--s-accent) / 0.6);
+  background: hsl(var(--s-accent) / 0.8);
 }
 [data-app="sales"] .s-rp-dow-fill-off {
-  background: hsl(var(--s-fg-faint) / 0.35);
+  background: hsl(var(--s-fg-faint) / 0.7);
 }
 
 /* the pace card */
@@ -3330,4 +3361,50 @@
   [data-app="sales"] .s-rp-table .s-rp-opt-lg {
     display: table-cell;
   }
+}
+
+/* the tab bar stays under the app bar while the report scrolls (a phone is a long page) */
+[data-app="sales"] .s-rp-sticky {
+  position: sticky;
+  inset-block-start: 56px;
+  z-index: 20;
+  padding-block: 6px;
+  background: hsl(var(--s-bg) / 0.94);
+  backdrop-filter: blur(8px);
+}
+@media (max-width: 767px) {
+  [data-app="sales"] .s-rp-sticky {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+}
+
+/* the CSV button: an icon beside the search, square at the 44px floor */
+[data-app="sales"] .s-rp-icon {
+  inline-size: 44px;
+  padding-inline: 0;
+  justify-content: center;
+  flex: none;
+}
+
+/* heat tints say it twice: a small arrow for a viewer who cannot tell green from red */
+[data-app="sales"] .s-rp-hm {
+  font-size: 8px;
+  margin-inline-end: 3px;
+  color: hsl(var(--s-fg-muted));
+  vertical-align: 1px;
+}
+
+/* the selected segment in the dark theme gets an accent edge: a lighter fill alone barely shows on the dark track */
+:root.dark [data-app="sales"] .s-rp-seg > button[aria-selected="true"],
+:root.dark [data-app="sales"] .s-rp-seg > button[aria-pressed="true"] {
+  background: hsl(var(--s-accent-soft));
+  box-shadow: inset 0 0 0 1px hsl(var(--s-accent));
+}
+:root.dark [data-app="sales"] .s-rp-tool[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px hsl(var(--s-accent));
+}
+/* the distributor badge on its dark fill: ink, not accent, so it clears 4.5:1 */
+:root.dark [data-app="sales"] .s-rp-bdg-di {
+  color: hsl(var(--s-fg));
 }

@@ -36,12 +36,12 @@ export function RetroTable({ d, rows }: { d: ReportData; rows: readonly RetroRow
             </span>
             <span className="s-nums" style={{ color: "hsl(var(--s-fg-muted))" }}>
               {L.orders(r.cnt)}
-              {r.avg !== null ? ` · ${money(r.avg)}` : ""}
+              {r.avg !== null ? ` · ${L.retroAvgShort} ${money(r.avg)}` : ""}
             </span>
             <span style={{ justifySelf: "end" }}>
               <Chip r={r} />
             </span>
-            <span style={{ gridColumn: "1 / -1", color: "hsl(var(--s-fg-muted))", fontSize: 12 }}>{topText(r)}</span>
+            <span style={{ gridColumn: "1 / -1", color: "hsl(var(--s-fg-muted))", fontSize: 12 }}>{r.top ? `${L.retroTopShort}: ${topText(r)}` : ""}</span>
           </li>
         ))}
       </ol>
@@ -50,6 +50,7 @@ export function RetroTable({ d, rows }: { d: ReportData; rows: readonly RetroRow
   return (
     <div className="s-rp-scroll" data-testid="retro">
       <table className="s-rp-table">
+        <caption className="sr-only">{L.retroTitle}</caption>
         <thead>
           <tr>
             <th scope="col" style={{ textAlign: "start" }}>{L.retroDate}</th>

@@ -23,7 +23,7 @@ export function PeriodControl({ years, value, onChange }: { years: readonly stri
   return (
     <Group label={L.periodLabel} testId="report-period">
       {options.map(([p, label]) => (
-        <button key={p} type="button" aria-pressed={value === p} data-testid={`report-period-${p}`} onClick={() => onChange(p)}>
+        <button key={p} type="button" aria-pressed={value === p} title={p === "12" ? L.period12Hint : undefined} aria-label={p === "12" ? `${label}, ${L.period12Hint}` : undefined} data-testid={`report-period-${p}`} onClick={() => onChange(p)}>
           {label}
         </button>
       ))}
@@ -69,9 +69,11 @@ export function RangeControl({ value, onChange }: { value: number; onChange: (n:
   );
 }
 
-export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+/** The search field, with the tab's own tools (the CSV copy) beside it. */
+export function SearchBox({ value, onChange, placeholder, children }: { value: string; onChange: (v: string) => void; placeholder: string; children?: ReactNode }) {
   return (
-    <div className="w-full sm:w-[260px]">
+    <div className="flex w-full items-center gap-2 sm:w-auto">
+      <div className="min-w-0 flex-1 sm:w-[260px] sm:flex-none">
       <input
         type="search"
         className="s-input"
@@ -81,6 +83,8 @@ export function SearchBox({ value, onChange, placeholder }: { value: string; onC
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
+      </div>
+      {children}
     </div>
   );
 }
