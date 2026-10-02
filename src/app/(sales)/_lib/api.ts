@@ -15,6 +15,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { RULE_MESSAGES, UI } from "./labels";
+import type { ReportPayload } from "./report/types";
 import type {
   ActivityRow,
   AttentionRow,
@@ -118,6 +119,7 @@ export const salesKeys = {
   identityReview: () => ["sales", "identity-review"] as const,
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
+  report: () => ["sales", "report"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
 };
 
@@ -321,6 +323,30 @@ export function useSettings(enabled = true): UseQueryResult<SalesSettings, Sales
     queryFn: async () => request<SalesSettings>("/api/sales/settings"),
     staleTime: 5 * 60_000,
   });
+}
+
+/**
+ * The sales report (tranche 202). The blob is large and changes every few minutes at most, so it is
+ * read once a minute at the fastest, re-read every five, and again when the viewer comes back to the
+ * tab. A 4xx is an answer (a rep is refused); a 5xx is retried once, quickly, before the error card.
+ */
+export function useSalesReport(enabled = true): UseQueryResult<ReportPayload, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.report(),
+    enabled,
+    queryFn: async () => request<ReportPayload>("/api/sales/report"),
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    retry: shouldRetryReport,
+    retryDelay: 600,
+  });
+}
+
+/** One quick retry for a server error or a dropped connection; a refusal (401 signed out, 403 not a manager) is an answer. */
+export function shouldRetryReport(count: number, error: SalesApiError): boolean {
+  if (error.status && error.status < 500) return false;
+  return count < 1;
 }
 
 // ---- writes ----------------------------------------------------------------

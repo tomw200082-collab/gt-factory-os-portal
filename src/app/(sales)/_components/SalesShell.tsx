@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
+import { Activity, ArrowLeftRight, Building2, CalendarCheck, ChartColumn, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
 import { useLeads, useQuickAdd } from "../_lib/api";
@@ -21,7 +21,10 @@ import { useSession } from "@/lib/auth/session-provider";
 
 interface Destination {
   href: string;
+  /** the phone bar's label */
   label: string;
+  /** the desktop rail's label, when there is room for more than the bar's */
+  railLabel?: string;
   icon: typeof CalendarCheck;
 }
 
@@ -34,6 +37,15 @@ const DESTINATIONS: Destination[] = [
   { href: "/sales/orgs", label: NAV_LABELS.orgs, icon: Building2 },
   { href: "/sales/attention", label: NAV_LABELS.attention, icon: Activity },
 ];
+
+// The sales report (tranche 202) is for the people who run sales, so only managers get the fifth
+// destination. A rep who opens the URL still lands on the page, which says it is not theirs.
+const REPORT_DESTINATION: Destination = {
+  href: "/sales/report",
+  label: NAV_LABELS.report,
+  railLabel: NAV_LABELS.reportFull,
+  icon: ChartColumn,
+};
 
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -54,7 +66,12 @@ export function useSalesDocumentLang() {
 export function SalesShell({ children }: { children: ReactNode }) {
   const { session } = useSession();
   const canManageSales = session?.role === "admin" || session?.role === "planner";
+  const destinations = canManageSales ? [...DESTINATIONS, REPORT_DESTINATION] : DESTINATIONS;
   const pathname = usePathname() ?? "";
+  // The report's month tables are the widest thing in the workspace: its body takes the room the page has
+  // beyond the usual column, toward the far edge. The rail and the app bar stay exactly where they are on
+  // every screen, so moving between screens never moves the navigation.
+  const wide = pathname === REPORT_DESTINATION.href;
   const [searchOpen, setSearchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -97,10 +114,10 @@ export function SalesShell({ children }: { children: ReactNode }) {
       </a>
 
       <header className="s-appbar sticky top-0 z-30 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4">
+        <div className={`mx-auto flex h-14 max-w-5xl items-center gap-3 px-4`}>
           <Link
             href="/sales/today"
-            className="s-brand text-[15px] font-semibold tracking-tight"
+            className="s-brand inline-flex min-h-[44px] items-center text-[15px] font-semibold tracking-tight"
             style={{ color: "hsl(var(--s-fg))" }}
           >
             <span className="s-brand-mark" aria-hidden />
@@ -156,7 +173,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
           aria-label={UI.navMain}
           className="hidden w-44 shrink-0 flex-col gap-1 md:flex"
         >
-          {DESTINATIONS.map((d) => {
+          {destinations.map((d) => {
             const active = isActive(pathname, d.href);
             const Icon = d.icon;
             return (
@@ -168,7 +185,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                 className={`s-tab justify-start ${active ? "s-tab-active" : ""}`}
               >
                 <Icon size={17} aria-hidden />
-                {d.label}
+                {d.railLabel ?? d.label}
               </Link>
             );
           })}
@@ -187,6 +204,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         <main
           id="sales-main"
           className="min-w-0 flex-1 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] md:pb-24"
+          style={wide ? { marginInlineEnd: "calc(-1 * clamp(0px, (100vw - 1024px) / 2 - 16px, 360px))" } : undefined}
         >
           {children}
         </main>
@@ -199,7 +217,8 @@ export function SalesShell({ children }: { children: ReactNode }) {
           add-a-reason button, which is a floating action obscuring a real one. */}
       {/* Nor on a business page: there the first viewport ends on the call and
           WhatsApp buttons, and the floating disc sat on top of them. */}
-      {pathname === "/sales/settings" || /^\/sales\/orgs\/[^/]+/.test(pathname) ? null : (
+      {/* Nor on the report: it is something you read, and the disc sat over the numbers in the corner. */}
+      {pathname === "/sales/settings" || pathname === REPORT_DESTINATION.href || /^\/sales\/orgs\/[^/]+/.test(pathname) ? null : (
       <button
         type="button"
         data-testid="sales-quick-add"
@@ -255,7 +274,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <ul className="mx-auto flex max-w-5xl">
-          {DESTINATIONS.map((d) => {
+          {destinations.map((d) => {
             const active = isActive(pathname, d.href);
             const Icon = d.icon;
             return (

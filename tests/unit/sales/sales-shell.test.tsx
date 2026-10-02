@@ -144,4 +144,30 @@ describe("sales shell", () => {
     const main = screen.getByRole("main");
     expect(main.textContent).toContain("תוכן הבדיקה");
   });
+
+  it("gives a manager the report as a fifth destination, on the rail and on the phone bar", () => {
+    for (const role of ["admin", "planner"]) {
+      currentRole.value = role;
+      render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+      expect(screen.getByTestId("sales-rail-/sales/report").textContent).toBe(NAV_LABELS.reportFull);
+      expect(screen.getByTestId("sales-tab-/sales/report").textContent).toBe(NAV_LABELS.report);
+      expect(screen.getByTestId("sales-tab-/sales/report").getAttribute("href")).toBe("/sales/report");
+      cleanup();
+    }
+  });
+
+  it("keeps the report off a sales rep's navigation", () => {
+    currentRole.value = "sales_rep";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.queryByTestId("sales-rail-/sales/report")).toBeNull();
+    expect(screen.queryByTestId("sales-tab-/sales/report")).toBeNull();
+    expect(screen.getAllByRole("link", { name: /היום|לידים|עסקים|מצב/ }).length).toBeGreaterThan(0);
+  });
+
+  it("marks the report active on its own route, and keeps the floating quick-add off it", () => {
+    pathname.current = "/sales/report";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.getByTestId("sales-tab-/sales/report").getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByTestId("sales-quick-add")).toBeNull();
+  });
 });
