@@ -5,7 +5,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "הגדרות — GT מכירות",
+  title: "הגדרות — GT CRM",
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

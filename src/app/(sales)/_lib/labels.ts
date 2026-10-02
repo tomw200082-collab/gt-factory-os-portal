@@ -315,7 +315,7 @@ const ORG_UI = {
 
   // the workspace (tranche 190)
   backToOrgs: "חזרה לעסקים",
-  orgPageTitle: (name: string) => `${name} · GT מכירות`,
+  orgPageTitle: (name: string) => `${name} · GT CRM`,
   orgLoading: "טוען את העסק…",
   orgForbiddenTitle: "לא ניתן להציג את העסק",
   orgForbiddenHint: "ייתכן שהקישור שגוי, או שהעסק אינו משויך אליך.",
@@ -777,7 +777,7 @@ export const NAV_LABELS = {
  */
 export const UI = {
   ...ORG_UI,
-  appName: "GT מכירות",
+  appName: "GT CRM",
   switchToFactory: "מעבר לייצור",
 
   // Today
