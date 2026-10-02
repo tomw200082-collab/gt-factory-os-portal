@@ -6,7 +6,7 @@
 // open = open drafts from the river (F1). Time runs right to left, the newest
 // month at the left, as a time axis does in a right-to-left interface.
 
-import { ymOf, type RingMonth } from "./ring";
+import { round2, ymOf, type RingMonth } from "./ring";
 
 export interface TimelineMonth extends RingMonth {
   total: number;
@@ -142,7 +142,7 @@ export function columnX(i: number, n: number, left: number, right: number): { x:
 export function barPath(x: number, y: number, w: number, h: number, r: number): string {
   if (h <= 0 || w <= 0) return "";
   const rr = Math.max(0, Math.min(r, w / 2, h));
-  const f = (n: number) => Math.round(n * 100) / 100;
+  const f = round2;
   return [
     `M ${f(x)} ${f(y + h)}`,
     `L ${f(x)} ${f(y + rr)}`,

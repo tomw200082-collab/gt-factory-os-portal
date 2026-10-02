@@ -48,7 +48,7 @@ function confirmCopy(p: Pending): { title: string; confirm: string; consequence:
 }
 
 /** What the API will accept for this card (mirrors orgs_handler.ts resolveIdentity). */
-export function actionsFor(org: IdentityOrg): { pick: boolean; reject: boolean; chain: boolean; blocked: boolean } {
+function actionsFor(org: IdentityOrg): { pick: boolean; reject: boolean; chain: boolean; blocked: boolean } {
   const identity = org.reasons.filter((r) => r !== CHAIN);
   if (identity.length === 0) return { pick: false, reject: false, chain: true, blocked: false };
   if (org.candidates.length === 0) return { pick: false, reject: false, chain: false, blocked: true };

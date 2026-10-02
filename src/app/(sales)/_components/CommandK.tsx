@@ -29,7 +29,7 @@ interface Hit {
   subtitle: string;
 }
 
-export function searchAll(leads: SalesLeadRow[], orgs: OrgSearchHit[], query: string): Hit[] {
+function searchAll(leads: SalesLeadRow[], orgs: OrgSearchHit[], query: string): Hit[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const digits = phoneSearchKey(query);

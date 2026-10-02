@@ -15,7 +15,7 @@ import { ChartColumn, CircleDot } from "lucide-react";
 import { fmtDate, fmtDateTime } from "../../_lib/format";
 import { daysSinceIsrael } from "../../_lib/israelTime";
 import { UI } from "../../_lib/labels";
-import { buildRing, markPoints, monthAngles, monthLabel, monthShort, sectorPath, type RingMonth } from "../../_lib/ring";
+import { buildRing, markPoints, monthAngles, monthName, monthShort, sectorPath, type RingMonth } from "../../_lib/ring";
 import type { OrgCircle, PendingDraft } from "../../_lib/types";
 import { OrdersTimeline } from "./OrdersTimeline";
 
@@ -72,9 +72,6 @@ function useReducedMotion(): boolean {
   return reduce;
 }
 
-export function monthName(m: RingMonth): string {
-  return `${monthLabel(m.ym)}: ${UI.monthCounts(m.filled, m.refunded, m.hollow, m.open)}`;
-}
 
 function activate(e: KeyboardEvent, go: () => void) {
   if (e.key === "Enter" || e.key === " ") {

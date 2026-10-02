@@ -6,6 +6,7 @@
 // top. Open drafts come only from the river's pending drafts: the circle's own
 // `drafts` count includes completed drafts, which are also orders (design §2 F1).
 
+import { UI } from "./labels";
 import type { CircleMonth, PendingDraft } from "./types";
 
 export interface RingMonth {
@@ -65,7 +66,9 @@ function point(cx: number, cy: number, r: number, deg: number): [number, number]
   return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
 }
 
-const f = (n: number) => Math.round(n * 100) / 100;
+/** Two decimals: enough for a pixel, short in a path string. */
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+const f = round2;
 
 /** An annular sector: the tap target of one month. */
 export function sectorPath(cx: number, cy: number, rOuter: number, rInner: number, start: number, end: number): string {
@@ -94,6 +97,11 @@ const HE_MONTH_SHORT = new Intl.DateTimeFormat("he-IL", { month: "short", timeZo
 /** "ספטמבר 2026" */
 export function monthLabel(ym: string): string {
   return HE_MONTH_LONG.format(new Date(`${ym}-15T12:00:00Z`));
+}
+
+/** A month as a screen reader says it, in the circle and on the timeline: "ספטמבר 2026: 3 הזמנות, אחת בוטלה" */
+export function monthName(m: RingMonth): string {
+  return `${monthLabel(m.ym)}: ${UI.monthCounts(m.filled, m.refunded, m.hollow, m.open)}`;
 }
 
 /** "ספט׳ 26", for the narrow grid */

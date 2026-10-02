@@ -21,6 +21,17 @@
 - **Dead code.** Six unused labels are removed, among them `orgNotCustomer`, `prospectTitle` and `timelineForLead`. `ORG_UI` is no longer exported. Classes with no rule are dropped, and so are two lines that could never act.
 - **Orders cache.** A month sheet's orders stay fresh for 5 minutes. They are mirror data with their own "as of".
 
+## ponytail-review (same day)
+
+Net −20 lines possible. Applied:
+- The two-decimal rounding is one `round2` in `ring.ts`.
+- A month's spoken name is one `monthName` in `ring.ts`, used by the circle and the timeline.
+- `searchAll` and `actionsFor` are no longer exported, since nothing imports them.
+
+Deferred, as above:
+- The toast timer moving into `Toast` (about −8 lines).
+- The press and scrub gesture refs (about −10 lines).
+
 ## Not taken, with reason
 
 - **One proxy factory for the `[id]` routes.** Every sales route file exports its own handler, and `api-stubs.test.ts` holds that contract.
@@ -46,6 +57,7 @@ manifest:
   - src/app/(sales)/_lib/api.ts
   - src/app/(sales)/_lib/labels.ts
   - src/app/(sales)/_lib/ring.ts
+  - src/app/(sales)/_components/CommandK.tsx
   - src/app/(sales)/_lib/timeline.ts
   - src/app/(sales)/sales-tokens.css
   - tests/unit/sales/timeline.test.ts

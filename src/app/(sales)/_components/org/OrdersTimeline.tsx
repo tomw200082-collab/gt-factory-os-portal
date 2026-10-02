@@ -19,7 +19,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, MoveHorizontal, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { UI } from "../../_lib/labels";
-import { monthLabel, monthShort, type RingMonth } from "../../_lib/ring";
+import { monthLabel, monthName, monthShort, type RingMonth } from "../../_lib/ring";
 import { fmtCount } from "../../_lib/format";
 import { barPath, columnX, smoothPath, timelineMonths, trendSummary, typicalMonth, yTicks, zoomLevels, type TimelineMonth } from "../../_lib/timeline";
 
@@ -202,7 +202,7 @@ export function OrdersTimeline({ months, onMonth, meta, asOf = null }: { months:
             ) : null}
           </>
         );
-        const name = `${monthLabel(m.ym)}: ${UI.monthCounts(m.filled, m.refunded, m.hollow, m.open)}${m.partial ? ` (${UI.timelineInProgress})` : ""}`;
+        const name = `${monthName(m)}${m.partial ? ` (${UI.timelineInProgress})` : ""}`;
         return { x, w, cx, over, colTop, drawn, name };
       }),
     // y is derived from base, yMax and unit, all listed
