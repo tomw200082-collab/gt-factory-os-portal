@@ -135,6 +135,13 @@ describe("lead drawer", () => {
       expect(input.value).toBe("2026-10-02");
     } finally { vi.useRealTimers(); }
   });
+  it("links the lead to its business workspace (Unit B, journey B)", () => {
+    render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+      templates={null} onClose={noop} onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    const link = screen.getByRole("link", { name: UI.openBusiness });
+    expect(link.getAttribute("href")).toBe(`/sales/orgs/${lead({}).org_id}`);
+  });
+
   it("says why the note cannot be saved yet, and stops saying it once there is a note", () => {
     render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
       templates={null} onClose={noop} onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);

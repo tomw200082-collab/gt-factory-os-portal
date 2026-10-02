@@ -52,3 +52,14 @@ export function atLeastSchedulable(date: string): string {
 export function israelNineAMAfter(days: number, from: Date = new Date()): string {
   return israelNineAM(addIsraelDays(israelDate(from), days));
 }
+
+/**
+ * Whole calendar days in Israel between a past instant and now (GT Pulse Unit B:
+ * "days since the last order"). Calendar days, not 24-hour blocks: an order at
+ * 23:30 yesterday is "one day ago" this morning, as a salesperson would say it.
+ */
+export function daysSinceIsrael(iso: string, now: Date = new Date()): number {
+  const from = Date.parse(`${israelDate(new Date(iso))}T00:00:00Z`);
+  const to = Date.parse(`${israelDate(now)}T00:00:00Z`);
+  return Math.max(0, Math.round((to - from) / 86_400_000));
+}

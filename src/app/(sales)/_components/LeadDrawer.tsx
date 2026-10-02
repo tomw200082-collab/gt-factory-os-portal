@@ -6,7 +6,8 @@
 // lose the reader's place in a 188-row table.
 
 import { useEffect, useRef, useState } from "react";
-import { Mail, MessageCircle, Phone, X } from "lucide-react";
+import Link from "next/link";
+import { Building2, Mail, MessageCircle, Phone, X } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtPhone } from "../_lib/format";
 import { LOST_REASONS, STATUS_LABELS, UI } from "../_lib/labels";
 import { mailtoHref, telHref, waHref, fillTemplate, templateFor } from "../_lib/wa";
@@ -237,6 +238,11 @@ export function LeadDrawer({
               <SlaBadge state={lead.sla_state} />
             </p>
             <MiniRail row={lead} />
+            {/* Unit B: the business behind the lead, its orders and its people. */}
+            <Link href={`/sales/orgs/${encodeURIComponent(lead.org_id)}`} className="s-org-back mt-2" data-testid="drawer-open-business">
+              <Building2 size={15} aria-hidden />
+              {UI.openBusiness}
+            </Link>
           </div>
           <button
             type="button"

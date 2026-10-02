@@ -20,8 +20,15 @@ import type {
   AttentionRow,
   LeadEventRow,
   TodayPayload,
+  OrderDetail,
+  OrdersPage,
+  OrgCircle,
+  OrgContacts,
+  OrgDetail,
   OrgFilter,
   OrgSearchHit,
+  RiverChip,
+  RiverPage,
   OrgSort,
   OrgsPage,
   OutcomeResult,
@@ -103,6 +110,8 @@ export const salesKeys = {
   events: (leadId: string) => ["sales", "events", leadId] as const,
   orgsPage: (filter: OrgFilter, sort: OrgSort) => ["sales", "orgs", "page", filter, sort] as const,
   orgSearch: (q: string) => ["sales", "orgs", "search", q] as const,
+  org: (id: string) => ["sales", "org", id] as const,
+  orgPart: (id: string, part: string, ...rest: string[]) => ["sales", "org", id, part, ...rest] as const,
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
@@ -205,6 +214,89 @@ export function useOrgSearch(query: string): UseQueryResult<OrgSearchHit[], Sale
       return Array.isArray(hits) ? (hits as OrgSearchHit[]) : [];
     },
     staleTime: 30_000,
+  });
+}
+
+/** A 4xx is an answer, not a hiccup: retrying a 403 only delays the forbidden state. */
+function retryServerErrors(count: number, error: SalesApiError): boolean {
+  if (error.status && error.status < 500) return false;
+  return count < 2;
+}
+
+/** One business (Unit B). Everything else on the workspace waits for this to succeed. */
+export function useOrg(id: string): UseQueryResult<OrgDetail, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.org(id),
+    queryFn: async () => await request<OrgDetail>(`/api/sales/orgs/${encodeURIComponent(id)}`),
+    retry: retryServerErrors,
+    staleTime: 30_000,
+  });
+}
+
+export function useOrgContacts(id: string, enabled: boolean): UseQueryResult<OrgContacts, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.orgPart(id, "contacts"),
+    enabled,
+    queryFn: async () => await request<OrgContacts>(`/api/sales/orgs/${encodeURIComponent(id)}/contacts`),
+    retry: retryServerErrors,
+    staleTime: 30_000,
+  });
+}
+
+export function useOrgCircle(id: string, enabled: boolean): UseQueryResult<OrgCircle, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.orgPart(id, "circle"),
+    enabled,
+    queryFn: async () => await request<OrgCircle>(`/api/sales/orgs/${encodeURIComponent(id)}/circle`),
+    retry: retryServerErrors,
+    staleTime: 60_000,
+  });
+}
+
+/** The business's river, a chip at a time, 25 to a page. */
+export function useOrgRiver(id: string, chip: RiverChip, enabled: boolean) {
+  return useInfiniteQuery<RiverPage, SalesApiError>({
+    queryKey: salesKeys.orgPart(id, "river", chip),
+    enabled,
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) =>
+      await request<RiverPage>(
+        `/api/sales/orgs/${encodeURIComponent(id)}/river?chip=${chip}&limit=25` +
+          (pageParam ? `&cursor=${encodeURIComponent(String(pageParam))}` : ""),
+      ),
+    getNextPageParam: (last) => last.next,
+    placeholderData: keepPreviousData,
+    retry: retryServerErrors,
+    staleTime: 30_000,
+  });
+}
+
+/** Every order of the business, newest first, 50 to a page (the month sheet walks it). */
+export function useOrgOrders(id: string, enabled: boolean) {
+  return useInfiniteQuery<OrdersPage, SalesApiError>({
+    queryKey: salesKeys.orgPart(id, "orders"),
+    enabled,
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) =>
+      await request<OrdersPage>(
+        `/api/sales/orgs/${encodeURIComponent(id)}/orders?limit=50` +
+          (pageParam ? `&cursor=${encodeURIComponent(String(pageParam))}` : ""),
+      ),
+    getNextPageParam: (last) => last.next,
+    retry: retryServerErrors,
+    staleTime: 60_000,
+  });
+}
+
+/** One order and its lines, with when the mirror read it. */
+export function useOrder(id: string, gid: string | null): UseQueryResult<OrderDetail, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.orgPart(id, "order", gid ?? "none"),
+    enabled: Boolean(gid),
+    queryFn: async () =>
+      await request<OrderDetail>(`/api/sales/orgs/${encodeURIComponent(id)}/orders/${encodeURIComponent(gid ?? "")}`),
+    retry: retryServerErrors,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -314,6 +406,14 @@ export function useBulkAssign() {
     { lead_ids: string[]; assignee: string; next_touch_at?: string | null },
     { assigned: number }
   >((vars) => request("/api/sales/bulk-assign", jsonBody(vars)));
+}
+
+/** A manager's decision on one contact that awaits review. */
+export function useContactAction() {
+  return useSalesMutation<{ contactId: string; action: "verify" | "reject" }, { contact_id: string }>(
+    ({ contactId, action }) =>
+      request(`/api/sales/contacts/${encodeURIComponent(contactId)}/${action}`, jsonBody({})),
+  );
 }
 
 /** One owner for many businesses, in one transaction (managers; T9). */

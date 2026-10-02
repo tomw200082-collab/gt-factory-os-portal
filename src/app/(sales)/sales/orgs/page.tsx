@@ -7,7 +7,7 @@
 // search asks the server's lean index. Filter, sort and search live in the URL,
 // so Back from a business returns to the same list.
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ShieldQuestion } from "lucide-react";
@@ -16,6 +16,7 @@ import { useOrgSearch, useOrgsPage, useSetOrgOwner, useSettings } from "../../_l
 import { fmtPhone } from "../../_lib/format";
 import { ORG_FILTER_LABELS, ORG_SORT_LABELS, UI } from "../../_lib/labels";
 import { useDebounced } from "../../_lib/useDebounced";
+import { useAutoClear } from "../../_lib/useAutoClear";
 import type { OrgFilter, OrgSort } from "../../_lib/types";
 import { ListEmpty, OrgsLoading, QueueError } from "../../_components/EmptyStates";
 import { OrgList } from "../../_components/OrgList";
@@ -66,6 +67,9 @@ function OrgsScreen() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [toast, setToast] = useState<string | null>(null);
 
+  const clearToast = useCallback(() => setToast(null), []);
+  useAutoClear(toast, clearToast);
+
   function toggle(id: string) {
     setSelected((cur) => {
       const next = new Set(cur);
@@ -106,7 +110,7 @@ function OrgsScreen() {
         />
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="s-segmented flex flex-wrap gap-1" role="group" aria-label={UI.filterLabel}>
+          <div className="s-segmented s-org-filters" data-count={filters.length} role="group" aria-label={UI.filterLabel}>
             {filters.map((f) => (
               <button
                 key={f}
@@ -124,7 +128,7 @@ function OrgsScreen() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <label htmlFor="orgs-sort" className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+            <label htmlFor="orgs-sort" className="shrink-0 text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
               {UI.sortLabel}
             </label>
             <select

@@ -182,7 +182,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
       {/* Not on settings: the one floating action is "add a lead", which is
           not a thing you do from a settings form — and it sat on top of the
           add-a-reason button, which is a floating action obscuring a real one. */}
-      {pathname === "/sales/settings" ? null : (
+      {/* Nor on a business page: there the first viewport ends on the call and
+          WhatsApp buttons, and the floating disc sat on top of them. */}
+      {pathname === "/sales/settings" || /^\/sales\/orgs\/[^/]+/.test(pathname) ? null : (
       <button
         type="button"
         data-testid="sales-quick-add"

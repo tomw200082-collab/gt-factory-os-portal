@@ -72,6 +72,13 @@ describe("sales tokens", () => {
     expect(css).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 
+  it("keeps typed text dark on a white field inside the petrol band", () => {
+    // The band remaps --s-fg to its light ink; a field there is still white, so
+    // typed text rendered at about 1:1 (Unit B rendered check, 2026-10-02).
+    expect(css).toMatch(/--s-field-fg:\s*var\(--s-fg\)/);
+    expect(css).toMatch(/\.s-opening \.s-input\s*\{[^}]*color:\s*hsl\(var\(--s-field-fg\)\)/);
+  });
+
   it("keeps a dark-theme block so the portal's toggle cannot break the surface", () => {
     expect(css).toMatch(/:root\.dark\s*\[data-app="sales"\]/);
   });
