@@ -95,6 +95,15 @@ export function fmtMoney(value: string | number | null | undefined): string {
   }).format(n);
 }
 
+/**
+ * Integer agorot (the Unit B API's money unit) to whole shekels: 1234500 → ₪12,345.
+ * Null stays "—": a withheld value is never printed as zero.
+ */
+export function fmtAgorot(agorot: number | null | undefined): string {
+  if (agorot === null || agorot === undefined || Number.isNaN(agorot)) return "—";
+  return fmtMoney(Math.round(agorot / 100));
+}
+
 export function fmtCount(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
@@ -134,7 +143,7 @@ export function phoneSearchKey(input: string | null | undefined): string {
 // only export the fields the App Router recognises — exporting a helper from
 // page.tsx fails the build (and typecheck alone will not tell you).
 
-import type { OrgRow, SalesLeadRow } from "./types";
+import type { SalesLeadRow } from "./types";
 
 /** Matches a lead against a typed query — name, business, email, or phone. */
 export function matchesQuery(row: SalesLeadRow, query: string): boolean {
@@ -145,21 +154,6 @@ export function matchesQuery(row: SalesLeadRow, query: string): boolean {
   if (digits.length >= 3 && phoneSearchKey(row.phone_e164).includes(digits)) return true;
 
   return [row.org_name, row.contact_name, row.email]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(q.toLowerCase());
-}
-
-/** The same, for a business. */
-export function matchesOrgQuery(org: OrgRow, query: string): boolean {
-  const q = query.trim();
-  if (!q) return true;
-
-  const digits = phoneSearchKey(q);
-  if (digits.length >= 3 && phoneSearchKey(org.phone_e164).includes(digits)) return true;
-
-  return [org.display_name, org.email]
     .filter(Boolean)
     .join(" ")
     .toLowerCase()

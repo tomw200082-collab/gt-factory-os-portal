@@ -108,22 +108,6 @@ export interface LeadEventRow {
   created_at: string;
 }
 
-export interface OrgRow {
-  id: string;
-  display_name: string;
-  phone_e164: string | null;
-  email: string | null;
-  email_domain: string | null;
-  city: string | null;
-  shopify_customer_id: string | null;
-  is_existing_customer: boolean;
-  shopify_snapshot: ShopifySnapshot | null;
-  shopify_snapshot_at: string | null;
-  created_at: string;
-  lead_count: number;
-  last_activity_at: string | null;
-}
-
 export interface WeekStats {
   week_new_leads: number;
   working_now: number;
@@ -232,4 +216,209 @@ export interface SalesTaskRow {
 export interface UndoTarget {
   leadId: string;
   previousNextTouch: string | null;
+}
+
+// ---- GT Pulse Unit B (gt-factory-os api/src/sales/orgs_handler.ts, main 893b3701) ----
+// Copied from the handler's exported shapes. Agorot are integers (₪1 = 100).
+
+/** How far GT trusts the link between an org and a Shopify customer (glossary). */
+export type LinkStatus = "verified" | "review" | "disputed" | "retired" | null;
+/** Whether order history may be shown now: only while the latest reconcile passed. */
+export type HistoryStatus = "ok" | "unverified" | "stale";
+export type OrderClass = "completed" | "refunded" | "cancelled" | "draft";
+
+export type OrgFilter = "active" | "prospect" | "all" | "review";
+export type OrgSort = "last_order" | "ex_vat_12m" | "name";
+
+export interface OrgListRow {
+  id: string;
+  name: string;
+  link_status: LinkStatus;
+  owner_email: string | null;
+  last_activity_at: string | null;
+  has_open_lead: boolean;
+  is_active_customer: boolean | null;
+  last_order_at: string | null;
+  orders_12m: number | null;
+  ex_vat_12m_agorot: number | null;
+  chain_name: string | null;
+}
+
+export interface OrgsPage {
+  rows: OrgListRow[];
+  next: string | null;
+  total: number;
+}
+
+export interface OrgSearchHit {
+  id: string;
+  name: string;
+  phone: string | null;
+}
+
+export interface Coverage {
+  verified_active: number;
+  census_active: number;
+  source: "shopifyql";
+  as_of: string;
+}
+
+/** A customer an identity decision is about. Its numbers are evidence, never a verified fact. */
+export interface Candidate {
+  customer_gid: string;
+  name: string | null;
+  order_count: number;
+  last_order_at: string | null;
+  basis: "held" | "phone";
+  /** another live org that already holds this customer: picking it merges into that org (absent from older APIs) */
+  held_by?: { org_id: string; name: string } | null;
+  evidence: "candidate";
+}
+
+export interface OrgCounts {
+  orders_12m: number;
+  ex_vat_12m_agorot: number;
+  clean_orders: number;
+  cancelled_orders: number;
+  open_drafts: number;
+  last_order: { gid: string; name: string | null; created_at: string; line_count: number } | null;
+}
+
+export interface OrgDetail {
+  header: { id: string; name: string; phone: string | null; owner_email: string | null };
+  link_status: LinkStatus;
+  chain: { name: string; kind: string; branch_count: number } | null;
+  moved: { to: string; on: string } | null;
+  counts: OrgCounts | null;
+  active: boolean | null;
+  coverage_line: Coverage | null;
+  history_status: HistoryStatus;
+  as_of: string | null;
+  identity: { reasons: string[]; candidates: Candidate[] } | null;
+  merged_into: { id: string; name: string } | null;
+}
+
+export interface OrderRow {
+  gid: string;
+  name: string | null;
+  created_at: string;
+  class: OrderClass;
+  draft_status: string | null;
+  ex_vat_agorot: number | null;
+  line_count: number;
+}
+
+export interface OrderDetail extends Omit<OrderRow, "line_count"> {
+  lines: Array<{ title: string | null; sku: string | null; quantity: number; ex_vat_agorot: number | null }>;
+  provenance: { source: "Shopify"; observed_at: string };
+}
+
+export interface OrdersPage {
+  rows: OrderRow[];
+  next: string | null;
+  history_status: HistoryStatus;
+}
+
+export type RiverChip = "all" | "orders" | "contact" | "cancelled" | "drafts";
+
+export type RiverItem =
+  | { kind: "order"; id: string; at: string; order: OrderRow }
+  | { kind: "org_event"; id: string; at: string; type: string; actor: string }
+  | {
+      kind: "lead_event";
+      id: string;
+      at: string;
+      type: string;
+      actor: string;
+      lead_id: string;
+      lead_name: string | null;
+      payload: Record<string, unknown>;
+    };
+
+export interface PendingDraft {
+  gid: string;
+  name: string | null;
+  draft_status: string;
+  created_at: string;
+  age_days: number;
+}
+
+export interface RiverPage {
+  rows: RiverItem[];
+  next: string | null;
+  counts: { cancelled: number; drafts: number };
+  pending_drafts: PendingDraft[];
+  history_status: HistoryStatus;
+}
+
+export interface ContactRow {
+  id: string;
+  name: string | null;
+  kind: "person" | "org_channel";
+  phone: string | null;
+  email: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  source: { system: string; observed_at: string };
+  /** present only on a verified contact */
+  tel?: string;
+  wa?: string;
+  mailto?: string;
+}
+
+export interface OrgContacts {
+  verified: ContactRow[];
+  review: ContactRow[];
+}
+
+export interface CircleMonth {
+  ym: string;
+  completed: number;
+  refunded: number;
+  cancelled: number;
+  /** every draft record, completed ones included: not drawn (design §2 F1) */
+  drafts: number;
+}
+
+export interface OrgCircle {
+  months: CircleMonth[];
+  last_order_at: string | null;
+  as_of: string | null;
+  history_status: HistoryStatus;
+}
+
+export interface IdentityOrg {
+  org_id: string;
+  name: string;
+  link_status: LinkStatus;
+  reason: string;
+  reasons: string[];
+  task_id: string;
+  task_ids: string[];
+  created_at: string;
+  candidates: Candidate[];
+}
+
+export interface MirrorException {
+  id: string;
+  kind: string;
+  detail: Record<string, unknown>;
+  created_at: string;
+  run_id: string | null;
+}
+
+export interface IdentityReview {
+  orgs: IdentityOrg[];
+  exceptions: MirrorException[];
+  coverage: Coverage | null;
+}
+
+export type IdentityAction = "confirm" | "pick" | "reject";
+
+export interface IdentityResult {
+  org_id: string;
+  action: IdentityAction;
+  link_status: LinkStatus;
+  customer_gid: string | null;
+  merged_into: string | null;
 }

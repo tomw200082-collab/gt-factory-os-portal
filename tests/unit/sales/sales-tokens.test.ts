@@ -72,6 +72,13 @@ describe("sales tokens", () => {
     expect(css).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 
+  it("keeps typed text dark on a white field inside the petrol band", () => {
+    // The band remaps --s-fg to its light ink; a field there is still white, so
+    // typed text rendered at about 1:1 (Unit B rendered check, 2026-10-02).
+    expect(css).toMatch(/--s-field-fg:\s*var\(--s-fg\)/);
+    expect(css).toMatch(/\.s-opening \.s-input\s*\{[^}]*color:\s*hsl\(var\(--s-field-fg\)\)/);
+  });
+
   it("keeps a dark-theme block so the portal's toggle cannot break the surface", () => {
     expect(css).toMatch(/:root\.dark\s*\[data-app="sales"\]/);
   });
@@ -181,6 +188,10 @@ const PAIRS: Array<[string, string, string, number]> = [
   ["D1 band muted text on petrol", "--s-opening-fg-muted", "--s-petrol", 4.5],
   ["D1 lead blue text on a card", "--s-status-new", "--s-surface", 4.5],
   ["D1 order green text on a card", "--s-status-won", "--s-surface", 4.5],
+  // GT Pulse Unit B: review amber on its badge, and as text on a card.
+  ["Unit B review badge", "--s-review", "--s-review-soft", 4.5],
+  ["Unit B review text on a card", "--s-review", "--s-surface", 4.5],
+  ["Unit B lead badge", "--s-status-new", "--s-status-new-soft", 4.5],
 ];
 
 describe.each([

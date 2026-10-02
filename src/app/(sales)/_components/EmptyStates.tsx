@@ -87,3 +87,26 @@ export function ListEmpty({ label }: { label: string }) {
     </div>
   );
 }
+
+/** The business list while a page loads: rows the height of a business row, not of a queue card. */
+export function OrgsLoading() {
+  return (
+    <div data-testid="orgs-loading" className="flex flex-col gap-2" aria-busy="true">
+      <span className="sr-only">{UI.loading}</span>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} aria-hidden className="s-card animate-pulse" style={{ height: 92, opacity: 1 - i * 0.18 }} />
+      ))}
+    </div>
+  );
+}
+
+/** A panel whose data could not be read says so, never "there is nothing": a
+ *  failed read is not an empty one (code review I-1). */
+export function PanelError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div data-testid="panel-error" role="status" className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.panelUnavailable(what)}</p>
+      <button type="button" className="s-btn s-btn-ghost s-btn-compact" onClick={onRetry}>{UI.retry}</button>
+    </div>
+  );
+}

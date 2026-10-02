@@ -122,6 +122,17 @@ describe("sales shell", () => {
     expect(screen.getByTestId("sales-search-open")).toBeTruthy();
   });
 
+  it("keeps the floating quick-add off a business page, where it covered the contact buttons", () => {
+    pathname.current = "/sales/orgs/00000000-0000-4000-8000-000000000001";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.queryByTestId("sales-quick-add")).toBeNull();
+    expect(screen.getByTestId("sales-search-open")).toBeTruthy();
+    cleanup();
+    pathname.current = "/sales/orgs";
+    render(withQuery(<SalesShell><p>תוכן</p></SalesShell>));
+    expect(screen.getByTestId("sales-quick-add")).toBeTruthy();
+  });
+
   it("renders its children in the main landmark", () => {
     render(
       withQuery(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addIsraelDays, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter } from "./israelTime";
+import { addIsraelDays, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter, daysSinceIsrael } from "./israelTime";
 
 describe("Israel next touches", () => {
   it("schedules today only while 09:00 Israel is still ahead", () => {
@@ -17,5 +17,16 @@ describe("Israel next touches", () => {
     expect(israelDate(new Date("2026-09-30T22:30:00Z"))).toBe("2026-10-01");
     expect(israelNineAMAfter(1, new Date("2026-09-30T22:30:00Z"))).toBe("2026-10-02T06:00:00.000Z");
     expect(addIsraelDays("2026-10-30", 3)).toBe("2026-11-02");
+  });
+});
+
+describe("daysSinceIsrael", () => {
+  it("counts Israeli calendar days, not 24-hour blocks", () => {
+    // 23:30 UTC on 30 June is 02:30 on 1 July in Israel (IDT, +3)
+    expect(daysSinceIsrael("2026-06-30T23:30:00Z", new Date("2026-07-01T06:00:00Z"))).toBe(0);
+    expect(daysSinceIsrael("2026-06-30T20:30:00Z", new Date("2026-07-01T06:00:00Z"))).toBe(1);
+  });
+  it("never goes negative", () => {
+    expect(daysSinceIsrael("2026-07-05T08:00:00Z", new Date("2026-07-01T06:00:00Z"))).toBe(0);
   });
 });

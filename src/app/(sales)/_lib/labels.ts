@@ -8,7 +8,8 @@
 // Schema values (new / working / won / lost) are never translated in data —
 // only on the way to the eye.
 
-import type { LeadStatus, OutcomeResult, OutreachChannel, TodayItemType } from "./types";
+import { fmtCount } from "./format";
+import type { LeadStatus, OrderClass, OrgFilter, OrgSort, OutcomeResult, OutreachChannel, RiverChip, TodayItemType } from "./types";
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "חדש",
@@ -49,6 +50,15 @@ export const EVENT_LABELS: Record<string, string> = {
   // drawer timeline renders the raw token "reminder_sent" on a Hebrew screen —
   // and this is the one event type a rep will see most mornings.
   reminder_sent: "תזכורת נשלחה",
+  // 0340 (funnel metrics) and 0360 (the WhatsApp lead journey). Before Unit B
+  // these rendered as raw tokens in the lead timeline.
+  qualified: "הליד ענה על שאלת המיון",
+  kit_sent: "נשלחה ערכת תוכן",
+  question_logged: "נרשמה שאלה של הליד",
+  auto_message: "נשלחה הודעה אוטומטית",
+  button_tap: "הליד לחץ על כפתור בהודעה",
+  opt_out: "ביקש לא לקבל הודעות",
+  draft_order: "נוצרה טיוטת הזמנה",
 };
 
 /**
@@ -137,6 +147,379 @@ const EMPTY_TAB_WORDS: Record<LeadStatus, string> = {
   lost: "שסומנו כאבודים",
 };
 
+// ---- GT Pulse Unit B ------------------------------------------------------
+// Written under Tom's delegation of 2026-10-02 (Session 2 masterprompt §1):
+// normal Unit B microcopy is the executor's call; business words come from the
+// glossary (Sales-Machine CONTEXT.md). No em dash in these strings.
+
+/** The list's server-side filters (T9: active customers plus open leads by default). */
+export const ORG_FILTER_LABELS: Record<OrgFilter, string> = {
+  active: "פעילים",
+  prospect: "טרם לקוח",
+  all: "הכל",
+  review: "בבדיקת זהות",
+};
+
+export const ORG_SORT_LABELS: Record<OrgSort, string> = {
+  last_order: "הזמנה אחרונה",
+  ex_vat_12m: "מחזור 12 חודשים",
+  name: "שם",
+};
+
+/** One state per business, always in words next to its icon. */
+export const ORG_STATE_LABELS = {
+  active: "לקוח פעיל",
+  inactive: "לקוח לא פעיל",
+  prospect: "טרם לקוח",
+  review: "בבדיקת זהות",
+  disputed: "זהות במחלוקת",
+  retired: "רשומה סגורה",
+  verifiedNoHistory: "לקוח מאומת",
+} as const;
+
+export type OrgStateKey = keyof typeof ORG_STATE_LABELS;
+
+/** org_event types (gt-factory-os 0364): what happened to the business itself. */
+const ORG_EVENT_LABELS: Record<string, string> = {
+  identity_linked: "העסק קושר ללקוח ב־Shopify",
+  identity_review: "זהות העסק הועברה לבדיקה",
+  identity_disputed: "זהות העסק במחלוקת",
+  identity_resolved: "נרשמה החלטה על זהות העסק",
+  identity_reverted: "הקישור ל־Shopify בוטל",
+  identity_merged: "בוצע מיזוג של שתי רשומות",
+  org_retired: "הרשומה נסגרה",
+  owner_assigned: "נקבעו בעלים לעסק",
+  contact_added: "נוסף איש קשר",
+  contact_verified: "איש קשר אומת",
+  contact_rejected: "איש קשר נדחה",
+  contact_promoted: "ערוץ של העסק נרשם כאיש קשר",
+  contact_redacted: "פרטי איש קשר הוסרו לצורכי פרטיות",
+};
+
+/** Every event the business river can carry: the lead's and the business's. */
+export const RIVER_EVENT_LABELS: Record<string, string> = { ...EVENT_LABELS, ...ORG_EVENT_LABELS };
+
+/** A type this file was not taught still reads as a sentence, never as a token. */
+export function riverEventLabel(type: string): string {
+  return RIVER_EVENT_LABELS[type] ?? "עדכון ברשומה";
+}
+
+export const ORDER_CLASS_LABELS: Record<OrderClass, string> = {
+  completed: "הזמנה",
+  refunded: "הזמנה עם החזר",
+  cancelled: "הזמנה שבוטלה",
+  draft: "טיוטה",
+};
+
+/** A Shopify draft's own status. A completed draft is also an order (glossary). */
+export const DRAFT_STATUS_LABELS: Record<string, string> = {
+  OPEN: "טיוטה פתוחה",
+  INVOICE_SENT: "טיוטה, נשלחה חשבונית",
+  COMPLETED: "טיוטה שהפכה להזמנה",
+};
+
+export const RIVER_CHIP_LABELS: Record<RiverChip, string> = {
+  all: "הכל",
+  orders: "הזמנות",
+  contact: "קשר",
+  cancelled: "בוטלו",
+  drafts: "טיוטות",
+};
+
+export const CONTACT_KIND_LABELS: Record<"person" | "org_channel", string> = {
+  person: "איש קשר",
+  org_channel: "מספר של העסק",
+};
+
+/** Where a contact came from, in the words of the people who use those systems. */
+export const CONTACT_SOURCE_LABELS: Record<string, string> = {
+  lead: "פנייה של ליד",
+  customer_portal_access: "פורטל ההזמנות של הלקוח",
+  customer_book: "ספר הלקוחות",
+  wa_customer_map: "מיפוי WhatsApp של הצוות",
+  wa_session: "שיחת WhatsApp עם הזמנה",
+  shopify: "הזמנות ב־Shopify",
+  manager: "מנהל המכירות",
+};
+
+export function contactSourceLabel(system: string): string {
+  return CONTACT_SOURCE_LABELS[system] ?? "מערכת פנימית";
+}
+
+/** Why an identity is under review (gt-factory-os 0368), said to a manager in plain words. */
+export const IDENTITY_REASON_LABELS: Record<string, string> = {
+  id_unproven: "הקישור ל־Shopify לא הוכח בטלפון",
+  phone_shared: "הטלפון של העסק מופיע אצל כמה לקוחות ב־Shopify",
+  chain_branch: "הטלפון שייך לסניף ברשת עם כמה סניפים",
+  b1_review_tag: "הלקוח ב־Shopify מסומן לבדיקה",
+  b1_active_no_client_key: "לקוח פעיל ב־Shopify בלי קישור ל־Green Invoice",
+  customer_not_verified: "הלקוח שהעסק מחזיק אינו לקוח מאומת",
+  chain_rule_hit: "מפת הרשתות מציעה לשייך את העסק לרשת",
+};
+
+export function identityReasonLabel(reason: string): string {
+  return IDENTITY_REASON_LABELS[reason] ?? "נדרשת בדיקה של זהות העסק";
+}
+
+/** mirror_exception kinds (gt-factory-os 0366). */
+export const EXCEPTION_LABELS: Record<string, string> = {
+  cap_exceeded: "ריענון עצר: יותר מדי שינויים בבת אחת",
+  stale_refresh: "הנתונים לא רועננו בזמן",
+  chain_map_changed: "מפת הרשתות השתנתה",
+  chain_conflict: "לקוח מתאים לשתי רשתות",
+  b1_fact_mismatch: "נתוני לקוח לא תואמים",
+  reconcile_failed: "ההשוואה מול Shopify נכשלה",
+  order_gone: "הזמנה נמחקה ב־Shopify",
+  customer_unresolved: "לקוח כבר לא נמצא ב־Shopify",
+};
+
+export function exceptionLabel(kind: string): string {
+  return EXCEPTION_LABELS[kind] ?? "חריגה בסנכרון";
+}
+
+/** Hebrew counts agree with the noun: "עסק אחד", never "1 עסקים". */
+function orgsWord(n: number): string {
+  return n === 1 ? "עסק אחד" : `${fmtCount(n)} עסקים`;
+}
+
+const ORG_UI = {
+  orgsCount: (n: number) => orgsWord(n),
+  orgsShowing: (shown: number, total: number) =>
+    `מוצגים ${fmtCount(shown)} מתוך ${fmtCount(total)}`,
+  orgsFilterEmpty: "אין עסקים במסנן הזה",
+  orgsShowAll: "הצג את כל העסקים",
+  showMoreOrgs: "הצג עוד עסקים",
+  orgsSearch: "חיפוש עסק לפי שם או טלפון",
+  sortLabel: "מיון",
+  filterLabel: "סינון עסקים",
+  orgOpenLead: "ליד פתוח",
+  orgOwner: (name: string) => `בעלים: ${name}`,
+  orgNoOwner: "ללא בעלים",
+  orgLastOrder: (when: string) => `הזמנה אחרונה ${when}`,
+  orgValue12mSuffix: "ב־12 חודשים",
+  exVat: "לפני מע״מ",
+  orgsSelect: "בחירה",
+  orgsSelectDone: "סיום בחירה",
+  selectOrgNamed: (name: string) => `בחר את ${name}`,
+  ownerPick: "בעלים חדשים",
+  ownerPickPlaceholder: "בחרו איש מכירות",
+  ownerAssign: "שייך בעלים",
+  ownerAssignNeedsOwner: "בחרו קודם למי לשייך",
+  ownerSavingWait: "השיוך נשמר, רגע",
+  selectRetiredHint: "רשומה סגורה: אין לה בעלים",
+  ownerAssigned: (n: number, name: string) =>
+    n === 1 ? `עסק אחד שויך ל${name}` : `${n} עסקים שויכו ל${name}`,
+  ownerFailed: "השיוך נכשל. הבחירה נשמרה, אפשר לנסות שוב",
+  ownerTooMany: "אפשר לשייך עד 200 עסקים בפעם אחת",
+  reviewQueueLink: "בדיקת זהות",
+
+  // the workspace (tranche 190)
+  backToOrgs: "חזרה לעסקים",
+  orgPageTitle: (name: string) => `${name} · GT מכירות`,
+  orgLoading: "טוען את העסק…",
+  orgForbiddenTitle: "לא ניתן להציג את העסק",
+  orgForbiddenHint: "ייתכן שהקישור שגוי, או שהעסק אינו משויך אליך.",
+  orgNotFoundTitle: "העסק לא נמצא",
+  orgNotFoundHint: "ייתכן שהרשומה לא קיימת, או שהקישור שגוי.",
+  orgErrorWhat: "העסק",
+  // kind is the chain map's own word (רשת, מפיץ), so the line reads "רשת ארומה · 4 סניפים".
+  chainLine: (kind: string, chain: string, branches: number) =>
+    branches > 1 ? `${kind} ${chain} · ${branches} סניפים` : `${kind} ${chain}`,
+  movedLine: (to: string, on: string) => `עבר ל${to} מ־${on}`,
+  ownerLine: (name: string) => `בעלים: ${name}`,
+  freshness: (when: string) => `Shopify · נכון ל־${when}`,
+  nextActionTitle: "הפעולה הבאה",
+  nextActionNone: "אין פעולה פתוחה לעסק",
+  nextActionNoneHint: "כשתיקבע משימה או מגע הבא לליד של העסק, הם יופיעו כאן.",
+  nextActionOverdue: "באיחור",
+  nextActionTouch: (name: string) => `לחזור ל${name}`,
+  nextActionTouchWhy: "מגע הבא שהובטח לליד",
+  nextActionOpenLead: "פתח את הליד",
+  nextActionOpenToday: "פתח בתור היום",
+  primaryContactTitle: "איש קשר",
+  noVerifiedContact: "אין עדיין איש קשר מאומת",
+  awaitingReview: (n: number) => (n === 1 ? "איש קשר אחד ממתין לאימות" : `${n} אנשי קשר ממתינים לאימות`),
+  callNamed: (name: string) => `התקשר ל${name}`,
+  whatsappNamed: (name: string) => `וואטסאפ ל${name}`,
+  emailNamed: (name: string) => `אימייל ל${name}`,
+  summaryTitle: "הזמנות",
+  lastOrder: "הזמנה אחרונה",
+  lastOrderLines: (n: number) => (n === 1 ? "שורה אחת" : `${n} שורות`),
+  orders12m: "הזמנות ב־12 חודשים",
+  value12m: "מחזור ב־12 חודשים",
+  noOrdersYet: "אין עדיין הזמנות",
+  openDraftsLine: (n: number) => (n === 1 ? "טיוטה פתוחה אחת ממתינה" : `${n} טיוטות פתוחות ממתינות`),
+  daysSince: (n: number) => (n === 0 ? "היום" : n === 1 ? "לפני יום" : `לפני ${n} ימים`),
+  asOf: (when: string) => `נכון ל־${when}`,
+  sourceOpen: "מקור הנתון",
+  sourceTitle: "מקור הנתון",
+  sourceSystem: "מקור",
+  sourceTime: "נכון ל",
+  sourceBasis: "בסיס",
+  sourceShopify: "Shopify, ההעתק המאומת של GT",
+  sourceBasisMoney: "סכום שורות ההזמנה במחיר הלקוח, לפני מע״מ",
+  sourceBasisOrders: "הזמנות נקיות: לא בוטלו, לא טיוטה ולא בדיקה. הזמנה עם החזר נספרת",
+  sourcePublication: "היסטוריה מוצגת רק כשההשוואה הלילית מול Shopify עוברת.",
+  historyStaleTitle: "הנתונים לא עודכנו בזמן",
+  historyStaleHint: (when: string) => `ההשוואה האחרונה מול Shopify עברה ב־${when}. מה שמוצג כאן נכון לאותו רגע.`,
+  historyUnavailableTitle: "היסטוריית ההזמנות לא זמינה כרגע",
+  historyUnavailableHint: "ההשוואה מול Shopify לא עוברת כרגע, ולכן לא מוצגים הזמנות וסכומים. זה לא אומר שאין הזמנות.",
+  identityReviewTitle: "זהות העסק בבדיקה",
+  identityReviewHint: "עד שמנהל יחליט על הקישור ל־Shopify לא מוצגים הזמנות וסכומים.",
+  identityDisputedTitle: "זהות העסק במחלוקת",
+  identityOpenReview: "למסך בדיקת הזהות",
+  prospectHint: "לעסק הזה אין עדיין קישור ללקוח ב־Shopify, ולכן אין היסטוריית הזמנות.",
+  retiredMerged: (name: string) => `העסק אוחד אל ${name}`,
+  retiredGo: (name: string) => `עבור אל ${name}`,
+  retiredClosed: "הרשומה הזו סגורה. אין לבצע עליה פעולות.",
+  riverTitle: "מה קרה עם העסק",
+  riverEmpty: "אין עדיין אירועים לעסק",
+  riverChipsLabel: "סינון אירועים",
+  riverMore: "הצג עוד אירועים",
+  pendingDraftsTitle: "טיוטות פתוחות",
+  draftAge: (days: number) => (days === 0 ? "נפתחה היום" : days === 1 ? "פתוחה יום אחד" : `פתוחה ${days} ימים`),
+  orderLinesTitle: "שורות ההזמנה",
+  orderNoLines: "אין שורות בהזמנה",
+  orderQuantity: (n: number) => `× ${n}`,
+  orderOpen: (name: string) => `פתח את ${name}`,
+  orderNameless: "הזמנה ללא מספר",
+  byActor: (who: string) => `על ידי ${who}`,
+  forLead: (name: string) => `ליד: ${name}`,
+  contactsTitle: "אנשי קשר",
+  contactsEmpty: "אין עדיין אנשי קשר לעסק",
+  contactsVerifiedTitle: "מאומתים",
+  contactsReviewTitle: "ממתינים לאימות",
+  contactsReviewHint: "לא מאומת: אין חיוג או הודעה מכאן עד שמנהל יאשר.",
+  contactVerifiedByWho: (who: string) => `אומת על ידי ${who}`,
+  contactFromWhere: (source: string) => `מקור: ${source}`,
+  contactVerifyNamed: (name: string) => `אמת את ${name}`,
+  contactRejectNamed: (name: string) => `דחה את ${name}`,
+  contactVerify: "אמת",
+  contactReject: "דחה",
+  contactVerifyTitle: "לאמת את איש הקשר?",
+  contactVerifyBody: "אחרי אימות יופיעו כפתורי חיוג, WhatsApp ואימייל לכל מי שעובד עם העסק. אמת רק אחרי שווידאת מול האדם עצמו.",
+  contactVerifyConfirm: "כן, אמת",
+  contactRejectTitle: "לדחות את איש הקשר?",
+  contactRejectBody: "איש הקשר יוסר מהרשימה של העסק. המקור שלו נשמר בהיסטוריה.",
+  contactRejectConfirm: "כן, דחה",
+  contactDecided: (action: string, name: string) =>
+    action === "verify" ? `${name} אומת ✓`
+      : action === "reject" ? `${name} נדחה`
+      : action === "redact" ? `הפרטים של ${name} הוסרו לצורכי פרטיות`
+      : `${name} עודכן ✓`,
+  contactUnnamed: "ללא שם",
+  leadsTitle: "הלידים של העסק",
+  leadsEmpty: "אין לידים לעסק",
+  panelUnavailable: (what: string) => `לא הצלחנו לטעון ${what} כרגע. זה לא אומר שאין.`,
+  panelWhatNext: "את הפעולה הבאה",
+  panelWhatContact: "את אנשי הקשר",
+  panelWhatLeads: "את הלידים",
+  panelWhatHistory: "את ההזמנות של השנתיים",
+  openBusiness: "לעמוד העסק",
+
+  // the business circle and the month sheet (tranche 191)
+  circleTitle: "שנתיים של הזמנות",
+  circleMonthsGroup: "חודשים, מהישן לחדש",
+  circleLegendOrder: "הזמנה",
+  circleLegendCancelled: "בוטלה",
+  circleLegendDraft: "טיוטה פתוחה",
+  circleLegendRings: "בחוץ: 12 החודשים האחרונים. בפנים: 12 שלפניהם. החודש הנוכחי למעלה",
+  circleLegendGrid: "מהחודש הנוכחי (במסגרת) אחורה, שנתיים",
+  circleMovedTitle: (to: string) => `עבר ל${to}`,
+  circleMovedSince: (on: string) => `מ־${on}`,
+  circleNoOrders: "אין הזמנות בשנתיים האחרונות",
+  circleSource: "מקור: Shopify",
+  monthCounts: (orders: number, refunded: number, cancelled: number, open: number) => {
+    const parts: string[] = [];
+    if (orders === 0 && cancelled === 0 && open === 0) return "אין הזמנות";
+    if (orders > 0) parts.push(orders === 1 ? "הזמנה אחת" : `${orders} הזמנות`);
+    if (refunded > 0) parts.push(refunded === 1 ? "אחת עם החזר" : `${refunded} עם החזר`);
+    if (cancelled > 0) parts.push(cancelled === 1 ? "אחת בוטלה" : `${cancelled} בוטלו`);
+    if (open > 0) parts.push(open === 1 ? "טיוטה פתוחה אחת" : `${open} טיוטות פתוחות`);
+    return parts.join(", ");
+  },
+  monthEmpty: "אין הזמנות בחודש הזה",
+
+  // the orders timeline: the same two years on a time axis (Tom, 2026-10-02)
+  ordersViewLabel: "תצוגת ההזמנות",
+  viewCircle: "עיגול",
+  viewTimeline: "ציר זמן",
+  timelineChartLabel: "הזמנות לפי חודש בשנתיים האחרונות, מהישן (מימין) לחדש (משמאל)",
+  timelineScale: (n: number) => (n === 1 ? "סולם: עד הזמנה אחת בחודש" : `סולם: עד ${n} הזמנות בחודש`),
+  timelineZoomLabel: "סולם ההזמנות",
+  timelineTotal: "הזמנות בשנתיים",
+  timelineTotalOne: "הזמנה בשנתיים",
+  timelineTrendWord: (dir: "up" | "down" | "flat", pct: number | null) =>
+    dir === "flat" ? "יציב" : `${dir === "up" ? "עלייה" : "ירידה"}${pct === null ? "" : ` של ${pct}%`}`,
+  timelineTrendBasis: "3 החודשים המלאים האחרונים מול 3 שלפניהם",
+  timelineInProgress: "חודש בתהליך",
+  timelineAvgNow: (v: string) => `כעת ${v} בחודש`,
+  timelineSteps: "מעבר בין חודשים",
+  timelineMonthPrev: "החודש הקודם",
+  timelineMonthNext: "החודש הבא",
+  timelineZoomAtFit: "כל החודשים כבר בתצוגה",
+  timelineZoomAtMax: "זו התצוגה הקרובה ביותר",
+  timelineZoomIn: "הגדלת התצוגה",
+  timelineZoomOut: "הקטנת התצוגה",
+  timelineZoomFit: "התאם לכל החודשים",
+  timelineZoomFitShort: "הכול",
+  timelineTrend: "מגמה: ממוצע 3 חודשים מלאים,",
+  timelinePick: "הקישו על חודש כדי לראות מה היה בו",
+  timelineOpenMonth: "פתח את הזמנות החודש",
+  timelineAxisHint: "ישן מימין, חדש משמאל",
+  monthLoading: "טוען את הזמנות החודש…",
+
+  // the identity review (tranche 191)
+  reviewTitle: "בדיקת זהות",
+  reviewIntro: "עסקים שהקישור שלהם ל־Shopify מחכה להחלטה של מנהל. עד ההחלטה לא מוצגים להם הזמנות וסכומים.",
+  reviewCount: (n: number) => (n === 1 ? "עסק אחד ממתין להחלטה" : `${n} עסקים ממתינים להחלטה`),
+  reviewCoverage: (verified: number, census: number) =>
+    `${fmtCount(verified)} מתוך ${fmtCount(census)} הלקוחות הפעילים ב־Shopify מאומתים`,
+  reviewCoverageSource: "מקור: ספירת הלקוחות של Shopify",
+  reviewEmpty: "אין עסקים שממתינים להחלטה ✓",
+  reviewForbiddenTitle: "המסך הזה למנהלי מכירות",
+  reviewForbiddenHint: "החלטות על זהות של עסקים מתקבלות בידי מנהל.",
+  reviewSince: (when: string) => `בבדיקה מ־${when}`,
+  candidatesTitle: "מועמדים ב־Shopify",
+  candidateEvidence: "ראיה להחלטה, לא נתון מאומת",
+  candidateHeld: "הלקוח שהעסק מחזיק היום",
+  candidatePhone: "אותו מספר טלפון",
+  candidateOrders: (n: number) => (n === 1 ? "הזמנה נקייה אחת" : `${n} הזמנות נקיות`),
+  candidateLast: (when: string) => `אחרונה: ${when}`,
+  candidateNoOrders: "אין הזמנות נקיות",
+  candidateUnnamed: "לקוח ללא שם",
+  chooseCandidate: "זה העסק",
+  confirmCustomer: "אשר את הלקוח",
+  rejectAll: "אף אחד מהם",
+  confirmChain: "אשר שיוך לרשת",
+  reviewBlocked: "אי אפשר להחליט מכאן: הלקוח שהעסק מחזיק לא נמצא בהעתק שלנו של Shopify. פנה למנהל המערכת.",
+  linkTitle: (org: string, customer: string) => `לקשר את ${org} ל${customer}?`,
+  linkConsequence: "מרגע זה העסק ייחשב לקוח מאומת, ויוצגו לו ההזמנות והסכומים של הלקוח הזה ב־Shopify.",
+  linkMaybeMerge: "אם הלקוח כבר שייך לעסק אחר, הרשומה הזו תיסגר לצמיתות ותאוחד אליו. אי אפשר לבטל את זה.",
+  candidateHeldBy: (holder: string) => `כבר שייך לעסק ${holder}`,
+  mergeTitle: (org: string, holder: string) => `לאחד את ${org} אל ${holder}?`,
+  mergeConsequence: (org: string, holder: string) =>
+    `הלקוח הזה כבר שייך לעסק ${holder}. הרשומה של ${org} תיסגר לצמיתות. הלידים שלה יעברו אל ${holder}, וגם אנשי הקשר שעוד אין לו. אי אפשר לבטל את זה.`,
+  mergeConfirm: "כן, לאחד",
+  mergeTargetUnknown: "העסק הקיים",
+  reviewMergedOpen: "לעסק",
+  reviewSaving: "שומר את ההחלטה…",
+  linkConfirm: "כן, לקשר",
+  rejectTitle: (org: string) => `לקבוע שאף מועמד אינו ${org}?`,
+  rejectConsequence: "הקישור ל־Shopify יוסר מהעסק, והמועמדים יירשמו כנדחים. לא יוצגו לעסק הזמנות עד שתימצא התאמה.",
+  rejectConfirm: "כן, אף אחד מהם",
+  chainTitle: (org: string) => `לשייך את ${org} לרשת שמפת הרשתות מציעה?`,
+  chainConsequence: "העסק יוצג כסניף ברשת. השיוך נרשם כהחלטה שלך.",
+  chainConfirm: "כן, לשייך",
+  reviewLinked: (org: string) => `${org} קושר ✓`,
+  reviewMerged: (org: string, holder: string) => `${org} אוחד אל ${holder} ✓`,
+  reviewRejected: (org: string) => `הקישור של ${org} הוסר`,
+  reviewChained: (org: string) => `${org} שויך לרשת ✓`,
+  exceptionsTitle: "חריגות בסנכרון",
+  exceptionsEmpty: "אין חריגות פתוחות",
+  openOrg: (name: string) => `פתח את ${name}`,
+} as const;
+
 export const NAV_LABELS = {
   today: "היום",
   leads: "לידים",
@@ -150,6 +533,7 @@ export const NAV_LABELS = {
  * product's own name, and Hebrew speakers read it that way.
  */
 export const UI = {
+  ...ORG_UI,
   appName: "GT מכירות",
   switchToFactory: "מעבר לייצור",
 
@@ -361,7 +745,6 @@ export const UI = {
   noteSaved: "נשמר ✓",
   teamCounts: "כל הצוות",
   // Tom 2026-10-01 ("מאשר הכל", tranche 188).
-  orgNotCustomer: "טרם לקוח",
   noteNeeded: "כתבו הערה כדי לשמור",
   customerStatusActive: "פעיל",
   customerStatusDisabled: "לא פעיל",
@@ -412,10 +795,6 @@ export const UI = {
   // orgs
   orgsTitle: "עסקים",
   orgLeads: (n: number) => leads(n),
-  orgLastActivity: "פעילות אחרונה",
-  orgNoActivity: "אין פעילות",
-  orgLeadsTitle: "הלידים של העסק",
-  timelineForLead: (name: string) => `היסטוריה של הליד: ${name}`,
 
   // customer context
   customerBadge: "לקוח קיים",
@@ -439,7 +818,10 @@ export const UI = {
   // search palette
   commandTitle: "חיפוש",
   commandPlaceholder: "שם, עסק או מספר טלפון",
+  commandSearching: "מחפש עסקים…",
+  commandSearchFailed: "החיפוש בעסקים לא הצליח כרגע. נסו שוב בעוד רגע.",
   searchResults: (n: number) => (n === 1 ? "תוצאה אחת" : `${n} תוצאות`),
+  searchMinHint: "עוד אות אחת, והחיפוש יתחיל",
   commandHintLeads: "לידים",
   commandHintOrgs: "עסקים",
 
@@ -479,4 +861,16 @@ export const RULE_MESSAGES: Record<string, string> = {
   SALES_INVALID_STATUS: "סטטוס לא מוכר.",
   SALES_LEAD_NOT_FOUND: "הליד לא נמצא.",
   SALES_NOTE_EMPTY: "ההערה ריקה.",
+  // GT Pulse Unit B (gt-factory-os orgs_handler.ts)
+  SALES_ORG_NOT_FOUND: "העסק לא נמצא.",
+  SALES_ORG_RETIRED: "אחד העסקים סגור. אי אפשר לשייך לו בעלים.",
+  SALES_OWNER_UNKNOWN: "האדם הזה אינו איש מכירות פעיל.",
+  SALES_IDENTITY_NOTHING_OPEN: "ההחלטה כבר התקבלה בינתיים. רעננו את הרשימה.",
+  SALES_IDENTITY_NOT_REJECTABLE: "לעסק זה יש אפשרות אישור בלבד, אין קישור לדחות.",
+  SALES_IDENTITY_ACTION_UNSUPPORTED: "הפעולה הזו לא מתאימה לעסק הזה.",
+  SALES_IDENTITY_CHAIN_AMBIGUOUS: "מפת הרשתות לא מציעה רשת אחת ברורה.",
+  SALES_IDENTITY_NEEDS_CUSTOMER: "צריך לבחור לקוח.",
+  SALES_IDENTITY_NOT_MIRRORED: "הלקוח לא נמצא בהעתק של Shopify.",
+  SALES_IDENTITY_NOT_A_CANDIDATE: "הלקוח הזה כבר אינו מועמד לעסק. רעננו את הרשימה.",
+  SALES_CONTACT_NOT_FOUND: "איש הקשר לא נמצא.",
 };

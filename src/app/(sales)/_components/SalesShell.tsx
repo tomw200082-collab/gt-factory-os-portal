@@ -12,7 +12,8 @@ import { usePathname } from "next/navigation";
 import { Activity, ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
-import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
+import { useLeads, useQuickAdd } from "../_lib/api";
+import { noteSalesPath } from "../_lib/salesHistory";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
 import { Toast } from "./Toast";
@@ -38,6 +39,18 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** The sales pages are Hebrew; the root layout says English for the rest of the portal (A11Y-B-003). */
+export function useSalesDocumentLang() {
+  useEffect(() => {
+    const el = document.documentElement;
+    const before = el.lang;
+    el.lang = "he";
+    return () => {
+      el.lang = before;
+    };
+  }, []);
+}
+
 export function SalesShell({ children }: { children: ReactNode }) {
   const { session } = useSession();
   const canManageSales = session?.role === "admin" || session?.role === "planner";
@@ -45,6 +58,8 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  useSalesDocumentLang();
+  useEffect(() => noteSalesPath(pathname), [pathname]);
 
   // Confirmation should not outstay its welcome above the tab bar. Without
   // this the quick-add toast sits there for the rest of the session, still
@@ -55,10 +70,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  // Both lists are already cached for the screens; the palette reuses them
-  // rather than adding a search endpoint.
+  // The leads list is already cached for the screens; the palette reuses it.
+  // Businesses are searched on the server (CommandK).
   const leads = useLeads();
-  const orgs = useOrgs();
   const quickAdd = useQuickAdd();
 
   useEffect(() => {
@@ -183,7 +197,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
       {/* Not on settings: the one floating action is "add a lead", which is
           not a thing you do from a settings form — and it sat on top of the
           add-a-reason button, which is a floating action obscuring a real one. */}
-      {pathname === "/sales/settings" ? null : (
+      {/* Nor on a business page: there the first viewport ends on the call and
+          WhatsApp buttons, and the floating disc sat on top of them. */}
+      {pathname === "/sales/settings" || /^\/sales\/orgs\/[^/]+/.test(pathname) ? null : (
       <button
         type="button"
         data-testid="sales-quick-add"
@@ -210,7 +226,6 @@ export function SalesShell({ children }: { children: ReactNode }) {
       {searchOpen ? (
         <CommandK
           leads={leads.data ?? []}
-          orgs={orgs.data ?? []}
           onClose={() => setSearchOpen(false)}
         />
       ) : null}
