@@ -68,7 +68,9 @@ export async function proxyRequest(
 
   const headers: Record<string, string> = {};
 
-  const devShimOn = process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
+  // Never on a production deployment: a flag set there by mistake must not act as the shim's admin.
+  const devShimOn =
+    process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true" && process.env.VERCEL_ENV !== "production";
   if (devShimOn) {
     // Local dev: pass fake admin session so API dev-shim path handles auth.
     // API must be running with ENABLE_DEV_SHIM_AUTH=true.

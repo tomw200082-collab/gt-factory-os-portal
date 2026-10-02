@@ -877,6 +877,7 @@ export const RULE_MESSAGES: Record<string, string> = {
   SALES_IDENTITY_CHAIN_AMBIGUOUS: "מפת הרשתות לא מציעה רשת אחת ברורה.",
   SALES_IDENTITY_NEEDS_CUSTOMER: "צריך לבחור לקוח.",
   SALES_IDENTITY_NOT_MIRRORED: "הלקוח לא נמצא בהעתק של Shopify.",
+  SALES_IDENTITY_HOLDER_CHANGED: "הלקוח הזה כבר שייך לעסק אחר מזה שהוצג. רעננו את הרשימה והחליטו שוב.",
   SALES_IDENTITY_NOT_A_CANDIDATE: "הלקוח הזה כבר אינו מועמד לעסק. רעננו את הרשימה.",
   SALES_CONTACT_NOT_FOUND: "איש הקשר לא נמצא.",
 };
