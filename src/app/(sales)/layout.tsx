@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Rubik } from "next/font/google";
+import { GTLoader } from "@/components/ui/GTLoader";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { SalesShell } from "./_components/SalesShell";
 import "./sales-tokens.css";
@@ -37,10 +38,14 @@ export const metadata: Metadata = {
  * hold — the middleware role table is a documented no-op until app_users.role is
  * projected into the JWT, which is exactly why changing only the API would give
  * a sales rep 2xx from every endpoint and still bounce them off the screen.
+ *
+ * While the session loads the gate shows the GT Pulse loader, so a direct load
+ * of a /sales/* URL is never a blank screen (the loader stays invisible for its
+ * first 120 ms, so a fast session never shows it).
  */
 export default function SalesLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGate minimum="sales:execute">
+    <RoleGate minimum="sales:execute" fallback={<GTLoader variant="sales" />}>
       <div className={rubik.variable}>
         <SalesShell>{children}</SalesShell>
       </div>

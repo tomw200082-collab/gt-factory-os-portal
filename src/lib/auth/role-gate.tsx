@@ -38,18 +38,22 @@ type RoleGateProps =
       allow: Role[];
       minimum?: never;
       children: ReactNode;
+      fallback?: ReactNode;
     }
   | {
       minimum: CapabilityRequirement;
       allow?: never;
       children: ReactNode;
+      fallback?: ReactNode;
     };
 
 export function RoleGate(props: RoleGateProps) {
   const { session, isLoading } = useSession();
 
-  // While session loads, render nothing — shell chrome shows its own skeleton.
-  if (isLoading) return null;
+  // While the session loads, render `fallback` — nothing unless a caller gives
+  // one (shell chrome shows its own skeleton; the sales layout passes its loader
+  // so a direct /sales/* load is not a blank screen).
+  if (isLoading) return <>{props.fallback ?? null}</>;
 
   let granted: boolean;
   let blockedLabel: string;
