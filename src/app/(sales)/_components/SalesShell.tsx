@@ -12,7 +12,7 @@ import { usePathname } from "next/navigation";
 import { Activity, ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
-import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
+import { useLeads, useQuickAdd } from "../_lib/api";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
 import { Toast } from "./Toast";
@@ -55,10 +55,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  // Both lists are already cached for the screens; the palette reuses them
-  // rather than adding a search endpoint.
+  // The leads list is already cached for the screens; the palette reuses it.
+  // Businesses are searched on the server (CommandK).
   const leads = useLeads();
-  const orgs = useOrgs();
   const quickAdd = useQuickAdd();
 
   useEffect(() => {
@@ -210,7 +209,6 @@ export function SalesShell({ children }: { children: ReactNode }) {
       {searchOpen ? (
         <CommandK
           leads={leads.data ?? []}
-          orgs={orgs.data ?? []}
           onClose={() => setSearchOpen(false)}
         />
       ) : null}

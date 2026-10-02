@@ -22,7 +22,6 @@ interface Stub {
 const STUBS: Stub[] = [
   { file: "today/route.ts", upstream: "/api/v1/queries/sales/today", methods: ["GET"] },
   { file: "leads/route.ts", upstream: "/api/v1/queries/sales/leads", methods: ["GET"] },
-  { file: "orgs/route.ts", upstream: "/api/v1/queries/sales/orgs", methods: ["GET"] },
   { file: "week-stats/route.ts", upstream: "/api/v1/queries/sales/week-stats", methods: ["GET"] },
   { file: "settings/route.ts", upstream: "sales/settings", methods: ["GET", "PUT"] },
   { file: "quick-add/route.ts", upstream: "/api/v1/mutations/sales/quick-add", methods: ["POST"] },
@@ -37,6 +36,19 @@ const STUBS: Stub[] = [
   { file: "tasks/[task_id]/complete/route.ts", upstream: "/api/v1/mutations/sales/tasks/", methods: ["POST"] },
   { file: "leads/[lead_id]/contact/route.ts", upstream: "/api/v1/mutations/sales/leads/", methods: ["PATCH"] },
   { file: "leads/[lead_id]/activity/route.ts", upstream: "/api/v1/mutations/sales/leads/", methods: ["POST"] },
+  // GT Pulse Unit B (tranche 189). The legacy GET /orgs proxy is gone with its last caller.
+  { file: "orgs/page/route.ts", upstream: "/api/v1/queries/sales/orgs/page", methods: ["GET"] },
+  { file: "orgs/search/route.ts", upstream: "/api/v1/queries/sales/orgs/search", methods: ["GET"] },
+  { file: "orgs/owner/route.ts", upstream: "/api/v1/mutations/sales/orgs/owner", methods: ["POST"] },
+  { file: "orgs/[id]/route.ts", upstream: "/api/v1/queries/sales/orgs/", methods: ["GET"] },
+  { file: "orgs/[id]/orders/route.ts", upstream: "/orders", methods: ["GET"] },
+  { file: "orgs/[id]/orders/[gid]/route.ts", upstream: "/orders/", methods: ["GET"] },
+  { file: "orgs/[id]/river/route.ts", upstream: "/river", methods: ["GET"] },
+  { file: "orgs/[id]/contacts/route.ts", upstream: "/contacts", methods: ["GET"] },
+  { file: "orgs/[id]/circle/route.ts", upstream: "/circle", methods: ["GET"] },
+  { file: "orgs/[id]/identity/route.ts", upstream: "/api/v1/mutations/sales/orgs/", methods: ["POST"] },
+  { file: "identity-review/route.ts", upstream: "/api/v1/queries/sales/identity-review", methods: ["GET"] },
+  { file: "contacts/[id]/[action]/route.ts", upstream: "/api/v1/mutations/sales/contacts/", methods: ["POST"] },
 ];
 
 function read(stub: Stub): string {
@@ -72,6 +84,25 @@ describe("sales API proxy stubs", () => {
       expect(src).toContain("encodeURIComponent(lead_id)");
       expect(src).toContain("await params");
     }
+  });
+
+  it("escapes the org id on every Unit B dynamic route, and the order gid", () => {
+    for (const stub of STUBS.filter((s) => s.file.includes("[id]"))) {
+      const src = read(stub);
+      expect(src).toContain("encodeURIComponent(id)");
+      expect(src).toContain("await params");
+    }
+    expect(read(STUBS.find((s) => s.file.includes("[gid]"))!)).toContain("encodeURIComponent(raw)");
+  });
+
+  it("forwards only the four contact verbs the API knows", () => {
+    const src = read(STUBS.find((s) => s.file.includes("[action]"))!);
+    expect(src).toContain('new Set(["verify", "reject", "promote", "redact"])');
+    expect(src).toContain("status: 404");
+  });
+
+  it("does not keep the legacy org list proxy", () => {
+    expect(fs.existsSync(path.join(API_DIR, "orgs/route.ts"))).toBe(false);
   });
 
   it("escapes the task id on task completion", () => {

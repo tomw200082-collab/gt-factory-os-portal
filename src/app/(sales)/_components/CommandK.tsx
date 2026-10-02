@@ -2,20 +2,22 @@
 
 // "Who is this?"
 //
-// An unknown number rings; paste it here and the answer is immediate. Search
-// runs over the already-loaded lists — 188 leads and 186 businesses fit in
-// memory many times over, and a round trip would be slower than typing.
+// An unknown number rings; paste it here and the answer is immediate. Leads are
+// searched in the already-loaded list. Businesses are not: about 1,300 orgs live
+// behind Unit B, so they come from the server's lean {id, name, phone} index
+// (two characters or more, one request per pause in typing).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useOrgSearch } from "../_lib/api";
 import { fmtPhone, phoneSearchKey } from "../_lib/format";
 import { UI } from "../_lib/labels";
-import type { OrgRow, SalesLeadRow } from "../_lib/types";
+import type { OrgSearchHit, SalesLeadRow } from "../_lib/types";
+import { useDebounced } from "../_lib/useDebounced";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 
 export interface CommandKProps {
   leads: SalesLeadRow[];
-  orgs: OrgRow[];
   onClose: () => void;
 }
 
@@ -26,7 +28,7 @@ interface Hit {
   subtitle: string;
 }
 
-export function searchAll(leads: SalesLeadRow[], orgs: OrgRow[], query: string): Hit[] {
+export function searchAll(leads: SalesLeadRow[], orgs: OrgSearchHit[], query: string): Hit[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const digits = phoneSearchKey(query);
@@ -46,24 +48,18 @@ export function searchAll(leads: SalesLeadRow[], orgs: OrgRow[], query: string):
       subtitle: [l.contact_name, fmtPhone(l.phone_e164)].filter(Boolean).join(" · "),
     }));
 
-  const orgHits: Hit[] = orgs
-    .filter((o) =>
-      byPhone && phoneSearchKey(o.phone_e164).includes(digits)
-        ? true
-        : [o.display_name, o.email].filter(Boolean).join(" ").toLowerCase().includes(q),
-    )
-    .slice(0, 6)
-    .map((o) => ({
-      kind: "org" as const,
-      id: o.id,
-      title: o.display_name,
-      subtitle: fmtPhone(o.phone_e164),
-    }));
+  // The server already matched these; they are shown as it ranked them.
+  const orgHits: Hit[] = orgs.slice(0, 8).map((o) => ({
+    kind: "org" as const,
+    id: o.id,
+    title: o.name,
+    subtitle: o.phone ? fmtPhone(o.phone) : "",
+  }));
 
   return [...leadHits, ...orgHits];
 }
 
-export function CommandK({ leads, orgs, onClose }: CommandKProps) {
+export function CommandK({ leads, onClose }: CommandKProps) {
   useReturnFocus();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -104,14 +100,19 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const hits = useMemo(() => searchAll(leads, orgs, query), [leads, orgs, query]);
+  const settled = useDebounced(query);
+  const orgSearch = useOrgSearch(settled);
+  const orgs = orgSearch.data;
+  const hits = useMemo(() => searchAll(leads, orgs ?? [], query), [leads, orgs, query]);
+  // "No results" only once the server has answered for what is typed now.
+  const orgsPending = query.trim().length >= 2 && (settled !== query || orgSearch.isFetching);
 
   function open(hit: Hit) {
     onClose();
     router.push(
       hit.kind === "lead"
         ? `/sales/leads?lead=${encodeURIComponent(hit.id)}`
-        : `/sales/orgs?org=${encodeURIComponent(hit.id)}`,
+        : `/sales/orgs/${encodeURIComponent(hit.id)}`,
     );
   }
 
@@ -156,10 +157,10 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
             a screen-reader user pastes a number and hears silence, then has to
             Tab into the list to find out whether it matched anyone. */}
         <p className="sr-only" role="status" aria-live="polite">
-          {query.trim() ? (hits.length === 0 ? UI.searchEmpty : UI.searchResults(hits.length)) : ""}
+          {query.trim() && !orgsPending ? (hits.length === 0 ? UI.searchEmpty : UI.searchResults(hits.length)) : ""}
         </p>
 
-        {query.trim() && hits.length === 0 ? (
+        {query.trim() && hits.length === 0 && !orgsPending ? (
           <p className="px-3 py-4 text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
             {UI.searchEmpty}
           </p>

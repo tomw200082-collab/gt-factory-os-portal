@@ -81,6 +81,11 @@
   --s-sla-overdue: 0 72% 46%;
   --s-sla-overdue-soft: 0 80% 96%;
 
+  /* GT Pulse Unit B: review amber (D1 V1), the ink of "identity under review",
+     "history is stale" and an open draft. Text on its own soft fill. */
+  --s-review: 34 85% 29%;
+  --s-review-soft: 40 90% 94%;
+
   /* The scrim behind a drawer or sheet. Dark-on-dark separates poorly, so the
      dark theme deepens it rather than reusing this value. */
   --s-overlay: 220 15% 10% / 0.35;
@@ -174,6 +179,8 @@
   --s-sla-ok-soft: 152 35% 18%;
   --s-sla-overdue: 0 72% 69%;
   --s-sla-overdue-soft: 0 40% 22%;
+  --s-review: 38 88% 62%;
+  --s-review-soft: 36 45% 18%;
   --s-danger-quiet: 0 50% 66%;
   --s-overlay: 0 0% 0% / 0.6;
   --s-shadow-card:
@@ -1391,3 +1398,115 @@
   color: hsl(var(--s-fg-muted));
   border: 1px dashed hsl(var(--s-border-strong));
 }
+
+/* ===========================================================================
+   GT Pulse Unit B: businesses (tranche 189)
+   =========================================================================== */
+
+/* State badges. Each carries an icon and a word; the tint only repeats them. */
+[data-app="sales"] .s-badge-active {
+  background: hsl(var(--s-status-won-soft));
+  color: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-badge-review {
+  background: hsl(var(--s-review-soft));
+  color: hsl(var(--s-review));
+}
+[data-app="sales"] .s-badge-retired {
+  color: hsl(var(--s-fg-muted));
+  background: hsl(var(--s-surface-sunken));
+  border: 1px dashed hsl(var(--s-border-strong));
+}
+[data-app="sales"] .s-badge-lead {
+  background: hsl(var(--s-status-new-soft));
+  color: hsl(var(--s-status-new));
+}
+
+/* A business row: the whole card is the link. The chevron says it goes
+   somewhere; it points to the inline end, which in RTL is the left. */
+[data-app="sales"] .s-org-row-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+[data-app="sales"] .s-org-row {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  padding-inline-end: 36px;
+  color: hsl(var(--s-fg));
+  text-decoration: none;
+}
+[data-app="sales"] .s-org-row:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+[data-app="sales"] .s-org-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+[data-app="sales"] .s-org-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: hsl(var(--s-fg-muted));
+  overflow-wrap: anywhere;
+}
+[data-app="sales"] .s-org-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: hsl(var(--s-fg-faint));
+}
+[data-app="sales"] .s-org-chevron {
+  position: absolute;
+  inset-inline-end: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: hsl(var(--s-fg-faint));
+}
+/* The selection box sits outside the link, a 44px target of its own, so a
+   tap meant for the box never opens the business. */
+[data-app="sales"] .s-org-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  border-radius: var(--s-radius);
+  border: 1px solid hsl(var(--s-border));
+  background: hsl(var(--s-surface));
+  cursor: pointer;
+}
+[data-app="sales"] .s-org-check[data-checked] {
+  border-color: hsl(var(--s-accent));
+  background: hsl(var(--s-accent-soft));
+}
+[data-app="sales"] .s-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: hsl(var(--s-accent));
+}
+[data-app="sales"] .s-bulkbar {
+  bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  [data-app="sales"] .s-bulkbar {
+    bottom: 16px;
+    inset-inline: auto 16px;
+    max-width: 640px;
+  }
+}
+/* A new filter is loading: the old rows stay, quietly, until it lands. */
+[data-app="sales"] .s-refetching {
+  opacity: 0.6;
+  transition: opacity 200ms var(--s-settle);
+}
+

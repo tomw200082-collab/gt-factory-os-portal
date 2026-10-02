@@ -1,61 +1,88 @@
 "use client";
 
-// The businesses behind the leads.
+// The businesses, one server page at a time (GT Pulse Unit B).
 //
-// This is the seam the churn radar and white-space mapping attach to later.
-// Today it answers one question well: who is this business, and when did we
-// last hear from them?
+// Each row answers "who is this and where do we stand": the name, the chain,
+// one state in words, and, only when the server published them, the last order
+// and the twelve-month value before VAT. A value the server withheld (review,
+// unpublished history) is absent, never printed as zero.
 
-import { fmtPhone, fmtRelative } from "../_lib/format";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { fmtAgorot, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
-import type { OrgRow } from "../_lib/types";
-import { CustomerBadge } from "./CustomerBadge";
+import type { OrgListRow } from "../_lib/types";
+import { OrgStateBadge, orgStateKey } from "./OrgStateBadge";
 
-export function OrgList({ rows, onOpen }: { rows: OrgRow[]; onOpen: (org: OrgRow) => void }) {
+export interface OrgListProps {
+  rows: OrgListRow[];
+  /** Managers see owners and may select rows for bulk assignment. */
+  manager: boolean;
+  /** email → display name, for the owner line */
+  owners?: Record<string, string>;
+  selecting?: boolean;
+  selected?: ReadonlySet<string>;
+  onToggle?: (id: string) => void;
+}
+
+export function OrgList({ rows, manager, owners = {}, selecting = false, selected, onToggle }: OrgListProps) {
   return (
-    <ul className="flex flex-col gap-2">
-      {rows.map((org) => (
-        <li key={org.id} className="s-enter">
-          <button
-            type="button"
-            data-testid={`org-row-${org.id}`}
-            onClick={() => onOpen(org)}
-            className="s-card w-full p-4 text-start"
-          >
-            <span className="flex items-start justify-between gap-2">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
-                  {org.display_name}
-                </span>
-                <span
-                  className="s-nums block truncate text-[13px]"
-                  style={{ color: "hsl(var(--s-fg-muted))" }}
-                >
-                  <bdi dir="ltr">{fmtPhone(org.phone_e164)}</bdi>
-                </span>
-              </span>
-              {/* Every row says which side of the line it is on (UX gate VISUAL-187-002). */}
-              {org.is_existing_customer ? (
-                <CustomerBadge />
-              ) : (
-                <span className="s-badge s-badge-prospect">{UI.orgNotCustomer}</span>
-              )}
-            </span>
-            <span
-              className="mt-2 flex flex-wrap items-center gap-2 text-[12px]"
-              style={{ color: "hsl(var(--s-fg-faint))" }}
+    <ul className="flex flex-col gap-2" data-testid="org-list">
+      {rows.map((org) => {
+        const checked = selected?.has(org.id) ?? false;
+        return (
+          <li key={org.id} className="s-enter s-org-row-wrap">
+            {selecting ? (
+              <label className="s-org-check" data-checked={checked || undefined}>
+                <input
+                  type="checkbox"
+                  className="s-checkbox"
+                  checked={checked}
+                  disabled={org.link_status === "retired"}
+                  aria-label={UI.selectOrgNamed(org.name)}
+                  onChange={() => onToggle?.(org.id)}
+                />
+              </label>
+            ) : null}
+            <Link
+              href={`/sales/orgs/${encodeURIComponent(org.id)}`}
+              data-testid={`org-row-${org.id}`}
+              className="s-card s-org-row"
             >
-              <span className="s-nums">{UI.orgLeads(Number(org.lead_count))}</span>
-              <span>·</span>
-              <span>
-                {org.last_activity_at
-                  ? `${UI.orgLastActivity}: ${fmtRelative(org.last_activity_at)}`
-                  : UI.orgNoActivity}
+              <span className="flex items-start justify-between gap-3">
+                <span className="min-w-0 flex-1">
+                  <span className="s-org-name">{org.name}</span>
+                  {org.chain_name ? <span className="s-org-sub">{org.chain_name}</span> : null}
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  <OrgStateBadge state={orgStateKey(org.link_status, org.is_active_customer)} />
+                  {org.has_open_lead ? <span className="s-badge s-badge-lead">{UI.orgOpenLead}</span> : null}
+                </span>
               </span>
-            </span>
-          </button>
-        </li>
-      ))}
+              <OrgMeta org={org} manager={manager} owners={owners} />
+              <ChevronLeft size={16} aria-hidden className="s-org-chevron" />
+            </Link>
+          </li>
+        );
+      })}
     </ul>
+  );
+}
+
+function OrgMeta({ org, manager, owners }: { org: OrgListRow; manager: boolean; owners: Record<string, string> }) {
+  const parts: string[] = [];
+  if (org.last_order_at) parts.push(UI.orgLastOrder(fmtRelative(org.last_order_at)));
+  if (org.ex_vat_12m_agorot !== null && org.ex_vat_12m_agorot > 0) {
+    parts.push(`${UI.orgValue12m(fmtAgorot(org.ex_vat_12m_agorot))} · ${UI.exVat}`);
+  }
+  const owner = org.owner_email ? (owners[org.owner_email] ?? org.owner_email.split("@")[0]) : null;
+  if (parts.length === 0 && !manager) return null;
+  return (
+    <span className="s-org-meta s-nums">
+      {parts.map((p) => (
+        <span key={p}>{p}</span>
+      ))}
+      {manager ? <span>{owner ? UI.orgOwner(owner) : UI.orgNoOwner}</span> : null}
+    </span>
   );
 }

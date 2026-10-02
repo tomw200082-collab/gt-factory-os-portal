@@ -6,6 +6,8 @@
 // proxyRequest → Fastify. No Supabase client for data, ever.
 
 import {
+  keepPreviousData,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -18,7 +20,10 @@ import type {
   AttentionRow,
   LeadEventRow,
   TodayPayload,
-  OrgRow,
+  OrgFilter,
+  OrgSearchHit,
+  OrgSort,
+  OrgsPage,
   OutcomeResult,
   OutreachChannel,
   SalesLeadRow,
@@ -96,7 +101,8 @@ export const salesKeys = {
   activity: (limit: number) => ["sales", "activity", limit] as const,
   leads: () => ["sales", "leads"] as const,
   events: (leadId: string) => ["sales", "events", leadId] as const,
-  orgs: () => ["sales", "orgs"] as const,
+  orgsPage: (filter: OrgFilter, sort: OrgSort) => ["sales", "orgs", "page", filter, sort] as const,
+  orgSearch: (q: string) => ["sales", "orgs", "search", q] as const,
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
@@ -166,10 +172,38 @@ export function useLeadEvents(leadId: string | null): UseQueryResult<LeadEventRo
   });
 }
 
-export function useOrgs(): UseQueryResult<OrgRow[], SalesApiError> {
+/**
+ * The business list, one server page at a time (GT Pulse Unit B).
+ *
+ * Filter, sort and paging happen in the API over ~1,300 orgs; the browser holds
+ * only the pages it has asked for. The previous pages stay on screen while a new
+ * filter loads, so a tap on a chip does not blank the list.
+ */
+export function useOrgsPage(filter: OrgFilter, sort: OrgSort) {
+  return useInfiniteQuery<OrgsPage, SalesApiError>({
+    queryKey: salesKeys.orgsPage(filter, sort),
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) =>
+      await request<OrgsPage>(
+        `/api/sales/orgs/page?filter=${filter}&sort=${sort}&limit=50` +
+          (pageParam ? `&cursor=${encodeURIComponent(String(pageParam))}` : ""),
+      ),
+    getNextPageParam: (last) => last.next,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+/** The lean {id, name, phone} search. Two characters or more; below that, nothing is asked. */
+export function useOrgSearch(query: string): UseQueryResult<OrgSearchHit[], SalesApiError> {
+  const q = query.trim();
   return useQuery({
-    queryKey: salesKeys.orgs(),
-    queryFn: async () => (await request<{ rows: OrgRow[] }>("/api/sales/orgs")).rows,
+    queryKey: salesKeys.orgSearch(q),
+    enabled: q.length >= 2,
+    queryFn: async () => {
+      const hits = await request<unknown>(`/api/sales/orgs/search?q=${encodeURIComponent(q)}`);
+      return Array.isArray(hits) ? (hits as OrgSearchHit[]) : [];
+    },
     staleTime: 30_000,
   });
 }
@@ -182,9 +216,10 @@ export function useWeekStats(): UseQueryResult<WeekStats, SalesApiError> {
   });
 }
 
-export function useSettings(): UseQueryResult<SalesSettings, SalesApiError> {
+export function useSettings(enabled = true): UseQueryResult<SalesSettings, SalesApiError> {
   return useQuery({
     queryKey: salesKeys.settings(),
+    enabled,
     queryFn: async () => request<SalesSettings>("/api/sales/settings"),
     staleTime: 5 * 60_000,
   });
@@ -279,6 +314,13 @@ export function useBulkAssign() {
     { lead_ids: string[]; assignee: string; next_touch_at?: string | null },
     { assigned: number }
   >((vars) => request("/api/sales/bulk-assign", jsonBody(vars)));
+}
+
+/** One owner for many businesses, in one transaction (managers; T9). */
+export function useSetOrgOwner() {
+  return useSalesMutation<{ org_ids: string[]; owner_email: string | null }, { updated: number }>((vars) =>
+    request("/api/sales/orgs/owner", jsonBody(vars)),
+  );
 }
 
 /**

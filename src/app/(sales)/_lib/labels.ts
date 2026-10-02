@@ -8,7 +8,7 @@
 // Schema values (new / working / won / lost) are never translated in data —
 // only on the way to the eye.
 
-import type { LeadStatus, OutcomeResult, OutreachChannel, TodayItemType } from "./types";
+import type { LeadStatus, OrgFilter, OrgSort, OutcomeResult, OutreachChannel, TodayItemType } from "./types";
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "חדש",
@@ -137,6 +137,72 @@ const EMPTY_TAB_WORDS: Record<LeadStatus, string> = {
   lost: "שסומנו כאבודים",
 };
 
+// ---- GT Pulse Unit B ------------------------------------------------------
+// Written under Tom's delegation of 2026-10-02 (Session 2 masterprompt §1):
+// normal Unit B microcopy is the executor's call; business words come from the
+// glossary (Sales-Machine CONTEXT.md). No em dash in these strings.
+
+/** The list's server-side filters (T9: active customers plus open leads by default). */
+export const ORG_FILTER_LABELS: Record<OrgFilter, string> = {
+  active: "פעילים",
+  prospect: "טרם לקוח",
+  all: "הכל",
+  review: "בבדיקת זהות",
+};
+
+export const ORG_SORT_LABELS: Record<OrgSort, string> = {
+  last_order: "הזמנה אחרונה",
+  ex_vat_12m: "מחזור 12 חודשים",
+  name: "שם",
+};
+
+/** One state per business, always in words next to its icon. */
+export const ORG_STATE_LABELS = {
+  active: "לקוח פעיל",
+  inactive: "לקוח לא פעיל",
+  prospect: "טרם לקוח",
+  review: "בבדיקת זהות",
+  disputed: "זהות במחלוקת",
+  retired: "רשומה סגורה",
+  verifiedNoHistory: "לקוח",
+} as const;
+
+export type OrgStateKey = keyof typeof ORG_STATE_LABELS;
+
+/** Hebrew counts agree with the noun: "עסק אחד", never "1 עסקים". */
+function orgsWord(n: number): string {
+  return n === 1 ? "עסק אחד" : `${new Intl.NumberFormat("he-IL").format(n)} עסקים`;
+}
+
+export const ORG_UI = {
+  orgsCount: (n: number) => orgsWord(n),
+  orgsShowing: (shown: number, total: number) =>
+    `מוצגים ${new Intl.NumberFormat("he-IL").format(shown)} מתוך ${new Intl.NumberFormat("he-IL").format(total)}`,
+  orgsFilterEmpty: "אין עסקים במסנן הזה",
+  orgsShowAll: "הצג את כל העסקים",
+  showMoreOrgs: "הצג עוד עסקים",
+  orgsSearch: "חיפוש עסק לפי שם או טלפון",
+  sortLabel: "מיון",
+  filterLabel: "סינון עסקים",
+  orgOpenLead: "ליד פתוח",
+  orgOwner: (name: string) => `בעלים: ${name}`,
+  orgNoOwner: "ללא בעלים",
+  orgLastOrder: (when: string) => `הזמנה אחרונה ${when}`,
+  orgValue12m: (money: string) => `${money} ב־12 חודשים`,
+  exVat: "לפני מע״מ",
+  orgsSelect: "בחירה",
+  orgsSelectDone: "סיום בחירה",
+  selectOrgNamed: (name: string) => `בחר את ${name}`,
+  ownerPick: "בעלים חדשים",
+  ownerPickPlaceholder: "בחרו איש מכירות",
+  ownerAssign: "שייך בעלים",
+  ownerAssigned: (n: number, name: string) =>
+    n === 1 ? `עסק אחד שויך ל${name}` : `${n} עסקים שויכו ל${name}`,
+  ownerFailed: "השיוך נכשל. הבחירה נשמרה, אפשר לנסות שוב",
+  ownerTooMany: "אפשר לשייך עד 200 עסקים בפעם אחת",
+  reviewQueueLink: "בדיקת זהות",
+} as const;
+
 export const NAV_LABELS = {
   today: "היום",
   leads: "לידים",
@@ -150,6 +216,7 @@ export const NAV_LABELS = {
  * product's own name, and Hebrew speakers read it that way.
  */
 export const UI = {
+  ...ORG_UI,
   appName: "GT מכירות",
   switchToFactory: "מעבר לייצור",
 

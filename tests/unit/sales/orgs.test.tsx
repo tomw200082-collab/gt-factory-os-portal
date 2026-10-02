@@ -1,161 +1,226 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { OrgList } from "@/app/(sales)/_components/OrgList";
-import { OrgCard } from "@/app/(sales)/_components/OrgCard";
-import { matchesOrgQuery } from "@/app/(sales)/_lib/format";
-import { UI } from "@/app/(sales)/_lib/labels";
-import type { OrgRow, SalesLeadRow } from "@/app/(sales)/_lib/types";
+// GT Pulse Unit B, tranche 189: the business list.
+//
+// Replaces the snapshot-era org tests (OrgCard, matchesOrgQuery and the word
+// "נטש"): the build plan's Task 24 carve-out. Every fixture here is synthetic.
 
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+
+const role = vi.hoisted(() => ({ value: "admin" as string }));
+const replace = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/session-provider", () => ({
+  useSession: () => ({ session: { role: role.value, email: "manager@synthetic.invalid" } }),
+}));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => "/sales/orgs",
+  useRouter: () => ({ push: vi.fn(), replace, prefetch: vi.fn(), back: vi.fn() }),
 }));
 
-const org: OrgRow = {
-  id: "O1",
-  display_name: "ליוניל יזמות",
-  phone_e164: "+972521234567",
-  email: "patio@example.co.il",
-  email_domain: "example.co.il",
-  city: null,
-  shopify_customer_id: null,
-  is_existing_customer: true,
-  shopify_snapshot: {
-    status: "נטש",
-    rev12: "2152",
-    orders: "5",
-    days_since_last_order: "196",
-    as_of: "2026-08-06",
-  },
-  shopify_snapshot_at: "2026-08-05T21:00:00Z",
-  created_at: "2026-06-09T09:00:00Z",
-  lead_count: 1,
-  last_activity_at: "2026-08-09T09:00:00Z",
-};
+import OrgsPage from "@/app/(sales)/sales/orgs/page";
+import { OrgList } from "@/app/(sales)/_components/OrgList";
+import { ORG_STATE_LABELS, UI } from "@/app/(sales)/_lib/labels";
+import type { OrgListRow } from "@/app/(sales)/_lib/types";
 
-const lead: SalesLeadRow = {
-  id: "L1",
-  org_id: "O1",
-  org_name: org.display_name,
-  contact_name: "בעל העסק",
-  phone_e164: org.phone_e164,
-  email: org.email,
-  source: "import_meta_export",
-  campaign_name: null,
-  ad_name: null,
-  platform: null,
-  is_organic: null,
-  status: "new",
-  lost_reason: null,
-  assignee: null,
-  next_touch_at: null,
-  first_touch_at: null,
-  possible_duplicate_of: null,
-  converted_order_ref: null,
-  converted_amount: null,
-  created_at: "2026-06-09T09:00:00Z",
-  is_existing_customer: true,
-  shopify_customer_id: null,
-  shopify_snapshot: org.shopify_snapshot,
-  shopify_snapshot_at: org.shopify_snapshot_at,
-  age_days: 69,
-  sla_deadline_at: "2026-06-10T09:00:00Z",
-  sla_state: "overdue",
-  next_touch_overdue: false,
-};
+function row(over: Partial<OrgListRow> = {}): OrgListRow {
+  return {
+    id: "00000000-0000-4000-8000-000000000001",
+    name: "קפה הדגמה רמת השרון",
+    link_status: "verified",
+    owner_email: null,
+    last_activity_at: null,
+    has_open_lead: false,
+    is_active_customer: true,
+    last_order_at: "2026-09-20T08:00:00.000000Z",
+    orders_12m: 14,
+    ex_vat_12m_agorot: 1234500,
+    chain_name: null,
+    ...over,
+  };
+}
 
-afterEach(cleanup);
+const calls: string[] = [];
+let respond: (url: string) => unknown = () => ({ rows: [], next: null, total: 0 });
 
-describe("org search", () => {
-  it("matches a business name or a phone typed locally", () => {
-    expect(matchesOrgQuery(org, "ליוניל")).toBe(true);
-    expect(matchesOrgQuery(org, "052-1234567")).toBe(true);
-    expect(matchesOrgQuery(org, "מאפייה")).toBe(false);
+beforeEach(() => {
+  calls.length = 0;
+  replace.mockReset();
+  role.value = "admin";
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+    return new Response(JSON.stringify(respond(url)), { status: 200, headers: { "Content-Type": "application/json" } });
+  }));
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+function withQuery(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+}
+
+describe("business list: server paging", () => {
+  it("asks the server for the first page of active businesses, sorted by last order", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    expect(calls[0]).toBe("/api/sales/orgs/page?filter=active&sort=last_order&limit=50");
+    expect(calls.some((u) => u === "/api/sales/orgs" || u.startsWith("/api/sales/orgs?"))).toBe(false);
+  });
+
+  it("offers more when the server has a next page, and sends its cursor", async () => {
+    respond = (url) => url.includes("cursor=")
+      ? { rows: [row({ id: "00000000-0000-4000-8000-000000000002", name: "מאפיית בדיקה" })], next: null, total: 2 }
+      : { rows: [row()], next: "CURSOR1", total: 2 };
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    expect(screen.getByTestId("orgs-showing").textContent).toBe(UI.orgsShowing(1, 2));
+    fireEvent.click(screen.getByRole("button", { name: UI.showMoreOrgs }));
+    await screen.findByText("מאפיית בדיקה");
+    expect(calls).toContain("/api/sales/orgs/page?filter=active&sort=last_order&limit=50&cursor=CURSOR1");
+    expect(screen.queryByRole("button", { name: UI.showMoreOrgs })).toBeNull();
+  });
+
+  it("changes filter and sort on the server, not in the browser", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    fireEvent.click(screen.getByRole("button", { name: "טרם לקוח" }));
+    await waitFor(() => expect(calls).toContain("/api/sales/orgs/page?filter=prospect&sort=last_order&limit=50"));
+    fireEvent.change(screen.getByLabelText(UI.sortLabel), { target: { value: "name" } });
+    await waitFor(() => expect(calls).toContain("/api/sales/orgs/page?filter=prospect&sort=name&limit=50"));
+    expect(replace).toHaveBeenCalled();
+  });
+
+  it("offers the identity-review filter to a manager only", async () => {
+    respond = () => ({ rows: [], next: null, total: 0 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByTestId("orgs-empty");
+    expect(screen.getByRole("button", { name: "בבדיקת זהות" })).toBeTruthy();
+    cleanup();
+    role.value = "sales_rep";
+    render(withQuery(<OrgsPage />));
+    await screen.findByTestId("orgs-empty");
+    expect(screen.queryByRole("button", { name: "בבדיקת זהות" })).toBeNull();
   });
 });
 
-describe("org list", () => {
-  it("shows the customer badge, lead count and last activity", () => {
-    render(<OrgList rows={[org]} onOpen={() => {}} />);
-    expect(screen.getByText(org.display_name)).toBeTruthy();
-    expect(screen.getByTestId("customer-badge")).toBeTruthy();
-    expect(screen.getByText(UI.orgLeads(1))).toBeTruthy();
+describe("business list: three different kinds of nothing", () => {
+  it("an empty system says there are no businesses yet", async () => {
+    respond = () => ({ rows: [], next: null, total: 0 });
+    render(withQuery(<OrgsPage />));
+    // the default filter is not "all", so it first says the filter is empty
+    expect((await screen.findByTestId("orgs-empty")).textContent).toContain(UI.orgsFilterEmpty);
+    fireEvent.click(screen.getByRole("button", { name: "הכל" }));
+    await waitFor(() => expect(screen.getByTestId("orgs-empty").textContent).toContain(UI.orgsEmpty));
   });
 
-  it("says so plainly when a business has no activity", () => {
-    render(<OrgList rows={[{ ...org, last_activity_at: null }]} onOpen={() => {}} />);
-    expect(screen.getByText(UI.orgNoActivity)).toBeTruthy();
+  it("an empty filter offers the whole list", async () => {
+    respond = (url) => url.includes("filter=all")
+      ? { rows: [row()], next: null, total: 1 }
+      : { rows: [], next: null, total: 0 };
+    render(withQuery(<OrgsPage />));
+    const empty = await screen.findByTestId("orgs-empty");
+    fireEvent.click(within(empty).getByRole("button", { name: UI.orgsShowAll }));
+    await screen.findByText("קפה הדגמה רמת השרון");
   });
 
-  it("opens a business", () => {
-    const opened: string[] = [];
-    render(<OrgList rows={[org]} onOpen={(o) => opened.push(o.id)} />);
-    fireEvent.click(screen.getByTestId("org-row-O1"));
-    expect(opened).toEqual(["O1"]);
+  it("a search with no match says no results, from the server's search", async () => {
+    respond = (url) => url.startsWith("/api/sales/orgs/search") ? [] : { rows: [row()], next: null, total: 1 };
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    fireEvent.change(screen.getByTestId("orgs-search"), { target: { value: "אין כזה" } });
+    await waitFor(() => expect(calls.some((u) => u.startsWith("/api/sales/orgs/search?q="))).toBe(true));
+    expect((await screen.findByTestId("orgs-empty")).textContent).toContain(UI.searchEmpty);
   });
 });
 
-describe("org card", () => {
-  it("carries the dated customer history", () => {
-    render(
-      <OrgCard org={org} leads={[lead]} events={[]} eventsLoading={false} onClose={() => {}} />,
-    );
-    const card = screen.getByTestId("org-card");
-    expect(card.textContent).toContain("נטש");
-    expect(card.textContent).toMatch(/נכון ל-/);
+describe("business list rows", () => {
+  it("links each business to its workspace", () => {
+    render(<OrgList rows={[row()]} manager={false} />);
+    const link = screen.getByRole("link", { name: /קפה הדגמה רמת השרון/ });
+    expect(link.getAttribute("href")).toBe("/sales/orgs/00000000-0000-4000-8000-000000000001");
   });
 
-  it("links each lead into the leads drawer", () => {
+  it("names the state in words, never by colour alone", () => {
     render(
-      <OrgCard org={org} leads={[lead]} events={[]} eventsLoading={false} onClose={() => {}} />,
-    );
-    const link = screen.getByTestId("org-lead-L1");
-    expect(link.getAttribute("href")).toBe("/sales/leads?lead=L1");
-  });
-
-  it("is a labelled modal dialog that closes on Escape", () => {
-    const closes: number[] = [];
-    render(
-      <OrgCard org={org} leads={[lead]} events={[]} eventsLoading={false} onClose={() => closes.push(1)} />,
-    );
-    const dialog = screen.getByRole("dialog");
-    expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(dialog.getAttribute("dir")).toBe("rtl");
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(closes).toEqual([1]);
-  });
-
-  it("names the lead when the timeline cannot cover the whole business", () => {
-    render(
-      <OrgCard
-        org={{ ...org, lead_count: 2 }}
-        leads={[lead, { ...lead, id: "L2" }]}
-        events={[]}
-        eventsLoading={false}
-        timelineLeadName="בעל העסק"
-        onClose={() => {}}
+      <OrgList
+        manager={false}
+        rows={[
+          row({ id: "a", name: "א" }),
+          row({ id: "b", name: "ב", is_active_customer: false }),
+          row({ id: "c", name: "ג", link_status: null, is_active_customer: null, last_order_at: null, orders_12m: null, ex_vat_12m_agorot: null }),
+          row({ id: "d", name: "ד", link_status: "review", is_active_customer: null, last_order_at: null, orders_12m: null, ex_vat_12m_agorot: null }),
+        ]}
       />,
     );
-    expect(screen.getByTestId("timeline-scope").textContent).toContain("בעל העסק");
+    expect(screen.getByTestId("org-row-a").textContent).toContain(ORG_STATE_LABELS.active);
+    expect(screen.getByTestId("org-row-b").textContent).toContain(ORG_STATE_LABELS.inactive);
+    expect(screen.getByTestId("org-row-c").textContent).toContain(ORG_STATE_LABELS.prospect);
+    expect(screen.getByTestId("org-row-d").textContent).toContain(ORG_STATE_LABELS.review);
   });
 
-  it("does not qualify the timeline when the business has a single lead", () => {
+  it("states money before VAT and never prints a value the server withheld", () => {
     render(
-      <OrgCard org={org} leads={[lead]} events={[]} eventsLoading={false} onClose={() => {}} />,
-    );
-    expect(screen.queryByTestId("timeline-scope")).toBeNull();
-  });
-
-  it("shows no customer history for a business we have never sold to", () => {
-    render(
-      <OrgCard
-        org={{ ...org, is_existing_customer: false, shopify_snapshot: null, shopify_snapshot_at: null }}
-        leads={[lead]}
-        events={[]}
-        eventsLoading={false}
-        onClose={() => {}}
+      <OrgList
+        manager={false}
+        rows={[row({ id: "a" }), row({ id: "r", link_status: "review", is_active_customer: null, last_order_at: null, orders_12m: null, ex_vat_12m_agorot: null })]}
       />,
     );
-    expect(screen.queryByTestId("customer-context")).toBeNull();
+    expect(screen.getByTestId("org-row-a").textContent).toContain(UI.exVat);
+    expect(screen.getByTestId("org-row-a").textContent).toContain("12,345");
+    expect(screen.getByTestId("org-row-r").textContent).not.toMatch(/₪|0 הזמנות/);
+  });
+
+  it("shows the owner to a manager", () => {
+    render(<OrgList rows={[row({ owner_email: "rep@synthetic.invalid" })]} manager owners={{ "rep@synthetic.invalid": "נציגה" }} />);
+    expect(screen.getByTestId(`org-row-${row().id}`).textContent).toContain("נציגה");
+  });
+});
+
+describe("bulk owner assignment", () => {
+  it("assigns the selected businesses to one person in one call", async () => {
+    const posts: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        return new Response(JSON.stringify({ updated: 1 }), { status: 200 });
+      }
+      if (url.startsWith("/api/sales/settings")) {
+        return new Response(JSON.stringify({
+          sla_hours: 24, whatsapp_templates: { new_lead: "", reminder: "", returning_customer: "" },
+          lost_reasons: [], queue: { daily_cap: 15, order: "newest_first" },
+          assignees: [{ email: "rep@synthetic.invalid", name: "נציגה", active: true }], last_changes: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ rows: [row()], next: null, total: 1 }), { status: 200 });
+    }));
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    fireEvent.click(screen.getByRole("button", { name: UI.orgsSelect }));
+    fireEvent.click(screen.getByRole("checkbox", { name: UI.selectOrgNamed("קפה הדגמה רמת השרון") }));
+    const bar = screen.getByTestId("bulk-owner-bar");
+    await waitFor(() => expect(within(bar).getAllByRole("option").length).toBeGreaterThan(1));
+    fireEvent.change(within(bar).getByLabelText(UI.ownerPick), { target: { value: "rep@synthetic.invalid" } });
+    fireEvent.click(within(bar).getByRole("button", { name: UI.ownerAssign }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toEqual({
+      url: "/api/sales/orgs/owner",
+      body: { org_ids: ["00000000-0000-4000-8000-000000000001"], owner_email: "rep@synthetic.invalid" },
+    });
+  });
+
+  it("is not offered to a rep", async () => {
+    role.value = "sales_rep";
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    expect(screen.queryByRole("button", { name: UI.orgsSelect })).toBeNull();
   });
 });

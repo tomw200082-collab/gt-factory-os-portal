@@ -181,6 +181,10 @@ const PAIRS: Array<[string, string, string, number]> = [
   ["D1 band muted text on petrol", "--s-opening-fg-muted", "--s-petrol", 4.5],
   ["D1 lead blue text on a card", "--s-status-new", "--s-surface", 4.5],
   ["D1 order green text on a card", "--s-status-won", "--s-surface", 4.5],
+  // GT Pulse Unit B: review amber on its badge, and as text on a card.
+  ["Unit B review badge", "--s-review", "--s-review-soft", 4.5],
+  ["Unit B review text on a card", "--s-review", "--s-surface", 4.5],
+  ["Unit B lead badge", "--s-status-new", "--s-status-new-soft", 4.5],
 ];
 
 describe.each([

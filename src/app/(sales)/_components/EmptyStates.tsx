@@ -87,3 +87,15 @@ export function ListEmpty({ label }: { label: string }) {
     </div>
   );
 }
+
+/** The business list while a page loads: rows the height of a business row, not of a queue card. */
+export function OrgsLoading() {
+  return (
+    <div data-testid="orgs-loading" className="flex flex-col gap-2" aria-busy="true">
+      <span className="sr-only">{UI.loading}</span>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} aria-hidden className="s-card animate-pulse" style={{ height: 92, opacity: 1 - i * 0.18 }} />
+      ))}
+    </div>
+  );
+}
