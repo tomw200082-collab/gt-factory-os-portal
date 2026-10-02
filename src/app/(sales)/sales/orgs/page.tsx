@@ -7,7 +7,7 @@
 // search asks the server's lean index. Filter, sort and search live in the URL,
 // so Back from a business returns to the same list.
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ShieldQuestion } from "lucide-react";
@@ -43,15 +43,24 @@ function OrgsScreen() {
   const settled = useDebounced(query);
   const searching = settled.trim().length >= 2;
 
-  // Keep the URL in step, so Back from a business lands on this same view.
+  // Keep the URL in step, so Back from a business lands on this same view. Only when
+  // the view changed, and never with an address it already shows: a replace that ran
+  // again during a navigation away (the router object is not stable across renders)
+  // pulled the person back to this list (e2e journey A, K).
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const shown = params?.toString() ?? "";
   useEffect(() => {
     const next = new URLSearchParams();
     if (filter !== "active") next.set("filter", filter);
     if (sort !== "last_order") next.set("sort", sort);
     if (settled.trim()) next.set("q", settled.trim());
     const qs = next.toString();
-    router.replace(qs ? `/sales/orgs?${qs}` : "/sales/orgs", { scroll: false });
-  }, [filter, sort, settled, router]);
+    if (qs === shown) return;
+    routerRef.current.replace(qs ? `/sales/orgs?${qs}` : "/sales/orgs", { scroll: false });
+    // the address is read, not watched: it follows the view, never the other way
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, sort, settled]);
 
   const page = useOrgsPage(filter, sort);
   const search = useOrgSearch(searching ? settled : "");

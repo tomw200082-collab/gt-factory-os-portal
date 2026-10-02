@@ -110,6 +110,16 @@ describe("business list: server paging", () => {
   });
 });
 
+describe("business list: the address", () => {
+  it("does not rewrite the address it already shows, so it can never pull a person back from a business they opened", async () => {
+    respond = () => ({ rows: [row()], next: null, total: 1 });
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    await new Promise((r) => setTimeout(r, 300));
+    expect(replace).not.toHaveBeenCalled();
+  });
+});
+
 describe("business list: three different kinds of nothing", () => {
   it("an empty system says there are no businesses yet", async () => {
     respond = () => ({ rows: [], next: null, total: 0 });

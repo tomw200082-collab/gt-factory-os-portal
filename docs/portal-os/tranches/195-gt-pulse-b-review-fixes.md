@@ -41,6 +41,14 @@
 - A press focuses a month, which chooses it, before its click. "Tap again to let go" therefore reads the choice from before the press.
 - The test has to fail before the fix and pass after it.
 
+### Found by the final full e2e run
+- **Journey A (search → open a business).** It failed once under load. The list page's address sync ran `router.replace` again during the navigation away: it depended on the router object, which is not stable across renders, and it rewrote even an unchanged address. That pulled the person back to the list, and it also explains K's earlier intermittent failure.
+- **The sync now:**
+  - runs only when the view changes (filter, sort, settled query);
+  - holds the router in a ref;
+  - never rewrites the address it already shows.
+- **Proof.** Red first: a unit test checks that no replace happens on an unchanged address. Then journeys A and K passed 16/16 across 8 repetitions each.
+
 ## Not taken, with reason
 
 - **Identity merge race (review M1: send the expected holder, server answers 409).** Deferred. It needs a backend contract change. The toast already reports a merge that did happen.
