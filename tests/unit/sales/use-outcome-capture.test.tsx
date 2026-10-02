@@ -88,7 +88,7 @@ describe("outcome capture", () => {
     expect(screen.getByTestId("pending").textContent).toBe("none");
   });
 
-  it("asks again on the next trip back after a dismissal", () => {
+  it("forgets the call once the sheet is closed: no question on the next return (Tom, 2026-10-02)", () => {
     render(<Probe />);
     act(() => screen.getByText("arm").click());
     returnToApp();
@@ -96,9 +96,28 @@ describe("outcome capture", () => {
 
     act(() => screen.getByText("dismiss").click());
     expect(screen.getByTestId("pending").textContent).toBe("none");
-    // Still owed — the intent stays in storage.
-    expect(window.sessionStorage.getItem("gt.sales.outreach")).not.toBeNull();
+    expect(window.sessionStorage.getItem("gt.sales.outreach")).toBeNull();
 
+    returnToApp();
+    expect(screen.getByTestId("pending").textContent).toBe("none");
+  });
+
+  it("does not come back after a reload once closed", () => {
+    const first = render(<Probe />);
+    act(() => screen.getByText("arm").click());
+    returnToApp();
+    act(() => screen.getByText("dismiss").click());
+    first.unmount();
+    render(<Probe />);
+    expect(screen.getByTestId("pending").textContent).toBe("none");
+  });
+
+  it("asks again after a new call, once closed", () => {
+    render(<Probe />);
+    act(() => screen.getByText("arm").click());
+    returnToApp();
+    act(() => screen.getByText("dismiss").click());
+    act(() => screen.getByText("arm").click());
     returnToApp();
     expect(screen.getByTestId("pending").textContent).toBe("L1:call");
   });

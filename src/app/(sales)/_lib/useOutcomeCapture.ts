@@ -4,13 +4,13 @@
 //
 // Tapping "התקשר" or "וואטסאפ" hands the phone off to another app. The moment
 // the user comes back, one sheet asks what happened — and a queue item is
-// cleared only by an answer to it. That is the difference between a queue and
-// a list you scroll past.
+// cleared only by an answer to it. Closing the sheet forgets the call: it is
+// not asked again (Tom, 2026-10-02), and the lead stays in the queue.
 //
 // The armed intent survives in sessionStorage because leaving for the dialler
 // can tear down the page on mobile Safari; it must still be waiting on return.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { OutreachChannel } from "./types";
 
 const STORAGE_KEY = "gt.sales.outreach";
@@ -66,39 +66,23 @@ export interface OutcomeCapture {
   pending: ArmedOutreach | null;
   /** Call on tap, before the browser follows the tel:/wa.me link. */
   arm: (leadId: string, channel: OutreachChannel, taskId?: string) => void;
-  /** Only a captured outcome clears the intent. Dismissal does not. */
+  /** A captured outcome clears the intent. */
   clear: () => void;
-  /**
-   * Closes the sheet without answering it. The intent stays in storage, so the
-   * next return to the app asks again — which is the point: a queue item is
-   * cleared by an outcome, never by looking away.
-   */
+  /** Closes the sheet without an answer and forgets the call; nothing is recorded. */
   dismiss: () => void;
 }
 
 export function useOutcomeCapture(email: string | undefined): OutcomeCapture {
   const [pending, setPending] = useState<ArmedOutreach | null>(null);
-  // Set when the sheet is closed without an answer. The intent is still owed,
-  // but it must not spring straight back: the browser fires a window focus for
-  // an ordinary click, and re-raising the sheet on that would make dismissal
-  // feel broken. It returns after a real trip away from the app.
-  const dismissedRef = useRef(false);
 
   const arm = useCallback((leadId: string, channel: OutreachChannel, taskId?: string) => {
     if (!email) return;
     writeArmed({ leadId, taskId, ownerEmail: email.toLowerCase(), channel, at: Date.now() });
-    dismissedRef.current = false;
     setPending(null);
   }, [email]);
 
   const clear = useCallback(() => {
     writeArmed(null);
-    dismissedRef.current = false;
-    setPending(null);
-  }, []);
-
-  const dismiss = useCallback(() => {
-    dismissedRef.current = true;
     setPending(null);
   }, []);
 
@@ -106,12 +90,7 @@ export function useOutcomeCapture(email: string | undefined): OutcomeCapture {
     if (typeof window === "undefined") return;
 
     const check = () => {
-      if (document.visibilityState === "hidden") {
-        // Leaving the app is what re-qualifies a dismissed intent.
-        dismissedRef.current = false;
-        return;
-      }
-      if (dismissedRef.current) return;
+      if (document.visibilityState === "hidden") return;
       const armed = readArmed();
       if (!armed) return;
       if (!email || armed.ownerEmail !== email.toLowerCase()) {
@@ -133,5 +112,5 @@ export function useOutcomeCapture(email: string | undefined): OutcomeCapture {
     };
   }, [email]);
 
-  return { pending, arm, clear, dismiss };
+  return { pending, arm, clear, dismiss: clear };
 }
