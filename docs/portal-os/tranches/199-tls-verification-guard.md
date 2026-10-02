@@ -23,7 +23,14 @@
 - Proven in Node: with the flag at `0`, a self-signed server is accepted. After `delete`, the same process refuses it (`DEPTH_ZERO_SELF_SIGNED_CERT`).
 - Proven in a `next build` + `next start` with `VERCEL=1`: the line is logged before Ready, and Node's TLS warning never appears.
 
-The Vercel variable itself should still be deleted (Tom, in the dashboard). The guard keeps a deployment safe either way.
+### Production finding after the first deploy
+
+Deployment `dpl_BXaMEDsiPqzaWuWWLTRwXcKiRinb`, 14:37 UTC: Node's TLS warning still appeared in `edge-middleware`, and that request reached Supabase (`/auth/v1/user` 403).
+
+- Middleware runs in the edge sandbox. There, `process.env` is a copy that Node's TLS layer never reads, so the delete does not reach it.
+- Worse, the guard's line there claimed the flag "was ignored", which was not true.
+- Fix: the guard now runs only when `NEXT_RUNTIME === "nodejs"`, which covers the API routes that carry the Bearer token to the API.
+- **The middleware, which talks to Supabase, is covered only by deleting `NODE_TLS_REJECT_UNAUTHORIZED` from the Vercel project.** This session cannot do that (403); Tom does it in the dashboard. Nothing needs the variable: both upstream certificates verify.
 
 ## Manifest
 
