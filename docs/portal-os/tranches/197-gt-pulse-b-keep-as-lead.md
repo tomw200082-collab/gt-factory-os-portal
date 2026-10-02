@@ -8,6 +8,7 @@
 
 - A `customer_not_verified` card explains the situation and offers one action, "לא לקוח, להשאיר כליד". A confirmation names the business and says what happens to it. The call is `{ action: "reject" }`, and on success a toast says the business stays a lead.
 - Cards that still can't be decided from the portal keep the blocked banner.
+- **CI fix, journey A.** The first click into a business waited 5s for the URL. Under `next dev` that first entry compiles the workspace route, and on the CI runner it took longer. Reproduced pinned to one core: 5s fails and 30s passes, with the same click. The wait on that one entry is now 30s. Production serves a prebuilt route.
 
 ## Manifest
 
@@ -18,6 +19,7 @@ manifest:
   - src/app/(sales)/_components/org/IdentityReview.tsx
   - src/app/(sales)/_lib/labels.ts
   - tests/unit/sales/identity-review.test.tsx
+  - tests/e2e/sales-orgs.spec.ts
 
 ## Gates
 
