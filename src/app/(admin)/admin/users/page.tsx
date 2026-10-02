@@ -355,13 +355,13 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin:
     "Full access including user management, masters, and system config. Assign sparingly.",
   planner:
-    "Can create and approve purchase recommendations, manage forecast, and review stock. Also works the sales workspace and can be assigned leads. Cannot change system config.",
+    "Can create and approve purchase recommendations, manage forecast, and review stock. Also works the CRM and can be assigned leads. Cannot change system config.",
   operator:
     "Can submit daily forms (Goods Receipt, Production Actual, Physical Count). Read access to stock and orders.",
   viewer:
     "Read-only access to dashboard and stock. Cannot submit forms or create records.",
   sales_rep:
-    "Works the sales workspace only \u2014 leads, callbacks and conversions. No standing anywhere in the factory: no forms, no planning, no stock.",
+    "Works the CRM only \u2014 leads, callbacks and conversions. No standing anywhere in the factory: no forms, no planning, no stock.",
 };
 
 export default function AdminUsersPage() {

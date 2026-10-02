@@ -23,7 +23,7 @@ const HEBREW = /[֐-׿]/;
  *  read off a screen that says "Green Invoice" in Latin letters. Translating the
  *  product's name would send the reader looking for something that is not
  *  there. */
-const ALLOWED_LATIN = ["WhatsApp", "Shopify", "Green Invoice", "GT", "SLA", "{{name}}"];
+const ALLOWED_LATIN = ["WhatsApp", "Shopify", "Green Invoice", "GT", "CRM", "SLA", "{{name}}"];
 
 function stripAllowed(value: string): string {
   return ALLOWED_LATIN.reduce((acc, token) => acc.split(token).join(""), value);

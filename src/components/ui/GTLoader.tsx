@@ -1,283 +1,189 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+} from "react";
+import { usePathname } from "next/navigation";
+import { loaderVariantFor, type LoaderVariant } from "./loader-variant";
 
-// Brand color constants (petrol teal palette — matches :root.dark accent)
-const T = {
-  bg0: "hsl(30 12% 5%)",
-  bg1: "hsl(30 12% 9%)",
-  ring1a: "hsl(186 50% 55%)",
-  ring1b: "hsl(186 40% 72%)",
-  ring2a: "hsl(146 40% 56%)",
-  ring2b: "hsl(32 72% 58%)",
-  glow: "hsl(186 50% 50% / 0.1)",
-  glowStrong: "hsl(186 50% 50% / 0.18)",
-  gridLine: "hsl(186 50% 50% / 0.035)",
-  textPrimary: "hsl(42 14% 84%)",
-  textMuted: "hsl(42 6% 38%)",
-  dot: "hsl(186 50% 58%)",
-  dotGlow: "hsl(186 50% 58% / 0.5)",
-  progressA: "hsl(186 50% 50%)",
-  progressB: "hsl(186 40% 65%)",
-  progressC: "hsl(146 40% 52%)",
-  staticRing: "hsl(186 50% 50% / 0.14)",
+// GTLoader — one loading system, two worlds (tranche 201).
+//
+// The same calm composition renders for the factory portal and for GT Pulse
+// (/sales/*): the cropped GT mark, one thin orbit, a breathing glow, a
+// glyph-only light sweep, a small label and a 2 px travelling progress line.
+// Only the palette differs; it is set by [data-variant] in globals.css
+// (.gt-loader). Entrance, exit and reduced motion are CSS-only as well.
+//
+// Two kinds of instance can be on screen for one navigation, and they must read
+// as ONE surface (tranche 201, UX gate L1):
+//   - the NavigationLoader overlay (`nav`), which covers the click-to-commit gap;
+//   - a route-boundary loader (`boundary`): root loading.tsx, or the RoleGate
+//     fallback while the session loads.
+// The overlay stays up until no boundary remains (see NavigationLoader), and a
+// boundary that mounts under a running overlay adopts the overlay's clock
+// (--gt-elapsed) so every animation lands on the same frame rather than
+// restarting its 120 ms invisible phase.
+
+/** Mirrors of the CSS timings in globals.css (.gt-loader). */
+export const GT_LOADER_ENTRANCE_MS = 120;
+export const GT_LOADER_EXIT_MS = 180;
+/**
+ * When a leaving loader is removed from the DOM. The fade is 180 ms but starts a
+ * frame or two after the state change, so removing on the dot would cut it short
+ * while it is still visibly fading (measured: a jump from ~0.4 to 0).
+ */
+export const GT_LOADER_REMOVE_MS = GT_LOADER_EXIT_MS + 100;
+
+const COPY: Record<
+  LoaderVariant,
+  {
+    label: string;
+    name: string;
+    lang: string | undefined;
+    slow: string;
+    reload: string;
+  }
+> = {
+  factory: {
+    label: "GT FACTORY OS",
+    name: "Loading GT Factory OS",
+    lang: undefined,
+    slow: "Taking longer than usual",
+    reload: "Reload",
+  },
+  sales: {
+    label: "GT CRM",
+    name: "טוען את GT CRM",
+    lang: "he",
+    slow: "לוקח יותר זמן מהרגיל",
+    reload: "טעינה מחדש",
+  },
 };
 
-export function GTLoader({
-  message,
-  instant = false,
-}: {
-  message?: string;
-  instant?: boolean;
-}) {
-  const [mounted, setMounted] = useState(instant);
+// useLayoutEffect warns during server render; the server has no overlay to join.
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+export function GTLoader({
+  variant,
+  leaving = false,
+  message,
+  nav = false,
+  startedAt,
+  boundary = false,
+  slowAfterMs,
+}: {
+  /** Which world to show. Defaults to the one the current pathname belongs to. */
+  variant?: LoaderVariant;
+  /** Fade out (180 ms); the parent unmounts it afterwards. */
+  leaving?: boolean;
+  /** Replaces the small label under the orbit. */
+  message?: string;
+  /** The NavigationLoader overlay. `startedAt` (Date.now()) lets boundaries join it. */
+  nav?: boolean;
+  startedAt?: number;
+  /** A route-boundary or fallback loader: the overlay waits for these to go. */
+  boundary?: boolean;
+  /** After this many ms offer "taking longer than usual" and a Reload button. */
+  slowAfterMs?: number;
+}) {
+  const pathname = usePathname();
+  const resolved = variant ?? loaderVariantFor(pathname ?? "");
+  const copy = COPY[resolved];
+
+  // Join a running loader's timeline (see the header comment). An overlay that
+  // takes over from a server-rendered loader is created with a `startedAt` in the
+  // past: it starts that far into its own animations. Frozen at mount, so a later
+  // re-render cannot shift animations that are already running.
+  const [elapsed, setElapsed] = useState(() => {
+    const lag = nav && startedAt !== undefined ? Date.now() - startedAt : 0;
+    return lag > 50 ? lag : 0; // a click-time overlay is "now"; ignore render lag
+  });
+  useIsoLayoutEffect(() => {
+    if (!boundary) return;
+    const overlay = document.querySelector<HTMLElement>(
+      ".gt-loader[data-gt-loader-nav]:not([data-leaving])",
+    );
+    const t0 = Number(overlay?.getAttribute("data-t0"));
+    if (overlay && Number.isFinite(t0)) setElapsed(Math.max(0, Date.now() - t0));
+  }, [boundary]);
+
+  const [slow, setSlow] = useState(false);
   useEffect(() => {
-    if (instant) return;
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, [instant]);
+    if (!slowAfterMs) return;
+    const id = setTimeout(() => setSlow(true), slowAfterMs);
+    return () => clearTimeout(id);
+  }, [slowAfterMs]);
 
   return (
     <div
+      className="gt-loader"
+      data-variant={resolved}
+      data-leaving={leaving ? "true" : undefined}
       role="status"
-      aria-label="Loading GT Factory OS"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        background: `radial-gradient(ellipse at 50% 42%, ${T.bg1} 0%, ${T.bg0} 100%)`,
-        opacity: mounted ? 1 : 0,
-        transition: "opacity 0.3s ease",
-      }}
+      aria-live="polite"
+      aria-label={copy.name}
+      lang={copy.lang}
+      data-gt-loader-nav={nav ? "" : undefined}
+      data-gt-loader-boundary={boundary ? "" : undefined}
+      data-t0={nav && startedAt !== undefined ? String(startedAt) : undefined}
+      style={
+        elapsed > 0
+          ? ({ "--gt-elapsed": `${elapsed}ms` } as CSSProperties)
+          : undefined
+      }
     >
-      {/* Subtle dot-grid texture */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `radial-gradient(${T.gridLine} 1px, transparent 1px)`,
-          backgroundSize: "24px 24px",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Ambient glow blob */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          width: 520,
-          height: 520,
-          borderRadius: "50%",
-          background: `radial-gradient(circle, ${T.glow} 0%, transparent 65%)`,
-          animation: "gt-pulse-glow 4s ease-in-out infinite",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* ── Logo ring container ── */}
-      <div
-        style={{
-          position: "relative",
-          width: 210,
-          height: 210,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {/* Outer ring — clockwise teal arc */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: "50%",
-            background: `conic-gradient(from 0deg, transparent 0%, transparent 18%, ${T.ring1a} 36%, ${T.ring1b} 60%, transparent 76%)`,
-            animation: "gt-spin 2.4s linear infinite",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              inset: 3,
-              borderRadius: "50%",
-              background: T.bg1,
-            }}
-          />
-        </div>
-
-        {/* Inner ring — counter-spinning moss-amber arc */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 18,
-            borderRadius: "50%",
-            background: `conic-gradient(from 200deg, transparent 0%, transparent 22%, ${T.ring2a} 40%, ${T.ring2b} 62%, transparent 78%)`,
-            animation: "gt-spin-r 3.6s linear infinite",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              inset: 2,
-              borderRadius: "50%",
-              background: T.bg1,
-            }}
-          />
-        </div>
-
-        {/* Static glow ring */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 34,
-            borderRadius: "50%",
-            border: `1px solid ${T.staticRing}`,
-            boxShadow: `0 0 28px ${T.glow}, inset 0 0 18px ${T.glowStrong}`,
-          }}
-        />
-
-        {/* Brand logo — the real GT Everyday mark (Tom 2026-06-12: replaces
-            the "GT" text monogram; everything else — rings, glow, shimmer,
-            timing — is unchanged). The loader surface is always dark and
-            /brand/logo.png is white-on-transparent, so unlike TopBar's
-            BrandMark no theme invert is needed here. */}
-        <div
-          style={{
-            position: "relative",
-            zIndex: 10,
-            animation:
-              "gt-logo-in 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.3s both",
-          }}
-        >
-          {/* Shimmer wrapper */}
-          <div style={{ position: "relative", overflow: "hidden" }}>
+      {/* The announcement: the stage below is decoration and stays hidden. */}
+      <span className="sr-only" lang={copy.lang}>
+        {copy.name}
+      </span>
+      <div className="gt-loader__stage" aria-hidden="true">
+        <div className="gt-loader__emblem">
+          <div className="gt-loader__glow" />
+          <div className="gt-loader__orbit">
+            <svg viewBox="0 0 200 200" focusable="false">
+              <circle className="gt-loader__track" cx="100" cy="100" r="96" />
+            </svg>
+            <svg className="gt-loader__arc" viewBox="0 0 200 200" focusable="false">
+              <circle
+                cx="100"
+                cy="100"
+                r="96"
+                pathLength={100}
+                strokeDasharray="25 75"
+              />
+            </svg>
+          </div>
+          <div className="gt-loader__mark">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/logo.png"
+              src="/brand/logo-mark.png"
               alt=""
-              aria-hidden
-              width={92}
-              height={92}
+              aria-hidden="true"
+              width={517}
+              height={632}
               draggable={false}
-              style={{
-                display: "block",
-                width: 92,
-                height: 92,
-                objectFit: "contain",
-                filter: `drop-shadow(0 0 18px hsl(186 50% 50% / 0.42))`,
-                userSelect: "none",
-              }}
             />
-            {/* Shimmer sweep */}
-            <div
-              aria-hidden
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                width: "55%",
-                background:
-                  "linear-gradient(90deg, transparent 0%, hsl(0 0% 100% / 0.15) 50%, transparent 100%)",
-                animation: "gt-shimmer 2.8s ease-in-out 1.4s infinite",
-                transform: "skewX(-12deg)",
-              }}
-            />
+            <div className="gt-loader__sweep" />
           </div>
         </div>
-      </div>
-
-      {/* Brand text */}
-      <div
-        style={{
-          marginTop: 28,
-          textAlign: "center",
-          animation: "gt-fade-up 0.6s ease 0.65s both",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.3em",
-            color: T.textPrimary,
-            fontFamily:
-              "var(--font-public-sans, ui-sans-serif, system-ui, sans-serif)",
-            textTransform: "uppercase",
-          }}
-        >
-          GT Factory OS
+        <div className="gt-loader__label" lang="en">
+          {message ?? copy.label}
         </div>
-        <div
-          style={{
-            fontSize: 9,
-            fontWeight: 500,
-            letterSpacing: "0.4em",
-            color: T.textMuted,
-            marginTop: 6,
-            fontFamily:
-              "var(--font-public-sans, ui-sans-serif, system-ui, sans-serif)",
-            textTransform: "uppercase",
-          }}
-        >
-          {message ?? "Initializing…"}
+        <div className="gt-loader__progress">
+          <span />
         </div>
       </div>
-
-      {/* Bouncing teal dots */}
-      <div
-        style={{
-          display: "flex",
-          gap: 7,
-          marginTop: 22,
-          animation: "gt-fade-up 0.6s ease 0.85s both",
-        }}
-      >
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: T.dot,
-              animation: `gt-bounce 1.4s ease-in-out ${i * 0.19}s infinite`,
-              boxShadow: `0 0 7px ${T.dotGlow}`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Bottom gradient progress bar */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: "hsl(30 8% 14%)",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            background: `linear-gradient(90deg, ${T.progressA} 0%, ${T.progressB} 50%, ${T.progressC} 100%)`,
-            animation: "gt-progress 2.8s cubic-bezier(0.4, 0, 0.2, 1) forwards",
-          }}
-        />
-      </div>
+      {slow ? (
+        <div className="gt-loader__slow" dir={resolved === "sales" ? "rtl" : undefined}>
+          <p>{copy.slow}</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            {copy.reload}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
