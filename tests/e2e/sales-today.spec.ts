@@ -166,9 +166,8 @@ test("queue renders, an outcome is captured, and the card clears @mocked", async
   const sheet = page.getByTestId("outcome-sheet");
   await expect(sheet).toBeVisible();
 
-  // Dismissing does NOT answer it: the intent is still owed, and the next trip
-  // back asks again. (It must not spring back on an ordinary click, which is
-  // why dismissal survives until the app is actually left.)
+  // Closing it forgets the call (Tom, 2026-10-02): the next trip back asks
+  // nothing, and the card stays in the queue because nothing was answered.
   // dispatchEvent rather than click(): this container runs a Chromium build
   // older than the Playwright driving it, and synthesised mouse input for this
   // one overlay never reaches the page — verified by instrumenting the button,
@@ -178,6 +177,13 @@ test("queue renders, an outcome is captured, and the card clears @mocked", async
   // covered directly in tests/unit/sales/use-outcome-capture.test.tsx.
   await page.getByTestId("outcome-dismiss").dispatchEvent("click");
   await expect(sheet).toBeHidden();
+  await leaveAndReturn(page);
+  await expect(page.getByTestId("outcome-sheet")).toBeHidden();
+  await expect(page.getByTestId("today-card-L1")).toBeVisible();
+
+  // A new call asks again. (Dispatched click: after this overlay has been up,
+  // the same container quirk described above swallows synthesised mouse input.)
+  await page.getByTestId("today-card-L1").getByRole("link", { name: "התקשר" }).dispatchEvent("click");
   await leaveAndReturn(page);
   await expect(page.getByTestId("outcome-sheet")).toBeVisible();
 

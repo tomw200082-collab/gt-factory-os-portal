@@ -270,3 +270,4 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/197-gt-pulse-b-keep-as-lead.md` — **GT Pulse Unit B, keep as a lead**: a `customer_not_verified` card can now be resolved. The manager keeps the business as a lead, and its Shopify account is unlinked.
 - `docs/portal-os/tranches/198-gt-pulse-b-closure-fixes.md` — **GT Pulse Unit B, closure fixes**: an identity decision posts the holder it saw, and the server refuses if that holder changed. The dev-shim is ignored on a production deployment.
 - `docs/portal-os/tranches/199-tls-verification-guard.md` — **TLS verification on every deployment**: `instrumentation.ts` drops `NODE_TLS_REJECT_UNAUTHORIZED=0` at boot on Vercel. Both upstreams have valid certificates.
+- `docs/portal-os/tranches/200-outcome-close-forgets.md` — **Closing "what happened?" forgets the call** (Tom, 2026-10-02). The sheet no longer comes back after X. The lead stays in the queue.
