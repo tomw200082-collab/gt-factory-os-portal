@@ -28,7 +28,10 @@ test.describe("GT Pulse Unit B journeys @mocked", () => {
     await page.goto("/sales/orgs");
     await page.getByTestId("orgs-search").fill("הרצליה");
     await page.getByTestId(`org-hit-${IDS.full}`).click();
-    await expect(page).toHaveURL(new RegExp(`/sales/orgs/${IDS.full}$`));
+    // The first entry into the workspace compiles its route under `next dev`. On a loaded CI
+    // runner that took more than 5s (pinned to one core locally: 5s fails, 30s passes, same
+    // click), so this wait covers the compile. Production serves a prebuilt route.
+    await expect(page).toHaveURL(new RegExp(`/sales/orgs/${IDS.full}$`), { timeout: 30_000 });
     await expect(page.getByRole("heading", { level: 1, name: "קפה הדגמה הרצליה" })).toBeVisible();
     await expect(page.getByTestId("primary-contact").getByRole("link", { name: /התקשר/ })).toHaveAttribute("href", /^tel:/);
     await expect(page.getByTestId("org-summary")).toContainText("לפני מע״מ");

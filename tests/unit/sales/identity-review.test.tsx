@@ -115,9 +115,27 @@ describe("identity review", () => {
     expect(within(screen.getByTestId(`review-${ID(2)}`)).queryByRole("button", { name: UI.rejectAll })).toBeNull();
   });
 
-  it("offers no dead button when the held customer is not in the mirror (F2)", async () => {
+  it("keeps a business whose account never became a customer as a lead (tranche 197)", async () => {
+    postBody = { org_id: ID(3), action: "reject", link_status: null, customer_gid: null, merged_into: null };
     view(<IdentityReview />);
     const card = await screen.findByTestId(`review-${ID(3)}`);
+    expect(card.textContent).toContain(UI.keepAsLeadHint);
+    expect(card.textContent).not.toContain(UI.reviewBlocked);
+    expect(within(card).queryByRole("button", { name: UI.rejectAll })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: UI.keepAsLead }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(UI.keepAsLeadTitle("עסק 03"));
+    expect(dialog.textContent).toContain(UI.keepAsLeadConsequence);
+    fireEvent.click(within(dialog).getByRole("button", { name: UI.keepAsLeadConfirm }));
+    await waitFor(() => expect(posts[0]?.body).toEqual({ action: "reject" }));
+    expect(posts[0]?.url).toContain(encodeURIComponent(ID(3)));
+    expect(await screen.findByText(UI.reviewKeptAsLead("עסק 03"))).toBeTruthy();
+  });
+
+  it("still offers no dead button when a card can't be decided from here (F2)", async () => {
+    payload.orgs = [org(ID(5), ["id_unproven"], [])];
+    view(<IdentityReview />);
+    const card = await screen.findByTestId(`review-${ID(5)}`);
     expect(within(card).queryAllByRole("button")).toHaveLength(0);
     expect(card.textContent).toContain(UI.reviewBlocked);
   });

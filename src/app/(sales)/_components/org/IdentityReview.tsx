@@ -27,10 +27,12 @@ import { Sheet } from "./Sheet";
 
 const LINK_REASONS = new Set(["id_unproven", "phone_shared", "chain_branch"]);
 const CHAIN = "chain_rule_hit";
+const NOT_A_CUSTOMER = "customer_not_verified";
 
 type Pending =
   | { kind: "link"; org: IdentityOrg; candidate: Candidate; action: IdentityAction }
   | { kind: "reject"; org: IdentityOrg }
+  | { kind: "lead"; org: IdentityOrg }
   | { kind: "chain"; org: IdentityOrg };
 
 /** The business a candidate already belongs to, in words even when its name is missing. */
@@ -39,6 +41,7 @@ const holderName = (h: Candidate["held_by"]): string => h?.name || UI.mergeTarge
 /** The one question a confirmation asks: title, button and consequence, for each kind of decision. */
 function confirmCopy(p: Pending): { title: string; confirm: string; consequence: string } {
   if (p.kind === "reject") return { title: UI.rejectTitle(p.org.name), confirm: UI.rejectConfirm, consequence: UI.rejectConsequence };
+  if (p.kind === "lead") return { title: UI.keepAsLeadTitle(p.org.name), confirm: UI.keepAsLeadConfirm, consequence: UI.keepAsLeadConsequence };
   if (p.kind === "chain") return { title: UI.chainTitle(p.org.name), confirm: UI.chainConfirm, consequence: UI.chainConsequence };
   if (p.candidate.held_by) {
     const holder = holderName(p.candidate.held_by);
@@ -48,12 +51,14 @@ function confirmCopy(p: Pending): { title: string; confirm: string; consequence:
 }
 
 /** What the API will accept for this card (mirrors orgs_handler.ts resolveIdentity). */
-function actionsFor(org: IdentityOrg): { pick: boolean; reject: boolean; chain: boolean; blocked: boolean } {
+function actionsFor(org: IdentityOrg): { pick: boolean; reject: boolean; lead: boolean; chain: boolean; blocked: boolean } {
   const identity = org.reasons.filter((r) => r !== CHAIN);
-  if (identity.length === 0) return { pick: false, reject: false, chain: true, blocked: false };
-  if (org.candidates.length === 0) return { pick: false, reject: false, chain: false, blocked: true };
-  const allLink = identity.every((r) => LINK_REASONS.has(r));
-  return { pick: true, reject: allLink, chain: false, blocked: false };
+  const none = { pick: false, reject: false, lead: false, chain: false, blocked: false };
+  if (identity.length === 0) return { ...none, chain: true };
+  // the account the business holds never became a customer: the manager can keep it a lead
+  const lead = identity.every((r) => r === NOT_A_CUSTOMER);
+  if (org.candidates.length === 0) return { ...none, lead, blocked: !lead };
+  return { ...none, pick: true, reject: identity.every((r) => LINK_REASONS.has(r)), lead };
 }
 
 export function IdentityReview() {
@@ -91,7 +96,7 @@ export function IdentityReview() {
     const vars =
       p.kind === "link"
         ? { orgId, action: p.action, customer_gid: p.candidate.customer_gid }
-        : { orgId, action: (p.kind === "reject" ? "reject" : "confirm") as IdentityAction };
+        : { orgId, action: (p.kind === "chain" ? "confirm" : "reject") as IdentityAction };
     setErrors((e) => ({ ...e, [orgId]: "" }));
     resolve.mutate(vars, {
       onSuccess: (result) => {
@@ -103,7 +108,7 @@ export function IdentityReview() {
           return;
         }
         setToast({
-          message: p.kind === "reject" ? UI.reviewRejected(name) : p.kind === "chain" ? UI.reviewChained(name) : UI.reviewLinked(name),
+          message: p.kind === "reject" ? UI.reviewRejected(name) : p.kind === "lead" ? UI.reviewKeptAsLead(name) : p.kind === "chain" ? UI.reviewChained(name) : UI.reviewLinked(name),
         });
       },
       onError: (err) => setErrors((e) => ({ ...e, [orgId]: err.message })),
@@ -248,6 +253,9 @@ function ReviewCard({ org, busy, saving, error, onAsk }: { org: IdentityOrg; bus
       {a.blocked ? (
         <p className="s-banner s-banner-review mt-3 text-[13px]">{UI.reviewBlocked}</p>
       ) : null}
+      {a.lead ? (
+        <p className="mt-3 text-[13px] leading-relaxed" style={{ color: "hsl(var(--s-fg-muted))" }}>{UI.keepAsLeadHint}</p>
+      ) : null}
 
       {org.candidates.length > 0 ? (
         <>
@@ -273,8 +281,13 @@ function ReviewCard({ org, busy, saving, error, onAsk }: { org: IdentityOrg; bus
         </>
       ) : null}
 
-      {a.reject || a.chain ? (
+      {a.reject || a.lead || a.chain ? (
         <div className="mt-3 flex flex-wrap gap-2">
+          {a.lead ? (
+            <button type="button" className="s-btn s-btn-primary" disabled={busy} onClick={() => onAsk({ kind: "lead", org })}>
+              {UI.keepAsLead}
+            </button>
+          ) : null}
           {a.reject ? (
             <button type="button" className="s-btn s-btn-danger-quiet" disabled={busy} onClick={() => onAsk({ kind: "reject", org })}>
               {UI.rejectAll}
