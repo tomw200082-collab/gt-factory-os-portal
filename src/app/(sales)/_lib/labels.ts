@@ -427,6 +427,21 @@ export const ORG_UI = {
     return parts.join(", ");
   },
   monthEmpty: "אין הזמנות בחודש הזה",
+
+  // the orders timeline: the same two years on a time axis (Tom, 2026-10-02)
+  ordersViewLabel: "תצוגת ההזמנות",
+  viewCircle: "עיגול",
+  viewTimeline: "ציר זמן",
+  timelineChartLabel: "הזמנות לפי חודש בשנתיים האחרונות, מהישן (מימין) לחדש (משמאל)",
+  timelineScale: (n: number) => (n === 1 ? "גובה מלא: הזמנה אחת" : `גובה מלא: ${n} הזמנות`),
+  timelineZoomIn: "הגדלת התצוגה",
+  timelineZoomOut: "הקטנת התצוגה",
+  timelineZoomFit: "התאם לכל החודשים",
+  timelineZoomFitShort: "התאם",
+  timelineTrend: "מגמה: ממוצע 3 חודשים",
+  timelinePick: "הקישו על חודש כדי לראות מה היה בו",
+  timelineOpenMonth: "פתח את הזמנות החודש",
+  timelineAxisHint: "ישן מימין, חדש משמאל",
   monthLoading: "טוען את הזמנות החודש…",
 
   // the identity review (tranche 191)

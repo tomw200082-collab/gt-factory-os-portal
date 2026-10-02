@@ -196,6 +196,30 @@ test.describe("GT Pulse Unit B journeys @mocked", () => {
     await expect(page).toHaveURL(new RegExp(`/sales/orgs/${IDS.eight}$`));
   });
 
+  test("Tom's timeline: the circle becomes a two-year trend, zooms on the count, and opens a month's orders", async ({ page }) => {
+    await setFakeRole(page, "admin");
+    await stubSalesOrgs(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/sales/orgs/${IDS.many}`);
+    await page.getByRole("group", { name: "תצוגת ההזמנות" }).getByRole("button", { name: "ציר זמן" }).click();
+    const tl = page.getByTestId("orders-timeline");
+    await expect(tl).toBeVisible();
+    await expect(page.getByTestId("circle-ring")).toHaveCount(0);
+    await noSidewaysScroll(page, "timeline at 390");
+    const fit = await page.getByTestId("timeline-scale").textContent();
+    await tl.getByRole("button", { name: "הגדלת התצוגה" }).click();
+    await expect(page.getByTestId("timeline-scale")).not.toHaveText(fit ?? "");
+    await tl.getByRole("button", { name: /ספטמבר 2026/ }).click();
+    await expect(page.getByTestId("timeline-callout")).toContainText("ספטמבר 2026");
+    await page.getByTestId("timeline-callout").getByRole("button", { name: "פתח את הזמנות החודש" }).click();
+    await expect(page.getByTestId("month-sheet")).toBeVisible();
+    await page.getByTestId("month-sheet").locator(".s-river-row").first().click();
+    await expect(page.getByTestId("order-sheet")).toBeVisible();
+    // the choice survives a reload
+    await page.reload();
+    await expect(page.getByTestId("orders-timeline")).toBeVisible();
+  });
+
   test("the moved branch states its distributor and counts no silence", async ({ page }) => {
     await setFakeRole(page, "admin");
     await stubSalesOrgs(page);

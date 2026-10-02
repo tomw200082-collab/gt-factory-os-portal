@@ -1,0 +1,83 @@
+// The orders timeline as a person meets it (Tom, 2026-10-02): trend, zoom on the
+// count scale, and from a month down to its orders.
+import { describe, it, expect, afterEach } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { OrdersTimeline } from "@/app/(sales)/_components/org/OrdersTimeline";
+import { UI } from "@/app/(sales)/_lib/labels";
+import { buildRing } from "@/app/(sales)/_lib/ring";
+import { circle } from "./_orgFixtures";
+
+afterEach(cleanup);
+
+const months = () => {
+  const r = buildRing(circle().months, [{ gid: "d", name: "#D", draft_status: "OPEN", created_at: "2026-09-25T08:00:00Z", age_days: 7 }]);
+  return [...r.inner, ...r.outer];
+};
+
+describe("orders timeline", () => {
+  it("offers every month as a named target, newest at the left", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const targets = within(screen.getByTestId("orders-timeline")).getAllByRole("button", { name: /20\d\d:/ });
+    expect(targets).toHaveLength(24);
+    expect(targets[23].getAttribute("aria-label")).toMatch(/אוקטובר 2026/);
+  });
+
+  it("selects a month on tap, says what it holds, and opens it from a real button", () => {
+    const opened: string[] = [];
+    render(<OrdersTimeline months={months()} onMonth={(ym) => opened.push(ym)} />);
+    fireEvent.click(screen.getByRole("button", { name: /ספטמבר 2026/ }));
+    const callout = screen.getByTestId("timeline-callout");
+    expect(callout.textContent).toContain("ספטמבר 2026");
+    expect(callout.textContent).toContain("טיוטה פתוחה אחת");
+    expect(opened).toEqual([]);
+    fireEvent.click(within(callout).getByRole("button", { name: UI.timelineOpenMonth }));
+    expect(opened).toEqual(["2026-09"]);
+  });
+
+  it("opens a month straight from the keyboard, and arrows walk through time", () => {
+    const opened: string[] = [];
+    render(<OrdersTimeline months={months()} onMonth={(ym) => opened.push(ym)} />);
+    const sep = screen.getByRole("button", { name: /ספטמבר 2026/ });
+    sep.focus();
+    fireEvent.keyDown(sep, { key: "ArrowLeft" });
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/אוקטובר 2026/);
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/ספטמבר 2026/);
+    fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+    expect(opened).toEqual(["2026-09"]);
+  });
+
+  it("zooms the order-count scale in and out, and back to fit", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const zoomIn = screen.getByRole("button", { name: UI.timelineZoomIn });
+    const zoomOut = screen.getByRole("button", { name: UI.timelineZoomOut });
+    const scale = () => screen.getByTestId("timeline-scale").textContent;
+    const fit = scale();
+    expect((zoomOut as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(zoomIn);
+    expect(scale()).not.toBe(fit);
+    expect((zoomOut as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(zoomIn);
+    expect((zoomIn as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: UI.timelineZoomFit }));
+    expect(scale()).toBe(fit);
+  });
+
+  it("marks a month taller than the zoomed scale with its true count", () => {
+    const m = months();
+    m[20] = { ...m[20], completed: 9, filled: 9 };
+    render(<OrdersTimeline months={m} onMonth={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: UI.timelineZoomIn }));
+    fireEvent.click(screen.getByRole("button", { name: UI.timelineZoomIn }));
+    // the default test width leaves room for the count above the column
+    expect(screen.getAllByTestId("timeline-overflow").map((e) => e.textContent)).toContain(String(m[20].filled + m[20].hollow + m[20].open));
+  });
+
+  it("explains its marks and its trend line in a visible legend", () => {
+    render(<OrdersTimeline months={months()} onMonth={() => {}} />);
+    const legend = screen.getByTestId("timeline-legend");
+    for (const word of [UI.circleLegendOrder, UI.circleLegendCancelled, UI.circleLegendDraft, UI.timelineTrend]) {
+      expect(legend.textContent).toContain(word);
+    }
+  });
+});

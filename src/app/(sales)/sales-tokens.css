@@ -2164,3 +2164,152 @@
   border: 1px solid hsl(var(--s-border));
   background: hsl(var(--s-surface-sunken));
 }
+
+/* ===========================================================================
+   GT Pulse Unit B: the orders timeline, the circle's other view (Tom, 2026-10-02)
+   Mark specs per the dataviz method: columns <= 24px with a 4px rounded top and
+   a square base, a 2px surface gap between stacked marks, solid hairline grid,
+   a 2px trend line with an 8px end marker ringed in the surface colour, text in
+   text tokens only.
+   =========================================================================== */
+[data-app="sales"] .s-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-surface-sunken));
+  border: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-view-toggle > .s-tab {
+  padding-inline: 12px;
+  font-size: 13px;
+}
+[data-app="sales"] .s-view-toggle > .s-tab-active {
+  background: hsl(var(--s-surface));
+  color: hsl(var(--s-fg));
+  box-shadow: 0 1px 3px hsl(195 40% 18% / 0.14);
+}
+[data-app="sales"] .s-tl-summary {
+  margin-top: 12px;
+}
+[data-app="sales"] .s-tl-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+[data-app="sales"] .s-tl-zoom:disabled,
+[data-app="sales"] .s-tl-toolbar .s-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+[data-app="sales"] .s-tl-plot {
+  width: 100%;
+  overflow: hidden;
+}
+[data-app="sales"] .s-tl-svg {
+  display: block;
+  max-width: 100%;
+}
+[data-app="sales"] .s-tl-grid {
+  stroke: hsl(var(--s-border));
+  stroke-width: 1;
+}
+[data-app="sales"] .s-tl-base {
+  stroke: hsl(var(--s-border-strong));
+  stroke-width: 1;
+}
+[data-app="sales"] .s-tl-year {
+  stroke: hsl(var(--s-border-strong));
+  stroke-width: 1;
+}
+[data-app="sales"] .s-tl-tick,
+[data-app="sales"] .s-tl-label {
+  font-size: 12px;
+  fill: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-tl-label-now {
+  fill: hsl(var(--s-fg));
+  font-weight: 600;
+}
+[data-app="sales"] .s-tl-seg-filled {
+  fill: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-tl-seg-hollow {
+  fill: hsl(var(--s-surface));
+  stroke: hsl(var(--s-fg-muted));
+  stroke-width: 1.5;
+}
+[data-app="sales"] .s-tl-seg-open {
+  fill: hsl(var(--s-review-soft));
+  stroke: hsl(var(--s-review));
+  stroke-width: 2;
+}
+[data-app="sales"] .s-tl-over {
+  font-size: 12px;
+  font-weight: 600;
+  fill: hsl(var(--s-fg));
+}
+[data-app="sales"] .s-tl-over-mark {
+  fill: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-tl-trend {
+  pointer-events: none;
+}
+[data-app="sales"] .s-tl-trend-line {
+  fill: none;
+  stroke: hsl(var(--s-accent));
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+[data-app="sales"] .s-tl-trend-end {
+  fill: hsl(var(--s-accent));
+  stroke: hsl(var(--s-surface));
+  stroke-width: 2;
+}
+[data-app="sales"] .s-tl-sel {
+  fill: hsl(var(--s-accent-soft));
+  rx: 6px;
+}
+[data-app="sales"] .s-tl-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+[data-app="sales"] .s-tl-hit:focus {
+  outline: none;
+}
+[data-app="sales"] .s-tl-hit:focus-visible {
+  stroke: hsl(var(--s-accent));
+  stroke-width: 2;
+}
+[data-app="sales"] .s-tl-callout {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--s-radius);
+  background: hsl(var(--s-surface-sunken));
+}
+[data-app="sales"] .s-line-key {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: hsl(var(--s-accent));
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-app="sales"] .s-tl-seg {
+    transform-box: fill-box;
+    transform-origin: bottom;
+    animation: s-tl-grow 420ms var(--s-settle) both;
+  }
+}
+@keyframes s-tl-grow {
+  from { transform: scaleY(0.2); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

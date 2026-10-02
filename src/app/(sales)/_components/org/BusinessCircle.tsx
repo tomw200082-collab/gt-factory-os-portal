@@ -11,11 +11,37 @@
 // Below 360px the ring becomes a grid of the same 24 named buttons.
 
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { ChartColumn, CircleDot } from "lucide-react";
 import { fmtDate, fmtDateTime } from "../../_lib/format";
 import { daysSinceIsrael } from "../../_lib/israelTime";
 import { UI } from "../../_lib/labels";
 import { buildRing, markPoints, monthAngles, monthLabel, monthShort, sectorPath, type RingMonth } from "../../_lib/ring";
 import type { OrgCircle, PendingDraft } from "../../_lib/types";
+import { OrdersTimeline } from "./OrdersTimeline";
+
+type View = "circle" | "timeline";
+const VIEW_KEY = "gt.sales.ordersView";
+
+/** The circle or the timeline, remembered per viewer (a convenience, never state that matters). */
+function useOrdersView(): [View, (v: View) => void] {
+  const [view, setView] = useState<View>("circle");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(VIEW_KEY) === "timeline") setView("timeline");
+    } catch {
+      /* storage blocked: the circle is the default */
+    }
+  }, []);
+  const choose = (v: View) => {
+    setView(v);
+    try {
+      window.localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* not remembered, still switched */
+    }
+  };
+  return [view, choose];
+}
 
 export interface BusinessCircleProps {
   data: OrgCircle;
@@ -69,6 +95,7 @@ function marksOf(m: RingMonth, cap: number): Array<Mark["kind"]> {
 
 export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessCircleProps) {
   const reduce = useReducedMotion();
+  const [view, setView] = useOrdersView();
   const ring = useMemo(() => buildRing(data.months, pending), [data.months, pending]);
   const all = [...ring.inner, ...ring.outer];
   const current = ring.outer[ring.outer.length - 1]?.ym;
@@ -115,8 +142,29 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
 
   return (
     <section data-testid="business-circle" aria-labelledby="org-circle-title" className="s-panel s-org-block s-circle">
-      <h2 id="org-circle-title" className="s-section-heading">{UI.circleTitle}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="org-circle-title" className="s-section-heading">{UI.circleTitle}</h2>
+        <div className="s-view-toggle" role="group" aria-label={UI.ordersViewLabel}>
+          <button type="button" aria-pressed={view === "circle"} className={`s-tab ${view === "circle" ? "s-tab-active" : ""}`} onClick={() => setView("circle")}>
+            <CircleDot size={15} aria-hidden />
+            {UI.viewCircle}
+          </button>
+          <button type="button" aria-pressed={view === "timeline"} className={`s-tab ${view === "timeline" ? "s-tab-active" : ""}`} onClick={() => setView("timeline")}>
+            <ChartColumn size={15} aria-hidden />
+            {UI.viewTimeline}
+          </button>
+        </div>
+      </div>
 
+      {view === "timeline" ? (
+        <>
+          <div className="s-circle-grid-centre s-tl-summary">
+            <CentreText moved={moved} last={last} asOf={data.as_of} quiet={quiet} now={now} />
+          </div>
+          <OrdersTimeline months={all} onMonth={onMonth} />
+        </>
+      ) : (
+      <>
       <div className="s-ring-wrap" data-testid="circle-ring" data-motion={reduce ? "off" : "on"}>
         <svg viewBox="0 0 340 340" className="s-ring" role="group" aria-label={UI.circleMonthsGroup}>
           {segments(ring.inner, INNER, "inner")}
@@ -165,6 +213,8 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
         <li className="s-circle-legend-rings s-legend-ring">{UI.circleLegendRings}</li>
         <li className="s-circle-legend-rings s-legend-grid">{UI.circleLegendGrid}</li>
       </ul>
+      </>
+      )}
     </section>
   );
 }

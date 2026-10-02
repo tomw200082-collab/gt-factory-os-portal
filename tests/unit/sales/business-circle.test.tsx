@@ -64,6 +64,23 @@ describe("business circle", () => {
     expect(document.querySelectorAll("[data-mark='open']").length).toBe(2);
   });
 
+  it("switches to a timeline and back, and remembers the choice", () => {
+    window.localStorage.removeItem("gt.sales.ordersView");
+    render(<BusinessCircle data={circle()} pending={[]} moved={null} onMonth={() => {}} now={NOW} />);
+    const toggle = screen.getByRole("group", { name: UI.ordersViewLabel });
+    expect(within(toggle).getByRole("button", { name: UI.viewCircle }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(toggle).getByRole("button", { name: UI.viewTimeline }));
+    expect(screen.getByTestId("orders-timeline")).toBeTruthy();
+    expect(screen.queryByTestId("circle-ring")).toBeNull();
+    expect(window.localStorage.getItem("gt.sales.ordersView")).toBe("timeline");
+    cleanup();
+    render(<BusinessCircle data={circle()} pending={[]} moved={null} onMonth={() => {}} now={NOW} />);
+    expect(screen.getByTestId("orders-timeline")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: UI.viewCircle }));
+    expect(screen.getByTestId("circle-ring")).toBeTruthy();
+    window.localStorage.removeItem("gt.sales.ordersView");
+  });
+
   it("starts no animation when the user asked for reduced motion", () => {
     const mm = vi.spyOn(window, "matchMedia").mockImplementation((q: string) => ({
       matches: q.includes("reduce"), media: q, onchange: null,
