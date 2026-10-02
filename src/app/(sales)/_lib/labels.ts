@@ -8,6 +8,7 @@
 // Schema values (new / working / won / lost) are never translated in data —
 // only on the way to the eye.
 
+import { fmtCount } from "./format";
 import type { LeadStatus, OrderClass, OrgFilter, OrgSort, OutcomeResult, OutreachChannel, RiverChip, TodayItemType } from "./types";
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -278,13 +279,13 @@ export function exceptionLabel(kind: string): string {
 
 /** Hebrew counts agree with the noun: "עסק אחד", never "1 עסקים". */
 function orgsWord(n: number): string {
-  return n === 1 ? "עסק אחד" : `${new Intl.NumberFormat("he-IL").format(n)} עסקים`;
+  return n === 1 ? "עסק אחד" : `${fmtCount(n)} עסקים`;
 }
 
-export const ORG_UI = {
+const ORG_UI = {
   orgsCount: (n: number) => orgsWord(n),
   orgsShowing: (shown: number, total: number) =>
-    `מוצגים ${new Intl.NumberFormat("he-IL").format(shown)} מתוך ${new Intl.NumberFormat("he-IL").format(total)}`,
+    `מוצגים ${fmtCount(shown)} מתוך ${fmtCount(total)}`,
   orgsFilterEmpty: "אין עסקים במסנן הזה",
   orgsShowAll: "הצג את כל העסקים",
   showMoreOrgs: "הצג עוד עסקים",
@@ -367,7 +368,6 @@ export const ORG_UI = {
   identityReviewHint: "עד שמנהל יחליט על הקישור ל־Shopify לא מוצגים הזמנות וסכומים.",
   identityDisputedTitle: "זהות העסק במחלוקת",
   identityOpenReview: "למסך בדיקת הזהות",
-  prospectTitle: "טרם לקוח",
   prospectHint: "לעסק הזה אין עדיין קישור ללקוח ב־Shopify, ולכן אין היסטוריית הזמנות.",
   retiredMerged: (name: string) => `העסק אוחד אל ${name}`,
   retiredGo: (name: string) => `עבור אל ${name}`,
@@ -474,7 +474,7 @@ export const ORG_UI = {
   reviewIntro: "עסקים שהקישור שלהם ל־Shopify מחכה להחלטה של מנהל. עד ההחלטה לא מוצגים להם הזמנות וסכומים.",
   reviewCount: (n: number) => (n === 1 ? "עסק אחד ממתין להחלטה" : `${n} עסקים ממתינים להחלטה`),
   reviewCoverage: (verified: number, census: number) =>
-    `${new Intl.NumberFormat("he-IL").format(verified)} מתוך ${new Intl.NumberFormat("he-IL").format(census)} הלקוחות הפעילים ב־Shopify מאומתים`,
+    `${fmtCount(verified)} מתוך ${fmtCount(census)} הלקוחות הפעילים ב־Shopify מאומתים`,
   reviewCoverageSource: "מקור: ספירת הלקוחות של Shopify",
   reviewEmpty: "אין עסקים שממתינים להחלטה ✓",
   reviewForbiddenTitle: "המסך הזה למנהלי מכירות",
@@ -745,7 +745,6 @@ export const UI = {
   noteSaved: "נשמר ✓",
   teamCounts: "כל הצוות",
   // Tom 2026-10-01 ("מאשר הכל", tranche 188).
-  orgNotCustomer: "טרם לקוח",
   noteNeeded: "כתבו הערה כדי לשמור",
   customerStatusActive: "פעיל",
   customerStatusDisabled: "לא פעיל",
@@ -796,10 +795,6 @@ export const UI = {
   // orgs
   orgsTitle: "עסקים",
   orgLeads: (n: number) => leads(n),
-  orgLastActivity: "פעילות אחרונה",
-  orgNoActivity: "אין פעילות",
-  orgLeadsTitle: "הלידים של העסק",
-  timelineForLead: (name: string) => `היסטוריה של הליד: ${name}`,
 
   // customer context
   customerBadge: "לקוח קיים",

@@ -87,16 +87,16 @@ export function markPoints(cx: number, cy: number, r: number, start: number, end
   });
 }
 
+// built once: a formatter costs far more than a format, and the charts name 48 months a render
+const HE_MONTH_LONG = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric", timeZone: "UTC" });
+const HE_MONTH_SHORT = new Intl.DateTimeFormat("he-IL", { month: "short", timeZone: "UTC" });
+
 /** "ספטמבר 2026" */
 export function monthLabel(ym: string): string {
-  return new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${ym}-15T12:00:00Z`));
+  return HE_MONTH_LONG.format(new Date(`${ym}-15T12:00:00Z`));
 }
 
 /** "ספט׳ 26", for the narrow grid */
 export function monthShort(ym: string): { month: string; year: string } {
-  const d = new Date(`${ym}-15T12:00:00Z`);
-  return {
-    month: new Intl.DateTimeFormat("he-IL", { month: "short", timeZone: "UTC" }).format(d),
-    year: ym.slice(2, 4),
-  };
+  return { month: HE_MONTH_SHORT.format(new Date(`${ym}-15T12:00:00Z`)), year: ym.slice(2, 4) };
 }

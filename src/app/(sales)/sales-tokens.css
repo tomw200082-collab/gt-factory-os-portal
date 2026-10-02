@@ -2409,8 +2409,10 @@
 [data-app="sales"] .s-tl-plot[data-selecting] .s-tl-col:not([data-selected]) .s-tl-dim {
   opacity: 0.42;
 }
-[data-app="sales"] .s-tl-seg-filled {
-  filter: drop-shadow(0 2px 5px hsl(var(--s-status-won) / 0.28));
+/* one glow per column, not per mark: an SVG filter is painted, not composited, and
+   a selection fades 23 columns at once (efficiency review) */
+[data-app="sales"] .s-tl-bars {
+  filter: drop-shadow(0 1px 4px hsl(var(--s-status-won) / 0.3));
 }
 [data-app="sales"] .s-tl-seg-hollow {
   fill: hsl(var(--s-surface));
@@ -2425,7 +2427,6 @@
 }
 [data-app="sales"] .s-tl-bead-filled {
   fill: hsl(var(--s-status-won));
-  filter: drop-shadow(0 0 3px hsl(var(--s-status-won) / 0.45));
 }
 [data-app="sales"] .s-tl-bead-hollow {
   fill: hsl(var(--s-surface));
@@ -2601,8 +2602,7 @@
 }
 :root.dark [data-app="sales"] .s-tl-stop-area-top { stop-opacity: 0.34; }
 :root.dark [data-app="sales"] .s-tl-trend-glow { stroke: hsl(var(--s-tl-light) / 0.6); }
-:root.dark [data-app="sales"] .s-tl-seg-filled { filter: drop-shadow(0 0 6px hsl(var(--s-status-won) / 0.45)); }
-:root.dark [data-app="sales"] .s-tl-bead-filled { filter: drop-shadow(0 0 4px hsl(var(--s-status-won) / 0.7)); }
+:root.dark [data-app="sales"] .s-tl-bars { filter: drop-shadow(0 0 5px hsl(var(--s-status-won) / 0.55)); }
 
 /* arrival, once: the months rise, then the line of light draws itself */
 @media (prefers-reduced-motion: no-preference) {

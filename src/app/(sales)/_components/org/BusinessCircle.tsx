@@ -47,7 +47,8 @@ export interface BusinessCircleProps {
   data: OrgCircle;
   pending: PendingDraft[];
   moved: { to: string; on: string } | null;
-  onMonth: (ym: string) => void;
+  /** the month itself comes along, so the caller never rebuilds the ring to find it */
+  onMonth: (ym: string, month: RingMonth) => void;
   now?: Date;
 }
 
@@ -99,9 +100,9 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
   const reduce = useReducedMotion();
   const [view, setView] = useOrdersView();
   const ring = useMemo(() => buildRing(data.months, pending), [data.months, pending]);
-  const all = [...ring.inner, ...ring.outer];
+  const all = useMemo(() => [...ring.inner, ...ring.outer], [ring]);
   const current = ring.outer[ring.outer.length - 1]?.ym;
-  const newestFirst = [...all].reverse();
+  const newestFirst = useMemo(() => [...all].reverse(), [all]);
   const quiet = all.every((m) => m.filled + m.hollow + m.open === 0);
 
   function segments(months: RingMonth[], geo: typeof OUTER, ringName: "outer" | "inner") {
@@ -121,8 +122,8 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
             data-has={has || undefined}
             data-current={m.ym === current || undefined}
             className="s-ring-seg"
-            onClick={() => onMonth(m.ym)}
-            onKeyDown={(e) => activate(e, () => onMonth(m.ym))}
+            onClick={() => onMonth(m.ym, m)}
+            onKeyDown={(e) => activate(e, () => onMonth(m.ym, m))}
           />
           {points.map(([x, y], k) =>
             k === marks.length ? (
@@ -196,7 +197,7 @@ export function BusinessCircle({ data, pending, moved, onMonth, now }: BusinessC
                 aria-label={monthName(m)}
                 data-has={m.filled + m.hollow + m.open > 0 || undefined}
                 data-current={m.ym === current || undefined}
-                onClick={() => onMonth(m.ym)}
+                onClick={() => onMonth(m.ym, m)}
               >
                 <span className="s-circle-cell-month">{s.month}</span>
                 <span className="s-circle-cell-year s-nums">{s.year}</span>

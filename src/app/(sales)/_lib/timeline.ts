@@ -108,22 +108,28 @@ export function niceCeil(n: number): number {
   return Math.round((STEPS.find((s) => s * p >= n) ?? 10) * p);
 }
 
-/** The scale's zoom steps, from "every month fits" down to two orders per height. */
-export function zoomLevels(dataMax: number): number[] {
+/** The scale's zoom steps, from "every month fits" down to two orders per height, never below `floor`:
+ *  past the height of a typical month nearly every column would only say it is cut (visual gate TL-001). */
+export function zoomLevels(dataMax: number, floor = 0): number[] {
   const levels = [niceCeil(Math.max(1, dataMax))];
   let v = levels[0];
   while (v > 2) {
-    const next = Math.max(2, Math.floor(v / 2));
-    if (next >= v) break;
-    levels.push(next);
-    v = next;
+    v = Math.max(2, Math.floor(v / 2));
+    if (v < floor) break;
+    levels.push(v);
   }
   return levels;
 }
 
+/** The order count of a typical month with orders: the median, the lower one of an even pair. */
+export function typicalMonth(months: Array<{ total: number }>): number {
+  const busy = months.map((m) => m.total).filter((t) => t > 0).sort((a, b) => a - b);
+  return busy.length ? busy[Math.floor((busy.length - 1) / 2)] : 0;
+}
+
 /** Axis labels in whole orders: 0, the middle when it is a whole step, and the top. */
 export function yTicks(yMax: number): number[] {
-  return [...new Set([0, Math.floor(yMax / 2), yMax])].filter((t) => t >= 0);
+  return [...new Set([0, Math.floor(yMax / 2), yMax])];
 }
 
 /** Column i of n (0 = oldest) between `left` and `right`, oldest at the right. */

@@ -290,7 +290,7 @@ export function useOrgOrders(id: string, enabled: boolean) {
       ),
     getNextPageParam: (last) => last.next,
     retry: retryServerErrors,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000, // mirror data with its own "as of"; a month sheet reopened soon pages nothing again
   });
 }
 

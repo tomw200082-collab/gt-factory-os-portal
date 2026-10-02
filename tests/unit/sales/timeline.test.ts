@@ -1,7 +1,7 @@
 // The orders timeline: the circle's two years laid on a time axis (Tom, 2026-10-02).
 import { describe, it, expect } from "vitest";
 import { buildRing } from "@/app/(sales)/_lib/ring";
-import { columnX, niceCeil, smoothPath, timelineMonths, trendSummary, yTicks, zoomLevels } from "@/app/(sales)/_lib/timeline";
+import { columnX, niceCeil, smoothPath, timelineMonths, trendSummary, typicalMonth, yTicks, zoomLevels } from "@/app/(sales)/_lib/timeline";
 import { circle } from "./_orgFixtures";
 
 const months = () => {
@@ -48,6 +48,13 @@ describe("scale and zoom", () => {
     expect(zoomLevels(37)).toEqual([40, 20, 10, 5, 2]);
     expect(zoomLevels(3)).toEqual([3, 2]);
     expect(zoomLevels(1)).toEqual([1]);
+  });
+
+  it("stops zooming at the height of a typical month", () => {
+    expect(zoomLevels(37, 7)).toEqual([40, 20, 10]);
+    expect(zoomLevels(8, 7)).toEqual([8]);
+    expect(typicalMonth([{ total: 0 }, { total: 3 }, { total: 9 }, { total: 2 }])).toBe(3);
+    expect(typicalMonth([{ total: 0 }])).toBe(0);
   });
 
   it("labels the axis with whole orders only", () => {

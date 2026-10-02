@@ -33,6 +33,20 @@ type Pending =
   | { kind: "reject"; org: IdentityOrg }
   | { kind: "chain"; org: IdentityOrg };
 
+/** The business a candidate already belongs to, in words even when its name is missing. */
+const holderName = (h: Candidate["held_by"]): string => h?.name || UI.mergeTargetUnknown;
+
+/** The one question a confirmation asks: title, button and consequence, for each kind of decision. */
+function confirmCopy(p: Pending): { title: string; confirm: string; consequence: string } {
+  if (p.kind === "reject") return { title: UI.rejectTitle(p.org.name), confirm: UI.rejectConfirm, consequence: UI.rejectConsequence };
+  if (p.kind === "chain") return { title: UI.chainTitle(p.org.name), confirm: UI.chainConfirm, consequence: UI.chainConsequence };
+  if (p.candidate.held_by) {
+    const holder = holderName(p.candidate.held_by);
+    return { title: UI.mergeTitle(p.org.name, holder), confirm: UI.mergeConfirm, consequence: UI.mergeConsequence(p.org.name, holder) };
+  }
+  return { title: UI.linkTitle(p.org.name, p.candidate.name ?? UI.candidateUnnamed), confirm: UI.linkConfirm, consequence: UI.linkConsequence };
+}
+
 /** What the API will accept for this card (mirrors orgs_handler.ts resolveIdentity). */
 export function actionsFor(org: IdentityOrg): { pick: boolean; reject: boolean; chain: boolean; blocked: boolean } {
   const identity = org.reasons.filter((r) => r !== CHAIN);
@@ -84,7 +98,7 @@ export function IdentityReview() {
         const name = p.org.name;
         if (result.merged_into) {
           // the record just closed for good: say where it went, and offer the way there
-          const holder = (p.kind === "link" && p.candidate.held_by?.name) || UI.mergeTargetUnknown;
+          const holder = holderName(p.kind === "link" ? p.candidate.held_by : null);
           setToast({ message: UI.reviewMerged(name, holder), href: `/sales/orgs/${encodeURIComponent(result.merged_into)}` });
           return;
         }
@@ -97,6 +111,7 @@ export function IdentityReview() {
   }
 
   const data = review.data;
+  const copy = pending ? confirmCopy(pending) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -163,48 +178,31 @@ export function IdentityReview() {
         </section>
       ) : null}
 
-      {pending ? (() => {
-        const holder = pending.kind === "link" ? pending.candidate.held_by : null;
-        return (
-        <Sheet
-          alert
-          testId="review-confirm"
-          title={
-            holder ? UI.mergeTitle(pending.org.name, holder.name || UI.mergeTargetUnknown)
-              : pending.kind === "link" ? UI.linkTitle(pending.org.name, pending.candidate.name ?? UI.candidateUnnamed)
-              : pending.kind === "reject" ? UI.rejectTitle(pending.org.name)
-              : UI.chainTitle(pending.org.name)
-          }
-          onClose={() => setPending(null)}
-          footer={
-            <>
-              <button
-                type="button"
-                className={`s-btn ${pending.kind === "reject" ? "s-btn-danger-quiet" : "s-btn-primary"}`}
-                onClick={() => {
-                  run(pending);
-                  setPending(null);
-                }}
-              >
-                {holder ? UI.mergeConfirm : pending.kind === "link" ? UI.linkConfirm : pending.kind === "reject" ? UI.rejectConfirm : UI.chainConfirm}
-              </button>
-              <button type="button" className="s-btn s-btn-ghost" onClick={() => setPending(null)}>{UI.cancel}</button>
-            </>
-          }
-        >
-          <p className="text-[15px] leading-relaxed" style={{ color: "hsl(var(--s-fg))" }}>
-            {holder ? UI.mergeConsequence(pending.org.name, holder.name || UI.mergeTargetUnknown)
-              : pending.kind === "link" ? UI.linkConsequence
-              : pending.kind === "reject" ? UI.rejectConsequence
-              : UI.chainConsequence}
-          </p>
-          {pending.kind === "link" && pending.candidate.held_by === undefined ? (
-            <p className="text-[14px] leading-relaxed" style={{ color: "hsl(var(--s-review))" }}>{UI.linkMaybeMerge}</p>
-          ) : null}
-          {pending.kind === "link" ? <CandidateFacts candidate={pending.candidate} /> : null}
-        </Sheet>
-        );
-      })() : null}
+      {pending && copy ? (
+          <Sheet alert testId="review-confirm" title={copy.title} onClose={() => setPending(null)}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className={`s-btn ${pending.kind === "reject" ? "s-btn-danger-quiet" : "s-btn-primary"}`}
+                  onClick={() => {
+                    run(pending);
+                    setPending(null);
+                  }}
+                >
+                  {copy.confirm}
+                </button>
+                <button type="button" className="s-btn s-btn-ghost" onClick={() => setPending(null)}>{UI.cancel}</button>
+              </>
+            }
+          >
+            <p className="text-[15px] leading-relaxed" style={{ color: "hsl(var(--s-fg))" }}>{copy.consequence}</p>
+            {pending.kind === "link" && pending.candidate.held_by === undefined ? (
+              <p className="text-[14px] leading-relaxed" style={{ color: "hsl(var(--s-review))" }}>{UI.linkMaybeMerge}</p>
+            ) : null}
+            {pending.kind === "link" ? <CandidateFacts candidate={pending.candidate} /> : null}
+          </Sheet>
+      ) : null}
 
       {toast ? (
         <Toast
@@ -316,7 +314,7 @@ function CandidateFacts({ candidate }: { candidate: Candidate }) {
       {candidate.held_by ? (
         <p data-testid="candidate-held-by" className="mt-1 flex items-center gap-1 text-[12px] font-medium [overflow-wrap:anywhere]" style={{ color: "hsl(var(--s-review))" }}>
           <Link2 size={13} aria-hidden className="shrink-0" />
-          {UI.candidateHeldBy(candidate.held_by.name || UI.mergeTargetUnknown)}
+          {UI.candidateHeldBy(holderName(candidate.held_by))}
         </p>
       ) : null}
       <p className="s-nums mt-1 text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>

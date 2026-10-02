@@ -17,8 +17,9 @@ import { UI, contactSourceLabel } from "../../_lib/labels";
 import { nextActionFor } from "../../_lib/nextAction";
 import { useAutoClear } from "../../_lib/useAutoClear";
 import { historyShown, historyView } from "../../_lib/orgTruth";
-import { buildRing, type RingMonth } from "../../_lib/ring";
+import type { RingMonth } from "../../_lib/ring";
 import type { ContactRow, RiverChip } from "../../_lib/types";
+import { assigneeName } from "../AssigneePicker";
 import { PanelError, QueueError } from "../EmptyStates";
 import { Toast } from "../Toast";
 import { BusinessCircle } from "./BusinessCircle";
@@ -78,11 +79,6 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
   const firstRiverPage = river.data?.pages[0];
   const pendingPage = chip === "all" ? firstRiverPage : allRiver.data?.pages[0];
   const pendingDrafts = useMemo(() => pendingPage?.pending_drafts ?? [], [pendingPage]);
-  const ringMonths = useMemo(() => {
-    if (!circle.data) return [];
-    const r = buildRing(circle.data.months, pendingDrafts);
-    return [...r.inner, ...r.outer];
-  }, [circle.data, pendingDrafts]);
 
   if (org.isLoading) return <OrgLoading />;
   if (org.isError) {
@@ -94,11 +90,8 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
   if (!org.data || !view) return null;
 
   const d = org.data;
-  const shown = historyShown(view);
-  const ownerEmail = d.header.owner_email;
-  const ownerName = ownerEmail
-    ? (settings.data?.assignees.find((a) => a.email === ownerEmail)?.name ?? ownerEmail.split("@")[0])
-    : null;
+  const shown = showsHistory;
+  const ownerName = assigneeName(d.header.owner_email, settings.data?.assignees ?? []);
 
   const historySource: SourceInfo = {
     system: UI.sourceShopify,
@@ -146,7 +139,7 @@ export function OrgWorkspace({ orgId }: OrgWorkspaceProps) {
               data={circle.data}
               pending={pendingDrafts}
               moved={d.moved}
-              onMonth={(ym) => setMonth(ringMonths.find((m) => m.ym === ym) ?? null)}
+              onMonth={(_, m) => setMonth(m)}
             />
           ) : shown && circle.isLoading ? (
             <div className="s-panel animate-pulse" aria-busy="true" style={{ minHeight: 380 }}>
