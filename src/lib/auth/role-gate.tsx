@@ -16,7 +16,16 @@
 import { useSession } from "./session-provider";
 import { authorizeCapability, type CapabilityRequirement } from "./authorize";
 import type { Role } from "@/lib/contracts/enums";
-import type { ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
+import { GTLoader, GT_LOADER_REMOVE_MS } from "@/components/ui/GTLoader";
 
 const CAPABILITY_LABELS: Partial<Record<CapabilityRequirement, string>> = {
   "viewer:read": "Viewer access",
@@ -29,7 +38,7 @@ const CAPABILITY_LABELS: Partial<Record<CapabilityRequirement, string>> = {
   "admin:execute": "Admin access",
   "admin:execute+override": "Admin override access",
   "sales:read": "Sales read access",
-  "sales:execute": "Sales workspace access",
+  "sales:execute": "CRM access",
   "sales:execute+override": "Sales override access",
 };
 
@@ -49,11 +58,55 @@ type RoleGateProps =
 
 export function RoleGate(props: RoleGateProps) {
   const { session, isLoading } = useSession();
+  const { fallback } = props;
+
+  // A GTLoader fallback does not vanish when the session lands: it stays on top
+  // of the freshly rendered content and fades out (180 ms), like every other
+  // GTLoader exit (UX gate L1c). It is the same element in the same slot, so its
+  // animations do not restart. If it never became visible (the session beat its
+  // 120 ms invisible phase) it is removed at once. Other fallbacks just drop.
+  const fadeable = isValidElement(fallback) && fallback.type === GTLoader;
+  const [prevLoading, setPrevLoading] = useState(isLoading);
+  const [exiting, setExiting] = useState(false);
+  if (prevLoading !== isLoading) {
+    setPrevLoading(isLoading);
+    if (!isLoading && fadeable) setExiting(true);
+    if (isLoading) setExiting(false);
+  }
+  const hostRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!exiting) return;
+    const loader = hostRef.current?.querySelector(".gt-loader");
+    if (!loader || getComputedStyle(loader).visibility === "hidden") {
+      setExiting(false);
+      return;
+    }
+    const id = setTimeout(() => setExiting(false), GT_LOADER_REMOVE_MS);
+    return () => clearTimeout(id);
+  }, [exiting]);
+
+  // The fallback keeps slot 0 and the content slot 1 in every phase, so React
+  // updates the loader in place instead of remounting it.
+  const overlay =
+    fallback == null
+      ? null
+      : isLoading
+        ? fallback
+        : exiting && isValidElement(fallback)
+          ? cloneElement(fallback as ReactElement<{ leaving?: boolean }>, {
+              leaving: true,
+            })
+          : null;
+  const host = (
+    <div ref={hostRef} style={{ display: "contents" }}>
+      {overlay}
+    </div>
+  );
 
   // While the session loads, render `fallback` — nothing unless a caller gives
   // one (shell chrome shows its own skeleton; the sales layout passes its loader
   // so a direct /sales/* load is not a blank screen).
-  if (isLoading) return <>{props.fallback ?? null}</>;
+  if (isLoading) return fallback == null ? null : host;
 
   let granted: boolean;
   let blockedLabel: string;
@@ -70,20 +123,28 @@ export function RoleGate(props: RoleGateProps) {
     blockedLabel = "this section";
   }
 
-  if (!granted) {
-    return (
-      <div className="card mx-auto mt-8 max-w-lg p-6 text-center">
-        <div className="text-sm font-semibold text-fg">Access restricted</div>
-        <div className="mt-2 text-xs text-fg-muted">
-          {blockedLabel} is required to view this page.
-          <br />
-          Your current role is <span className="font-mono text-fg">{session.role}</span>.
-          Contact your administrator to request access.
-        </div>
+  const body = !granted ? (
+    <div className="card mx-auto mt-8 max-w-lg p-6 text-center">
+      <div className="text-sm font-semibold text-fg">Access restricted</div>
+      <div className="mt-2 text-xs text-fg-muted">
+        {blockedLabel} is required to view this page.
+        <br />
+        Your current role is <span className="font-mono text-fg">{session.role}</span>.
+        Contact your administrator to request access.
       </div>
-    );
-  }
-  return <>{props.children}</>;
+    </div>
+  ) : (
+    <>{props.children}</>
+  );
+
+  return fallback == null ? (
+    body
+  ) : (
+    <>
+      {host}
+      {body}
+    </>
+  );
 }
 
 export function useCapability(required: CapabilityRequirement): boolean {

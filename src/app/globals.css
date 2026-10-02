@@ -24,6 +24,10 @@
   --gt-settle: cubic-bezier(0.16, 1, 0.3, 1);
   --gt-mark-h: clamp(96px, 28vw, 128px);
   --gt-orbit: calc(var(--gt-mark-h) * 1.9);
+  /* A loader that joins a running one (a route boundary under the navigation
+     overlay) sets this to the time already elapsed, so every delay below lands
+     on the same frame instead of restarting from zero. */
+  --gt-elapsed: 0ms;
 
   position: fixed;
   inset: 0;
@@ -36,7 +40,8 @@
   -webkit-tap-highlight-color: transparent;
   /* Invisible and inert (opacity 0 + visibility hidden) for 120 ms, then a
      200 ms fade: a navigation that commits quickly never flashes a loader. */
-  animation: gt-loader-in 200ms ease-out 120ms both;
+  animation: gt-loader-in 200ms ease-out both;
+  animation-delay: calc(120ms - var(--gt-elapsed));
 }
 .gt-loader[data-variant="factory"] {
   --gt-bg-inner: 30 12% 9%;
@@ -60,6 +65,9 @@
    loader that is still mid-fade-in cannot jump to full opacity on its way out. */
 .gt-loader[data-leaving="true"] {
   pointer-events: none;
+  /* Freeze the entrance where it is: a commit between ~120 and ~350 ms must not
+     keep fading in while the stage fades out (a mixed, rising-then-falling fade). */
+  animation-play-state: paused;
 }
 .gt-loader__stage {
   position: absolute;
@@ -99,11 +107,13 @@
     transparent 68%
   );
   animation: gt-loader-breathe 3.2s ease-in-out infinite;
+  animation-delay: calc(0ms - var(--gt-elapsed));
 }
 .gt-loader__orbit {
   position: absolute;
   inset: 0;
-  animation: gt-loader-fade 420ms ease-out 120ms both;
+  animation: gt-loader-fade 420ms ease-out both;
+  animation-delay: calc(120ms - var(--gt-elapsed));
 }
 .gt-loader__orbit svg {
   position: absolute;
@@ -122,13 +132,15 @@
   stroke-width: 1.5;
   stroke-linecap: round;
   animation: gt-loader-orbit 1.8s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  animation-delay: calc(0ms - var(--gt-elapsed));
   will-change: transform;
 }
 .gt-loader__mark {
   position: relative;
   height: var(--gt-mark-h);
   aspect-ratio: 517 / 632;
-  animation: gt-loader-mark-in 420ms var(--gt-settle) 120ms both;
+  animation: gt-loader-mark-in 420ms var(--gt-settle) both;
+  animation-delay: calc(120ms - var(--gt-elapsed));
 }
 .gt-loader__mark img {
   display: block;
@@ -168,7 +180,8 @@
     transparent 100%
   );
   transform: translateX(-140%) skewX(-14deg);
-  animation: gt-loader-sweep 2.8s cubic-bezier(0.4, 0, 0.2, 1) 1.1s infinite;
+  animation: gt-loader-sweep 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: calc(1100ms - var(--gt-elapsed));
 }
 .gt-loader__label {
   margin-top: 22px;
@@ -181,7 +194,8 @@
   text-transform: uppercase;
   white-space: nowrap;
   color: hsl(var(--gt-ink-muted));
-  animation: gt-loader-fade 480ms ease-out 360ms both;
+  animation: gt-loader-fade 480ms ease-out both;
+  animation-delay: calc(360ms - var(--gt-elapsed));
 }
 .gt-loader__progress {
   position: absolute;
@@ -205,7 +219,52 @@
     hsl(var(--gt-accent-2)) 100%
   );
   animation: gt-loader-travel 1.7s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  animation-delay: calc(0ms - var(--gt-elapsed));
   will-change: transform;
+}
+/* The way out of a stuck load: outside the (aria-hidden) stage, so it can be
+   read and pressed. Only rendered after GTLoader's slowAfterMs. */
+.gt-loader__slow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(9vh + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  text-align: center;
+  font-family: var(--font-public-sans, ui-sans-serif, system-ui, sans-serif);
+  animation: gt-loader-fade 400ms ease-out both;
+  transition: opacity 180ms ease-in;
+}
+.gt-loader__slow p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: hsl(var(--gt-ink-muted));
+}
+.gt-loader__slow button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--gt-accent) / 0.65);
+  background: hsl(var(--gt-accent) / 0.1);
+  color: hsl(var(--gt-ink));
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gt-loader__slow button:focus-visible {
+  outline: 2px solid hsl(var(--gt-accent));
+  outline-offset: 3px;
+}
+.gt-loader[data-leaving="true"] .gt-loader__slow {
+  animation: none;
+  opacity: 0;
 }
 
 @keyframes gt-loader-in {
@@ -255,7 +314,8 @@
     opacity: 0.9;
   }
   .gt-loader__mark {
-    animation: gt-loader-fade 420ms ease-out 120ms both;
+    animation: gt-loader-fade 420ms ease-out both;
+    animation-delay: calc(120ms - var(--gt-elapsed));
   }
   .gt-loader__sweep {
     display: none;

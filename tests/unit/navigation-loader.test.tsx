@@ -9,10 +9,13 @@ vi.mock("next/navigation", () => ({
 import { NavigationLoader } from "@/components/ui/NavigationLoader";
 
 // Mirrors of the CSS timings in globals.css (.gt-loader). The entrance is
-// invisible for ENTRANCE_MS, the exit fade lasts EXIT_MS, and the safety valve
+// invisible for ENTRANCE_MS, the exit fade ends by EXIT_MS, and the safety valve
 // gives up on a navigation that never commits.
 const ENTRANCE_MS = 120;
-const EXIT_MS = 180;
+// The exit fade is 180 ms; the node is removed a little later (100 ms of slack),
+// because the transition starts a frame or two after the state change and
+// removing on the dot would cut it short while it is still visibly fading.
+const EXIT_MS = 280;
 const SAFETY_MS = 6000;
 
 const anchors: HTMLAnchorElement[] = [];
@@ -26,7 +29,20 @@ function link(href: string, attrs: Record<string, string> = {}) {
   return a;
 }
 
+// happy-dom delivers MutationObserver records on a real timer, so the fake clock
+// cannot flush them: keep a handle on the real setTimeout for that.
+const realSetTimeout = globalThis.setTimeout;
 const loader = () => screen.queryByRole("status");
+// Let the boundary watcher notice a change: a real tick for the MutationObserver
+// (happy-dom delivers records on a real timer) and one poll interval of fake time
+// for its backup poll (happy-dom's observer is not reliable enough to be the only
+// route in a test; the browser's is).
+async function flushObservers() {
+  await act(async () => {
+    await new Promise<void>((r) => realSetTimeout(r, 15));
+    vi.advanceTimersByTime(60);
+  });
+}
 const advance = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 const swallowNavigation = (e: Event) => e.preventDefault();
 
@@ -53,7 +69,7 @@ describe("NavigationLoader: which world", () => {
     const el = loader();
     expect(el).not.toBeNull();
     expect(el!.getAttribute("data-variant")).toBe("sales");
-    expect(screen.getByRole("status", { name: "טוען" })).toBe(el);
+    expect(screen.getByRole("status", { name: "טוען את GT CRM" })).toBe(el);
     expect(el!.getAttribute("lang")).toBe("he");
   });
 
@@ -294,6 +310,304 @@ describe("NavigationLoader: lifecycle", () => {
     const { unmount } = render(<NavigationLoader />);
     unmount();
     fireEvent.click(link("/sales/today"));
+    expect(loader()).toBeNull();
+  });
+});
+
+// ── L1: one continuous loader across the route boundary ─────────────────────
+// Root loading.tsx and the RoleGate fallback mount their own GTLoader, tagged
+// data-gt-loader-boundary. The navigation overlay must stay up (opaque) until
+// none of them remain, and only then run its exit, so the user sees one surface.
+describe("NavigationLoader: one continuous surface", () => {
+  const boundaries: HTMLElement[] = [];
+  function boundary(attrs: Record<string, string> = {}) {
+    const el = document.createElement("div");
+    el.className = "gt-loader";
+    el.setAttribute("data-gt-loader-boundary", "");
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    document.body.appendChild(el);
+    boundaries.push(el);
+    return el;
+  }
+  const flush = flushObservers;
+  afterEach(() => {
+    for (const b of boundaries.splice(0)) b.remove();
+  });
+
+  it("stamps the overlay so a boundary can join its timeline", () => {
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    const el = loader()!;
+    expect(el.hasAttribute("data-gt-loader-nav")).toBe(true);
+    expect(Number(el.getAttribute("data-t0"))).toBeGreaterThan(0);
+  });
+
+  it("does not start its exit while a boundary loader is still up", async () => {
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 200);
+    const b = boundary();
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    await flush();
+    expect(loader()!.getAttribute("data-leaving")).toBeNull();
+    advance(1500);
+    expect(loader()!.getAttribute("data-leaving")).toBeNull();
+
+    b.remove();
+    await flush();
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+    advance(EXIT_MS);
+    expect(loader()).toBeNull();
+  });
+
+  it("waits for every boundary, not just the first", async () => {
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 200);
+    const a = boundary();
+    const b = boundary();
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    a.remove();
+    await flush();
+    expect(loader()!.getAttribute("data-leaving")).toBeNull();
+    b.remove();
+    await flush();
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+  });
+
+  it("a boundary that is itself fading out does not hold the overlay", async () => {
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 200);
+    boundary({ "data-leaving": "true" });
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+  });
+
+  it("still gives up at the safety valve with a boundary stuck on screen", async () => {
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 200);
+    boundary();
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    advance(SAFETY_MS - ENTRANCE_MS - 200 - 1);
+    expect(loader()!.getAttribute("data-leaving")).toBeNull();
+    advance(1);
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+    advance(EXIT_MS);
+    expect(loader()).toBeNull();
+  });
+
+  it("removes at once when the boundary clears before anything was visible", async () => {
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(10);
+    const b = boundary();
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    advance(10);
+    b.remove();
+    await flush();
+    expect(loader()).toBeNull();
+  });
+
+  it("a new click while waiting on a boundary starts over cleanly", async () => {
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 200);
+    const b = boundary();
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    fireEvent.click(link("/home"));
+    expect(loader()!.getAttribute("data-variant")).toBe("factory");
+    b.remove();
+    await flush();
+    // The old wait must not fade the overlay of the navigation that replaced it.
+    expect(loader()!.getAttribute("data-leaving")).toBeNull();
+  });
+
+  it("stops watching on unmount", async () => {
+    const { rerender, unmount } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 200);
+    const b = boundary();
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    unmount();
+    b.remove();
+    await flush();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// ── L3: a click on the page you are already on ───────────────────────────────
+describe("NavigationLoader: a click on the current page while an overlay is up", () => {
+  it("fades the overlay out instead of leaving it for the 6 s valve", () => {
+    nav.pathname = "/sales/leads";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/home"));
+    advance(ENTRANCE_MS + 100);
+    expect(loader()).not.toBeNull();
+    fireEvent.click(link("/sales/leads?status=new"));
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+    advance(EXIT_MS);
+    expect(loader()).toBeNull();
+  });
+
+  it("removes it at once if it was never visible", () => {
+    nav.pathname = "/sales/leads";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/home"));
+    advance(40);
+    fireEvent.click(link("/sales/leads"));
+    expect(loader()).toBeNull();
+  });
+
+  it("does nothing when no overlay is up", () => {
+    nav.pathname = "/sales/leads";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/leads?status=new"));
+    expect(loader()).toBeNull();
+  });
+});
+
+// ── L4: the page behind a visible overlay cannot be reached ──────────────────
+describe("NavigationLoader: inert page behind the overlay", () => {
+  const extras: HTMLElement[] = [];
+  function content(tag = "main") {
+    const el = document.createElement(tag);
+    el.textContent = "page";
+    document.body.appendChild(el);
+    extras.push(el);
+    return el;
+  }
+  afterEach(() => {
+    for (const e of extras.splice(0)) e.remove();
+  });
+
+  it("inerts the rest of the page once the overlay is visible, not before", () => {
+    const main = content();
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS - 1);
+    expect(main.hasAttribute("inert")).toBe(false);
+    advance(1);
+    expect(main.hasAttribute("inert")).toBe(true);
+    // The overlay itself stays reachable (its own subtree is never inert).
+    expect(loader()!.closest("[inert]")).toBeNull();
+  });
+
+  it("lifts it as the exit starts", () => {
+    const main = content();
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 100);
+    expect(main.hasAttribute("inert")).toBe(true);
+    nav.pathname = "/sales/today";
+    rerender(<NavigationLoader />);
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+    expect(main.hasAttribute("inert")).toBe(false);
+  });
+
+  it("lifts it on unmount and when the overlay is removed outright", () => {
+    const main = content();
+    const { unmount } = render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 100);
+    expect(main.hasAttribute("inert")).toBe(true);
+    unmount();
+    expect(main.hasAttribute("inert")).toBe(false);
+  });
+
+  it("leaves alone what was already inert", () => {
+    const main = content();
+    const modal = content("aside");
+    modal.setAttribute("inert", "");
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 100);
+    expect(main.hasAttribute("inert")).toBe(true);
+    cleanup();
+    expect(main.hasAttribute("inert")).toBe(false);
+    expect(modal.hasAttribute("inert")).toBe(true);
+  });
+
+  it("does not take the route announcer out of the accessibility tree", () => {
+    const announcer = content("next-route-announcer");
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(ENTRANCE_MS + 100);
+    expect(announcer.hasAttribute("inert")).toBe(false);
+  });
+});
+
+// ── L1: a hard load that arrives with a boundary loader already in the HTML ──
+// On /sales/* the server HTML carries the RoleGate fallback. React then
+// suspends and swaps boundary loaders (hiding the server one, mounting the
+// root loading.tsx one), each restarting its invisible phase, and finally
+// removes them in one commit. The overlay takes over at hydration so the user
+// sees one surface, and it supplies the exit fade.
+describe("NavigationLoader: hard load with a server-rendered loader", () => {
+  const server: HTMLElement[] = [];
+  function serverLoader(variant = "sales") {
+    const el = document.createElement("div");
+    el.className = "gt-loader";
+    el.setAttribute("data-variant", variant);
+    el.setAttribute("data-gt-loader-boundary", "");
+    document.body.appendChild(el);
+    server.push(el);
+    return el;
+  }
+  const flush = flushObservers;
+  afterEach(() => {
+    for (const e of server.splice(0)) e.remove();
+  });
+
+  it("does nothing on an ordinary load", () => {
+    render(<NavigationLoader />);
+    expect(loader()).toBeNull();
+  });
+
+  it("takes over at once, in the same world, before the first paint", () => {
+    serverLoader("sales");
+    render(<NavigationLoader />);
+    const el = screen.getAllByRole("status").find((n) => n.hasAttribute("data-gt-loader-nav"))!;
+    expect(el).toBeTruthy();
+    expect(el.getAttribute("data-variant")).toBe("sales");
+    // Its clock started when the page did, so it joins already-run animations.
+    expect(Number(el.getAttribute("data-t0"))).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("leaves with the fade once the last boundary is gone, not before", async () => {
+    const s = serverLoader("sales");
+    render(<NavigationLoader />);
+    const overlay = () =>
+      screen.queryAllByRole("status").find((n) => n.hasAttribute("data-gt-loader-nav")) ?? null;
+    advance(ENTRANCE_MS + 500);
+    expect(overlay()!.getAttribute("data-leaving")).toBeNull();
+    s.remove();
+    await flush();
+    expect(overlay()!.getAttribute("data-leaving")).toBe("true");
+    advance(EXIT_MS);
+    expect(overlay()).toBeNull();
+  });
+
+  it("covers a factory hard load the same way", () => {
+    serverLoader("factory");
+    render(<NavigationLoader />);
+    expect(loader()!.getAttribute("data-variant")).toBe("factory");
+  });
+
+  it("still gives up at the safety valve", () => {
+    serverLoader("sales");
+    render(<NavigationLoader />);
+    advance(SAFETY_MS);
+    expect(loader()!.getAttribute("data-leaving")).toBe("true");
+    advance(EXIT_MS);
     expect(loader()).toBeNull();
   });
 });

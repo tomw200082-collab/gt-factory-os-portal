@@ -39,13 +39,15 @@ export const metadata: Metadata = {
  * projected into the JWT, which is exactly why changing only the API would give
  * a sales rep 2xx from every endpoint and still bounce them off the screen.
  *
- * While the session loads the gate shows the GT Pulse loader, so a direct load
- * of a /sales/* URL is never a blank screen (the loader stays invisible for its
- * first 120 ms, so a fast session never shows it).
+ * While the session loads the gate shows the sales loader, so a direct load of
+ * a /sales/* URL is never a blank screen (the loader stays invisible for its
+ * first 120 ms, so a fast session never shows it). It is a route-boundary loader
+ * (the navigation overlay waits for it), it fades out when the session lands,
+ * and after 8 s it offers a reload instead of spinning forever.
  */
 export default function SalesLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGate minimum="sales:execute" fallback={<GTLoader variant="sales" />}>
+    <RoleGate minimum="sales:execute" fallback={<GTLoader variant="sales" boundary slowAfterMs={8000} />}>
       <div className={rubik.variable}>
         <SalesShell>{children}</SalesShell>
       </div>
