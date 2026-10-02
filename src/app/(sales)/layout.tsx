@@ -17,7 +17,7 @@ const rubik = Rubik({
 });
 
 export const metadata: Metadata = {
-  title: "GT Sales",
+  title: "GT CRM",
   // Scoped manifest: only sales routes advertise the installable app, so the
   // factory portal's install behaviour is untouched.
   manifest: "/sales-manifest.webmanifest",

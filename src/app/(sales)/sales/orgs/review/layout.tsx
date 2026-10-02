@@ -3,7 +3,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "בדיקת זהות · GT מכירות",
+  title: "בדיקת זהות · GT CRM",
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

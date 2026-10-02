@@ -16,8 +16,8 @@ const manifest = JSON.parse(
 };
 
 describe("sales PWA manifest", () => {
-  it("installs as GT Sales and opens on the work queue", () => {
-    expect(manifest.name).toBe("GT Sales");
+  it("installs as GT CRM and opens on the work queue", () => {
+    expect(manifest.name).toBe("GT CRM");
     expect(manifest.start_url).toBe("/sales/today");
     expect(manifest.display).toBe("standalone");
   });

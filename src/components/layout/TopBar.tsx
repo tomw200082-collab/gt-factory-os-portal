@@ -237,12 +237,12 @@ export function SalesSwitch() {
     <Link
       href="/sales/today"
       className="btn btn-ghost gap-1.5 border border-[var(--border)]"
-      title="Switch to the sales workspace"
-      aria-label="Switch to the sales workspace"
+      title="Switch to the CRM"
+      aria-label="Switch to the CRM"
       data-testid="topbar-switch-sales"
     >
       <ArrowLeftRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
-      <span>Sales</span>
+      <span>CRM</span>
     </Link>
   );
 }

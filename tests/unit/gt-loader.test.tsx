@@ -44,12 +44,12 @@ describe("GTLoader", () => {
     expect(sales.getAttribute("lang")).toBe("he");
   });
 
-  it("labels each world: GT FACTORY OS and GT PULSE, never Initializing", () => {
+  it("labels each world: GT FACTORY OS and GT CRM, never Initializing", () => {
     const { container, unmount } = render(<GTLoader variant="factory" />);
     expect(container.textContent).toBe("GT FACTORY OS");
     unmount();
     const sales = render(<GTLoader variant="sales" />);
-    expect(sales.container.textContent).toBe("GT PULSE");
+    expect(sales.container.textContent).toBe("GT CRM");
     sales.unmount();
     const custom = render(<GTLoader variant="sales" message="LOADING LEADS" />);
     expect(custom.container.textContent).toBe("LOADING LEADS");

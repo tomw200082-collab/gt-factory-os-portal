@@ -1,7 +1,9 @@
 # Tranche 201 — One loader, two worlds
 
 **Status:** in progress on `claude/gt-loader-two-worlds`.
-**Origin:** Tom, 2026-10-02. Loading should look like Factory on the factory routes and like GT Pulse on `/sales/*`. Today Sales inherits the Production colours, the GT logo looks small with a visible square artifact, and the motion is busy. Same brand, two environments; premium, calm, fast, smooth, phone-first. No generic spinner, no game-like effects.
+**Origin:** Tom, 2026-10-02. Loading should look like Factory on the factory routes and like the GT CRM (GT Pulse D1 visual system) on `/sales/*`. Today Sales inherits the Production colours, the GT logo looks small with a visible square artifact, and the motion is busy. Same brand, two environments; premium, calm, fast, smooth, phone-first. No generic spinner, no game-like effects.
+
+**Name (Tom, 2026-10-02):** the sales system is called **GT CRM** in the product ("בוא נקרא לילד בשמו"). The loader label, the app name, the page titles, the installed-app name, the `/apps` card and the factory TopBar switch say GT CRM / CRM. Routes stay `/sales/*`.
 
 ## Before
 
@@ -41,6 +43,20 @@ manifest:
   - tests/unit/navigation-loader.test.tsx
   - tests/unit/gt-loader.test.tsx
   - tests/unit/role-gate-fallback.test.tsx
+  - src/app/(sales)/_lib/labels.ts
+  - src/app/(sales)/sales/attention/layout.tsx
+  - src/app/(sales)/sales/orgs/[id]/layout.tsx
+  - src/app/(sales)/sales/orgs/review/layout.tsx
+  - src/app/(sales)/sales/orgs/layout.tsx
+  - src/app/(sales)/sales/leads/layout.tsx
+  - src/app/(sales)/sales/settings/layout.tsx
+  - src/app/(sales)/sales/today/layout.tsx
+  - public/sales-manifest.webmanifest
+  - src/app/apps/page.tsx
+  - src/components/layout/TopBar.tsx
+  - src/components/layout/TopBar.switch.test.tsx
+  - tests/unit/sales/manifest.test.ts
+  - tests/unit/sales/labels.test.ts
 
 ## Gates
 

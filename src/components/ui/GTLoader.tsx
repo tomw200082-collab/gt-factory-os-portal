@@ -20,7 +20,7 @@ const COPY: Record<
   { label: string; name: string; lang: string | undefined }
 > = {
   factory: { label: "GT FACTORY OS", name: "Loading GT Factory OS", lang: undefined },
-  sales: { label: "GT PULSE", name: "טוען", lang: "he" },
+  sales: { label: "GT CRM", name: "טוען", lang: "he" },
 };
 
 export function GTLoader({

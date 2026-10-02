@@ -67,20 +67,20 @@ describe("SalesSwitch", () => {
 
   it("T5 — is labelled at every width, phone included", () => {
     renderAs("admin");
-    const link = screen.getByLabelText("Switch to the sales workspace");
+    const link = screen.getByLabelText("Switch to the CRM");
     expect(link.getAttribute("data-testid")).toBe("topbar-switch-sales");
 
     // Tranche 163 gated the word behind `sm:`, so on a phone this was one
     // unlabelled glyph among six — and Tom reported the feature as missing the
     // same day it shipped. A control nobody can find is a control nobody has.
     const label = link.querySelector("span");
-    expect(label?.textContent).toBe("Sales");
+    expect(label?.textContent).toBe("CRM");
     expect(label?.className ?? "").not.toContain("hidden");
   });
 
   it("T6 — reads as a control, not as a bare glyph", () => {
     renderAs("admin");
-    const link = screen.getByLabelText("Switch to the sales workspace");
+    const link = screen.getByLabelText("Switch to the CRM");
     expect(link.className).toContain("border");
   });
 });

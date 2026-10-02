@@ -1,6 +1,6 @@
 {
-  "name": "GT Sales",
-  "short_name": "GT Sales",
+  "name": "GT CRM",
+  "short_name": "GT CRM",
   "start_url": "/sales/today",
   "scope": "/sales/",
   "display": "standalone",

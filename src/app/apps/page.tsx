@@ -109,7 +109,7 @@ export default function AppsPage() {
         >
           <TrendingUp size={22} aria-hidden style={{ color: "hsl(var(--s-accent))" }} />
           <span className="text-lg font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
-            מכירות
+            CRM
           </span>
           <span className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
             תור העבודה, לידים, עסקים
