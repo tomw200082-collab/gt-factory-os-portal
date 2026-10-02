@@ -24,6 +24,8 @@ const STUBS: Stub[] = [
   { file: "leads/route.ts", upstream: "/api/v1/queries/sales/leads", methods: ["GET"] },
   { file: "week-stats/route.ts", upstream: "/api/v1/queries/sales/week-stats", methods: ["GET"] },
   { file: "settings/route.ts", upstream: "sales/settings", methods: ["GET", "PUT"] },
+  // The sales report (tranche 202).
+  { file: "report/route.ts", upstream: "/api/v1/queries/sales/report", methods: ["GET"] },
   { file: "quick-add/route.ts", upstream: "/api/v1/mutations/sales/quick-add", methods: ["POST"] },
   { file: "leads/[lead_id]/events/route.ts", upstream: "queries/sales/leads/", methods: ["GET"] },
   { file: "leads/[lead_id]/status/route.ts", upstream: "mutations/sales/leads/", methods: ["POST"] },

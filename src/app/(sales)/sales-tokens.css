@@ -2642,3 +2642,692 @@
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.5); opacity: 0.35; }
 }
+
+/* ===========================================================================
+   The sales report (tranche 202, Tom 2026-10-02): the Artifact's five tabs as a
+   native screen. No new colour: series are petrol and turquoise, up is the won
+   green, down is the overdue red, the month in progress is review amber, and the
+   heat tints are the same two greens and reds at low alpha. Numerals tabular.
+   =========================================================================== */
+
+/* segmented controls: tabs, period, unit, view, range */
+[data-app="sales"] .s-rp-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-surface-sunken));
+  border: 1px solid hsl(var(--s-border));
+  max-inline-size: 100%;
+}
+[data-app="sales"] .s-rp-seg-fit {
+  display: inline-flex;
+  inline-size: fit-content;
+}
+[data-app="sales"] .s-rp-seg > button {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 44px;
+  padding-inline: 10px;
+  border: 0;
+  border-radius: var(--s-radius-pill);
+  background: transparent;
+  color: hsl(var(--s-fg-muted));
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--s-motion) var(--s-ease), color var(--s-motion) var(--s-ease);
+}
+[data-app="sales"] .s-rp-seg-fit > button {
+  flex: 0 0 auto;
+  padding-inline: 12px;
+}
+[data-app="sales"] .s-rp-seg > button:hover {
+  background: hsl(var(--s-surface));
+}
+[data-app="sales"] .s-rp-seg > button[aria-selected="true"],
+[data-app="sales"] .s-rp-seg > button[aria-pressed="true"] {
+  background: hsl(var(--s-surface));
+  color: hsl(var(--s-fg));
+  font-weight: 600;
+  box-shadow: 0 1px 3px hsl(195 40% 18% / 0.14);
+}
+[data-app="sales"] .s-rp-seg > button:focus-visible,
+[data-app="sales"] .s-rp-tool:focus-visible,
+[data-app="sales"] .s-rp-rowbtn:focus-visible,
+[data-app="sales"] .s-rp-sort:focus-visible,
+[data-app="sales"] .s-rp-chart:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+
+/* a plain tool button (heat, copy) */
+[data-app="sales"] .s-rp-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 44px;
+  padding-inline: 14px;
+  border: 1px solid hsl(var(--s-border-field));
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-surface));
+  color: hsl(var(--s-fg-muted));
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+[data-app="sales"] .s-rp-tool[aria-pressed="true"] {
+  background: hsl(var(--s-accent-soft));
+  border-color: hsl(var(--s-accent));
+  color: hsl(var(--s-fg));
+  font-weight: 600;
+}
+
+/* the freshness pill sits on the petrol band */
+[data-app="sales"] .s-rp-fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(0 0% 100% / 0.07);
+  box-shadow: inset 0 0 0 1px hsl(0 0% 100% / 0.1);
+  color: hsl(var(--s-opening-fg));
+  font-size: 12.5px;
+  font-weight: 500;
+}
+[data-app="sales"] .s-rp-fresh .s-live-dot {
+  flex: none;
+}
+
+/* hero tiles */
+[data-app="sales"] .s-rp-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+/* four across only where the content column is wide enough to hold a figure whole: the rail takes a
+   fifth of the width from tablet up, so 768px still gets two by two */
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+[data-app="sales"] .s-rp-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 12px 12px;
+  min-inline-size: 0;
+}
+[data-app="sales"] .s-rp-tile-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: hsl(var(--s-fg-muted));
+}
+/* a figure is never broken across lines: it shrinks to the tile instead */
+[data-app="sales"] .s-rp-tile-value {
+  font-size: clamp(16px, 5.2vw, 21px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  max-inline-size: 100%;
+  white-space: nowrap;
+}
+@media (min-width: 768px) {
+  [data-app="sales"] .s-rp-tile {
+    padding: 16px 18px 14px;
+  }
+  [data-app="sales"] .s-rp-tile-value {
+    font-size: 24px;
+  }
+}
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-tile-value {
+    font-size: 22px;
+  }
+}
+@media (min-width: 1280px) {
+  [data-app="sales"] .s-rp-tile-value {
+    font-size: 26px;
+  }
+}
+
+/* delta chips */
+[data-app="sales"] .s-rp-chip {
+  display: inline-block;
+  padding: 1px 9px;
+  /* a chip that has to wrap is a rounded tag, not a pill with three lines in it */
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-chip-up,
+[data-app="sales"] .s-rp-chip-ok {
+  background: hsl(var(--s-status-won-soft));
+  color: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-rp-chip-dn,
+[data-app="sales"] .s-rp-chip-crit {
+  background: hsl(var(--s-sla-overdue-soft));
+  color: hsl(var(--s-sla-overdue));
+}
+[data-app="sales"] .s-rp-chip-warn {
+  background: hsl(var(--s-review-soft));
+  color: hsl(var(--s-review));
+}
+[data-app="sales"] .s-rp-chip-neu {
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg-muted));
+}
+
+/* the month tables */
+[data-app="sales"] .s-rp-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-scroll-tall {
+    max-block-size: min(76vh, 920px);
+    overflow-y: auto;
+  }
+}
+[data-app="sales"] .s-rp-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-inline-size: 100%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+[data-app="sales"] .s-rp-table th,
+[data-app="sales"] .s-rp-table td {
+  padding-block: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
+  background: hsl(var(--s-surface));
+  border-block-end: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-rp-table td {
+  block-size: 38px;
+}
+[data-app="sales"] .s-rp-table thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 4;
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg-muted));
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  border-block-end: 1px solid hsl(var(--s-border-strong));
+}
+[data-app="sales"] .s-rp-table .s-rp-first {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+  max-inline-size: min(40vw, 200px);
+  min-inline-size: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: start;
+  font-weight: 500;
+  border-inline-end: 1px solid hsl(var(--s-border-strong));
+}
+[data-app="sales"] .s-rp-table thead .s-rp-first {
+  z-index: 5;
+}
+[data-app="sales"] .s-rp-num {
+  text-align: end;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+[data-app="sales"] .s-rp-table thead .s-rp-num,
+[data-app="sales"] .s-rp-table thead .s-rp-mid {
+  text-align: center;
+}
+[data-app="sales"] .s-rp-table .s-rp-mid {
+  text-align: center;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+[data-app="sales"] .s-rp-table .s-rp-muted {
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-table tr.s-rp-main:hover td {
+  background: hsl(var(--s-surface-sunken));
+}
+[data-app="sales"] .s-rp-table tr.s-rp-child td {
+  background: hsl(var(--s-surface-sunken));
+  font-size: 12.5px;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-table tr.s-rp-lvl3 td {
+  font-size: 12px;
+}
+[data-app="sales"] .s-rp-table tr.s-rp-quiet .s-rp-first {
+  color: hsl(var(--s-sla-overdue));
+}
+[data-app="sales"] .s-rp-table tfoot td,
+[data-app="sales"] .s-rp-table tr.s-rp-total td {
+  background: hsl(var(--s-accent-soft));
+  font-weight: 600;
+  border-block-start: 1px solid hsl(var(--s-border-strong));
+}
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-table tr.s-rp-total td {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: 3;
+  }
+  [data-app="sales"] .s-rp-table tr.s-rp-total .s-rp-first {
+    z-index: 4;
+  }
+}
+[data-app="sales"] .s-rp-table .s-rp-up {
+  color: hsl(var(--s-status-won));
+  font-weight: 600;
+}
+[data-app="sales"] .s-rp-table .s-rp-down {
+  color: hsl(var(--s-sla-overdue));
+  font-weight: 600;
+}
+[data-app="sales"] .s-rp-sort,
+[data-app="sales"] .s-rp-rowbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+[data-app="sales"] .s-rp-rowbtn {
+  max-inline-size: 100%;
+  min-block-size: 38px;
+  text-align: start;
+}
+[data-app="sales"] .s-rp-rowbtn > span {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the chain label beside a name gives way first, and goes entirely before the name is cut */
+[data-app="sales"] .s-rp-rowbtn > .s-rp-sub {
+  flex: 0 100 auto;
+  white-space: nowrap;
+}
+[data-app="sales"] .s-rp-chev {
+  flex: none;
+  color: hsl(var(--s-fg-faint));
+  transition: transform var(--s-motion) var(--s-ease);
+}
+[data-app="sales"] [aria-expanded="true"] > .s-rp-chev {
+  transform: rotate(-90deg);
+}
+[data-app="sales"] .s-rp-spark {
+  display: block;
+  stroke: hsl(var(--s-accent));
+  fill: hsl(var(--s-accent));
+}
+[data-app="sales"] .s-rp-sub {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: hsl(var(--s-fg-faint));
+}
+
+/* the phone's summary list */
+[data-app="sales"] .s-rp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+[data-app="sales"] .s-rp-list > li + li {
+  border-block-start: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-rp-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 12px;
+  inline-size: 100%;
+  min-block-size: 56px;
+  padding-block: 8px;
+  padding-inline: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+[data-app="sales"] .s-rp-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+[data-app="sales"] .s-rp-item-name > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-app="sales"] .s-rp-item-total {
+  font-size: 15px;
+  font-weight: 600;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+[data-app="sales"] .s-rp-item-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: hsl(var(--s-fg-muted));
+  min-inline-size: 0;
+}
+[data-app="sales"] .s-rp-item-spark {
+  justify-self: end;
+}
+[data-app="sales"] .s-rp-item-child {
+  padding-inline-start: 32px;
+  min-block-size: 44px;
+  background: hsl(var(--s-surface-sunken));
+}
+[data-app="sales"] .s-rp-item-child .s-rp-item-name {
+  font-size: 13px;
+  font-weight: 400;
+}
+[data-app="sales"] .s-rp-item-child.s-rp-lvl3 {
+  padding-inline-start: 52px;
+}
+
+/* badges on chain rows */
+[data-app="sales"] .s-rp-bdg {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: var(--s-radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: nowrap;
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg-muted));
+  border: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-rp-bdg-sl {
+  background: hsl(var(--s-sla-overdue-soft));
+  color: hsl(var(--s-sla-overdue));
+  border-color: transparent;
+}
+[data-app="sales"] .s-rp-bdg-mv {
+  background: hsl(var(--s-review-soft));
+  color: hsl(var(--s-review));
+  border-color: transparent;
+}
+[data-app="sales"] .s-rp-bdg-di {
+  background: hsl(var(--s-accent-soft));
+  color: hsl(var(--s-accent));
+  border-color: transparent;
+}
+
+/* chains KPI strip */
+[data-app="sales"] .s-rp-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+[data-app="sales"] .s-rp-kpis > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  [data-app="sales"] .s-rp-kpis > :last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+[data-app="sales"] .s-rp-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  padding: 12px 14px;
+}
+[data-app="sales"] .s-rp-kpi-alert {
+  border-color: hsl(var(--s-sla-overdue) / 0.55);
+}
+[data-app="sales"] .s-rp-kpi-alert .s-rp-kpi-value {
+  color: hsl(var(--s-sla-overdue));
+}
+[data-app="sales"] .s-rp-kpi-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-kpi-value {
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+[data-app="sales"] .s-rp-kpi-sub {
+  font-size: 12px;
+  color: hsl(var(--s-fg-muted));
+}
+
+/* chart cards */
+[data-app="sales"] .s-rp-chart {
+  position: relative;
+  inline-size: 100%;
+  border-radius: var(--s-radius);
+  touch-action: pan-y;
+}
+[data-app="sales"] .s-rp-chart svg {
+  display: block;
+  inline-size: 100%;
+  overflow: visible;
+}
+[data-app="sales"] .s-rp-axis {
+  fill: hsl(var(--s-fg-faint));
+  font-size: 11px;
+  font-family: inherit;
+  direction: ltr;
+  unicode-bidi: isolate;
+  /* a halo in the card's colour keeps a label legible where a line or a bar runs under it */
+  paint-order: stroke;
+  stroke: hsl(var(--s-surface));
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+[data-app="sales"] .s-rp-gl {
+  stroke: hsl(var(--s-border));
+  stroke-width: 1;
+}
+[data-app="sales"] .s-rp-tip {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  inline-size: max-content;
+  max-inline-size: 220px;
+  padding: 7px 11px;
+  border-radius: var(--s-radius-sm);
+  border: 1px solid hsl(var(--s-border-strong));
+  background: hsl(var(--s-surface));
+  box-shadow: var(--s-shadow-lift);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: hsl(var(--s-fg));
+}
+[data-app="sales"] .s-rp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-sw {
+  display: inline-block;
+  inline-size: 18px;
+  margin-inline-end: 6px;
+  border-block-start: 3px solid hsl(var(--s-accent));
+  vertical-align: middle;
+}
+[data-app="sales"] .s-rp-sw-prior {
+  border-block-start: 3px dashed hsl(var(--s-fg-faint));
+}
+[data-app="sales"] .s-rp-sw-bar {
+  inline-size: 12px;
+  block-size: 12px;
+  border: 0;
+  border-radius: 3px;
+  background: hsl(var(--s-accent) / 0.45);
+}
+[data-app="sales"] .s-rp-sw-off {
+  inline-size: 12px;
+  block-size: 12px;
+  border: 0;
+  border-radius: 3px;
+  background: hsl(var(--s-fg-faint) / 0.4);
+}
+
+/* the weekday rhythm */
+[data-app="sales"] .s-rp-dow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 0;
+  font-size: 13px;
+}
+[data-app="sales"] .s-rp-dow-track {
+  display: block;
+  block-size: 14px;
+  border-radius: 4px;
+  background: hsl(var(--s-surface-sunken));
+  overflow: hidden;
+}
+[data-app="sales"] .s-rp-dow-fill {
+  display: block;
+  block-size: 100%;
+  border-radius: 4px;
+  background: hsl(var(--s-accent) / 0.6);
+}
+[data-app="sales"] .s-rp-dow-fill-off {
+  background: hsl(var(--s-fg-faint) / 0.35);
+}
+
+/* the pace card */
+[data-app="sales"] .s-rp-pace {
+  max-inline-size: 560px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+[data-app="sales"] .s-rp-pace dt {
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-pace dd {
+  margin: 0;
+  font-weight: 600;
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+[data-app="sales"] .s-rp-pace .s-rp-pace-total {
+  color: hsl(var(--s-fg));
+  font-weight: 700;
+}
+
+/* the stacked retro row on a phone */
+[data-app="sales"] .s-rp-retro {
+  display: grid;
+  gap: 4px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px 14px;
+  border-block-end: 1px solid hsl(var(--s-border));
+  font-size: 13px;
+}
+[data-app="sales"] .s-rp-retro-now {
+  background: hsl(var(--s-accent-soft));
+}
+[data-app="sales"] .s-rp-retro-off {
+  color: hsl(var(--s-fg-muted));
+}
+
+/* notes and fine print */
+[data-app="sales"] .s-rp-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: hsl(var(--s-fg-muted));
+}
+[data-app="sales"] .s-rp-skel {
+  border-radius: var(--s-radius-card);
+  background: hsl(var(--s-surface-sunken));
+  border: 1px solid hsl(var(--s-border));
+}
+
+/* a first column that may wrap: a chain's name with its badges underneath */
+[data-app="sales"] .s-rp-table .s-rp-first-wrap {
+  white-space: normal;
+  text-overflow: clip;
+  padding-block: 6px;
+}
+[data-app="sales"] .s-rp-table td.s-rp-first-wrap {
+  block-size: auto;
+  min-block-size: 38px;
+}
+[data-app="sales"] .s-rp-first-wrap .s-rp-bdg {
+  white-space: normal;
+  max-inline-size: 100%;
+}
+[data-app="sales"] .s-rp-wrapname {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-inline-size: 0;
+}
+
+/* columns a narrow month table gives up: share and year over year below 640px, the sparkline below 1024px.
+   The summary list carries them on a phone, and a phone's month table keeps the newest months and the total in view. */
+[data-app="sales"] .s-rp-table .s-rp-opt-sm {
+  display: none;
+}
+[data-app="sales"] .s-rp-table .s-rp-opt-lg {
+  display: none;
+}
+@media (min-width: 640px) {
+  [data-app="sales"] .s-rp-table .s-rp-opt-sm {
+    display: table-cell;
+  }
+}
+@media (min-width: 1024px) {
+  [data-app="sales"] .s-rp-table .s-rp-opt-lg {
+    display: table-cell;
+  }
+}
