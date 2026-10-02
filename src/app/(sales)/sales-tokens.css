@@ -2086,9 +2086,10 @@
 [data-app="sales"] .s-circle-cell[data-current] {
   border: 2px solid hsl(var(--s-accent));
 }
+/* dashed, like the ring's focus, so it never reads as the current month's solid edge */
 [data-app="sales"] .s-circle-cell:focus-visible {
-  outline: 2px solid hsl(var(--s-accent));
-  outline-offset: 2px;
+  outline: 2px dashed hsl(var(--s-fg));
+  outline-offset: 3px;
 }
 [data-app="sales"] .s-circle-cell-month {
   font-size: 13px;

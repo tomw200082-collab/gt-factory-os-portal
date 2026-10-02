@@ -49,6 +49,17 @@
   - A retired row's checkbox says why it is disabled.
   - The ring arrival uses the spring easing with an explicit `transform-box`.
 
+## Rerun round (same day)
+
+The gate rerun at 6e43849 confirmed every finding above as fixed. Flow passed with P0 0 and P1 0. New findings, resolved:
+
+- **COPY-B-012 (P1).** The merge consequence no longer promises contacts the destination already has: "וגם אנשי הקשר שעוד אין לו".
+- **INTER-B-008 (P1).** "סיום בחירה" is disabled, with a reason, while an assignment saves.
+- **A11Y NEW-001 (P1) and NEW-003.** Fixed in tranche 194: hover is silent, and the chart is one tab stop.
+- **VIS-B-008 (P1): not a product defect.** The screenshot script emulated the colour scheme without the portal's `dark` class. Re-rendered with the class, the sheet is dark (`scratchpad/gate2/m-sheet-merge-confirm-390-dark.png`). `Sheet` has no portal and renders inside `[data-app="sales"]`.
+- **P2s.** Redaction gets its own words (COPY-B-013); "אוחד אל" is used everywhere (COPY-B-014); the grid cell focus is dashed (A11Y NEW-002); disabled zoom buttons say why (INTER-B-009, tranche 194).
+- **Deferred P2s.** The month sheet's paging progress (FLOW-NEW-001) and reopening the lead drawer on return (FLOW-NEW-002) are pre-existing behaviour.
+
 ## Not taken, with reason
 
 - **VIS-B-003:** rejected. The inset shadow is D1's, passed at its own gate.
@@ -86,6 +97,7 @@ manifest:
   - tests/unit/sales/identity-review.test.tsx
   - tests/unit/sales/org-workspace.test.tsx
   - tests/unit/sales/orgs.test.tsx
+  - tests/unit/sales/org-labels.test.ts
   - tests/e2e/sales-orgs.spec.ts
 
 ## Gates

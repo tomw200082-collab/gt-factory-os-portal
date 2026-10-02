@@ -257,6 +257,38 @@ describe("bulk owner assignment", () => {
     await waitFor(() => expect(screen.queryByTestId("bulk-owner-bar")).toBeNull());
   });
 
+  it("keeps the selection open while an assignment is still saving", async () => {
+    let release: () => void = () => {};
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        await new Promise<void>((r) => { release = r; });
+        return new Response(JSON.stringify({ updated: 1 }), { status: 200 });
+      }
+      if (url.startsWith("/api/sales/settings")) {
+        return new Response(JSON.stringify({
+          sla_hours: 24, whatsapp_templates: { new_lead: "", reminder: "", returning_customer: "" },
+          lost_reasons: [], queue: { daily_cap: 15, order: "newest_first" },
+          assignees: [{ email: "rep@synthetic.invalid", name: "נציגה", active: true }], last_changes: [],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ rows: [row()], next: null, total: 1 }), { status: 200 });
+    }));
+    render(withQuery(<OrgsPage />));
+    await screen.findByText("קפה הדגמה רמת השרון");
+    fireEvent.click(screen.getByRole("button", { name: UI.orgsSelect }));
+    fireEvent.click(screen.getByRole("checkbox", { name: UI.selectOrgNamed("קפה הדגמה רמת השרון") }));
+    const bar = screen.getByTestId("bulk-owner-bar");
+    await waitFor(() => expect(within(bar).getAllByRole("option").length).toBeGreaterThan(1));
+    fireEvent.change(within(bar).getByLabelText(UI.ownerPick), { target: { value: "rep@synthetic.invalid" } });
+    fireEvent.click(within(bar).getByRole("button", { name: UI.ownerAssign }));
+    const done = screen.getByRole("button", { name: UI.orgsSelectDone }) as HTMLButtonElement;
+    await waitFor(() => expect(done.disabled).toBe(true));
+    expect(done.getAttribute("title")).toBe(UI.ownerSavingWait);
+    release();
+    expect(await screen.findByTestId("sales-toast")).toBeTruthy();
+  });
+
   it("is not offered to a rep", async () => {
     role.value = "sales_rep";
     respond = () => ({ rows: [row()], next: null, total: 1 });

@@ -304,6 +304,7 @@ export const ORG_UI = {
   ownerPickPlaceholder: "בחרו איש מכירות",
   ownerAssign: "שייך בעלים",
   ownerAssignNeedsOwner: "בחרו קודם למי לשייך",
+  ownerSavingWait: "השיוך נשמר, רגע",
   selectRetiredHint: "רשומה סגורה: אין לה בעלים",
   ownerAssigned: (n: number, name: string) =>
     n === 1 ? `עסק אחד שויך ל${name}` : `${n} עסקים שויכו ל${name}`,
@@ -368,7 +369,7 @@ export const ORG_UI = {
   identityOpenReview: "למסך בדיקת הזהות",
   prospectTitle: "טרם לקוח",
   prospectHint: "לעסק הזה אין עדיין קישור ללקוח ב־Shopify, ולכן אין היסטוריית הזמנות.",
-  retiredMerged: (name: string) => `העסק אוחד לתוך ${name}`,
+  retiredMerged: (name: string) => `העסק אוחד אל ${name}`,
   retiredGo: (name: string) => `עבור אל ${name}`,
   retiredClosed: "הרשומה הזו סגורה. אין לבצע עליה פעולות.",
   riverTitle: "מה קרה עם העסק",
@@ -402,7 +403,10 @@ export const ORG_UI = {
   contactRejectBody: "איש הקשר יוסר מהרשימה של העסק. המקור שלו נשמר בהיסטוריה.",
   contactRejectConfirm: "כן, דחה",
   contactDecided: (action: string, name: string) =>
-    action === "verify" ? `${name} אומת ✓` : action === "reject" ? `${name} נדחה` : `${name} עודכן ✓`,
+    action === "verify" ? `${name} אומת ✓`
+      : action === "reject" ? `${name} נדחה`
+      : action === "redact" ? `הפרטים של ${name} הוסרו לצורכי פרטיות`
+      : `${name} עודכן ✓`,
   contactUnnamed: "ללא שם",
   leadsTitle: "הלידים של העסק",
   leadsEmpty: "אין לידים לעסק",
@@ -487,7 +491,7 @@ export const ORG_UI = {
   candidateHeldBy: (holder: string) => `כבר שייך לעסק ${holder}`,
   mergeTitle: (org: string, holder: string) => `לאחד את ${org} אל ${holder}?`,
   mergeConsequence: (org: string, holder: string) =>
-    `הלקוח הזה כבר שייך לעסק ${holder}. הרשומה של ${org} תיסגר לצמיתות, והלידים ואנשי הקשר שלה יעברו אל ${holder}. אי אפשר לבטל את זה.`,
+    `הלקוח הזה כבר שייך לעסק ${holder}. הרשומה של ${org} תיסגר לצמיתות. הלידים שלה יעברו אל ${holder}, וגם אנשי הקשר שעוד אין לו. אי אפשר לבטל את זה.`,
   mergeConfirm: "כן, לאחד",
   mergeTargetUnknown: "העסק הקיים",
   reviewMergedOpen: "לעסק",

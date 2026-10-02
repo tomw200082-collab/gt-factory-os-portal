@@ -161,6 +161,9 @@ function OrgsScreen() {
               <button
                 type="button"
                 className="s-btn s-btn-ghost s-glass-btn"
+                // an assignment in flight finishes before the selection closes, or its confirmation is lost (INTER-B-008)
+                disabled={selecting && owner.isPending}
+                title={selecting && owner.isPending ? UI.ownerSavingWait : undefined}
                 onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
               >
                 {selecting ? UI.orgsSelectDone : UI.orgsSelect}

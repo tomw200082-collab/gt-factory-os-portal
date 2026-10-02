@@ -11,6 +11,7 @@ import {
   IDENTITY_REASON_LABELS,
   ORDER_CLASS_LABELS,
   RIVER_EVENT_LABELS,
+  UI,
   contactSourceLabel,
   riverEventLabel,
 } from "@/app/(sales)/_lib/labels";
@@ -74,5 +75,17 @@ describe("contact sources", () => {
   it("names the systems contacts come from, without table names", () => {
     checkAll(CONTACT_SOURCE_LABELS, ["lead", "customer_portal_access", "customer_book", "wa_customer_map", "shopify", "manager"]);
     expect(contactSourceLabel("private_core.something")).not.toContain("private_core");
+  });
+});
+
+describe("merge and contact words say exactly what happens (UX gate rerun)", () => {
+  it("does not promise contacts the destination already has", () => {
+    expect(UI.mergeConsequence("א", "ב")).toContain("שעוד אין");
+  });
+  it("names a privacy removal as one", () => {
+    expect(UI.contactDecided("redact", "נועה")).toContain("לצורכי פרטיות");
+  });
+  it("uses one preposition for one merge", () => {
+    expect(UI.retiredMerged("ב")).toContain("אל ב");
   });
 });
