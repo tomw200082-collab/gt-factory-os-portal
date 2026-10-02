@@ -3462,6 +3462,17 @@
   [data-app="sales"] .s-rp-table thead th {
     font-size: 11.5px;
   }
+  /* a month header may take two lines, so the figures, not "ספט׳ 26 *", set the tile width: under a
+     wider fallback font the header alone pushed 320px from 2 months + total to 1 (CI, tranche 202) */
+  [data-app="sales"] .s-rp-table thead th:not(.s-rp-first) {
+    white-space: normal;
+    line-height: 1.15;
+  }
+  [data-app="sales"] .s-rp-table thead th:not(.s-rp-first) .s-rp-sort {
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 2px;
+  }
 }
 
 /* an edge fade says a table scrolls on */
