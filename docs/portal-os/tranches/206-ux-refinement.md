@@ -103,3 +103,14 @@ Revert the merge commit. No data, permission or API change.
 - src/app/(production)/production/runs/[run_id]/_components/AddMaterialControl.tsx
 - src/app/(production)/production/runs/[run_id]/_components/DoneBar.tsx
 - src/app/(production)/production/runs/[run_id]/report/_components/ReportForm.tsx
+
+## Wave W3 files (sales pending states)
+- src/app/(sales)/_components/BulkBar.tsx
+- src/app/(sales)/_components/BulkOwnerBar.tsx
+- src/app/(sales)/_components/OutcomeSheet.tsx
+- src/app/(sales)/_components/QuickAddSheet.tsx
+
+## Lead fixes (attention pulses kept as pulses)
+- src/app/(ops)/stock/waste-adjustments/page.tsx
+- src/app/(admin)/admin/jobs/page.tsx
+- src/app/(inbox)/inbox/page.tsx
