@@ -4,7 +4,7 @@
 // agedTone too, and importing it back out of the component that renders the
 // card would make the two modules circular.
 
-import type { TodayItemType, TodayRow } from "./types";
+import type { SlaState, TodayItemType, TodayRow } from "./types";
 
 /**
  * Above this, a section count stops being information and becomes an alarm.
@@ -79,4 +79,20 @@ export function budgetSpent(rows: TodayRow[], budget: number): number {
  */
 export function agedTone(ageDays: number, slaHours: number): "muted" | "overdue" {
   return ageDays > slaHours / 24 ? "overdue" : "muted";
+}
+
+/**
+ * Inside a section, only a lead about to pass jumps ahead, soonest deadline first (D-043,
+ * UX gate P0-1). Overdue and on-time leads keep the order they arrived in — the stored
+ * queue direction — exactly as before: sorting a 145-lead overdue backlog first hid every
+ * fresh and hot lead behind the daily cap. The overdue pill still marks them. The server
+ * orders Today the same way; doing it here too keeps it true before the cap is applied.
+ */
+export function bySlaUrgency<T extends { sla_state: SlaState; sla_deadline_at: string | null }>(rows: T[]): T[] {
+  const soon = rows
+    .filter((r) => r.sla_state === "due_soon")
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => (Date.parse(a.r.sla_deadline_at ?? "") || 0) - (Date.parse(b.r.sla_deadline_at ?? "") || 0) || a.i - b.i)
+    .map((x) => x.r);
+  return [...soon, ...rows.filter((r) => r.sla_state !== "due_soon")];
 }

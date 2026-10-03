@@ -907,7 +907,6 @@ export const UI = {
   queueShapeTitle: "צורת התור",
   queueCapLabel: "כמה שיחות ביום",
   queueCapRange: "בין 1 ל־100 שיחות",
-  slaRange: "בין 1 ל־168 שעות",
   eventsLoaded: (n: number) => (n === 1 ? "אירוע אחד" : `${n} אירועים`),
   requiredMark: "(חובה)",
   queueOrderNewest: "חדשים קודם",
@@ -1136,22 +1135,63 @@ export const UI = {
   templateNewLead: "ליד חדש",
   templateReminder: "תזכורת",
   templateReturning: "לקוח חוזר",
-  slaTitle: "זמן תגובה (SLA)",
-  slaHint: "כמה שעות יש לטפל בליד חדש לפני שהוא נצבע באדום.",
-  slaHours: "שעות",
   settingsSaved: "נשמר ✓",
 
-  // SLA badge
-  // slaWithin was deliberately retired in tranche 164: the calm state gets no
-  // badge, so the red one means something. Kept out of the object rather than
-  // left dangling — an unused string is a future mistake.
-  slaOverdue: "עבר זמן",
+  // Response time (D-043, tranche 204). A pill only when it asks for action — about to pass,
+  // or past it. On time is a quiet line of text: a pill on every fresh card is a pill on
+  // nothing (tranche 164, audit P1-3). The time left sits in the card's meta line, so the
+  // pill stays one or two words and the business name and phone never truncate.
+  slaDueSoon: "עומד לעבור",
+  slaOverdue: "עבר הזמן",
+  /** Working time left: minutes under an hour; hours in words up to two and a half. */
+  workLeft: (amount: string) => `עוד ${amount} עבודה`,
+  workMinutes: (m: number) => (m === 1 ? "דקת" : `${m} דקות`),
+  workHours: (h: number) =>
+    h === 1 ? "שעה" : h === 1.5 ? "שעה וחצי" : h === 2 ? "שעתיים" : h === 2.5 ? "שעתיים וחצי" : `${h} שעות`,
+
+  // Settings: זמני תגובה (D-043)
+  rtTitle: "זמני תגובה",
+  rtHint: "הזמן נספר רק בימי העבודה ובשעות העבודה. חגים לא נספרים. השעון רץ מהרגע שהליד נכנס ועד הפנייה הראשונה אליו.",
+  rtDays: "ימי עבודה",
+  rtStart: "משעה",
+  rtEnd: "עד שעה",
+  rtHot: "ליד חם",
+  rtHotHint: "הליד לחץ «אני רוצה להזמין» או «רוצה לשמוע עוד», או כתב לנו בוואטסאפ",
+  rtNormal: "כל ליד אחר",
+  rtHoursUnit: "שעות עבודה",
+  rtDaysEmpty: "בחרו לפחות יום עבודה אחד",
+  rtTimeFormat: "כתבו את השעה כך: 09:00",
+  rtEndBeforeStart: "שעת הסיום צריכה להיות אחרי שעת ההתחלה",
+  rtHoursRange: "בין חצי שעה ל־40 שעות, בחצאי שעות",
+  rtHotSlower: "היעד לליד חם לא יכול להיות ארוך מהיעד לליד רגיל",
+  rtSave: "שמירת זמני התגובה",
+  rtSaved: "נשמר ✓",
+  rtUnsaved: "לא נשמר",
+  rtChangedBy: (actor: string, when: string) => `שונה ע״י ${actor} ${when}`,
+
+  // Attention: the week per rep (D-043)
+  weekTitle: "זמני תגובה · 7 ימים אחרונים",
+  weekHint: "לידים שנכנסו השבוע, ומתי חזרו אליהם",
+  weekOnTime: "ענו בזמן",
+  weekLate: "ענו באיחור",
+  weekOpen: "עוד לא ענו",
+  weekOpenDueSoon: (n: number) => (n === 1 ? "מתוכם אחד עומד לעבור" : `מתוכם ${n} עומדים לעבור`),
+  weekMetLabel: "עמדו ביעד",
+  weekMet: (pct: number, met: number, decided: number) => `${pct}% · ${met} מתוך ${decided}`,
+  weekNoDecided: "עוד אין",
+  weekUnowned: "ללא בעלים",
+  weekEmpty: "לא נכנסו לידים בשבוע האחרון",
+  weekTotal: (n: number) => (n === 1 ? "ליד אחד" : `${n} לידים`),
 
   // errors
   genericError: "משהו השתבש",
   saveFailed: "השמירה נכשלה — נסה שוב",
   sessionExpired: "החיבור פג — רענן את הדף",
 } as const;
+
+/** Working days for the response clock (D-043): short on the toggle, full for its name. 0 = Sunday. */
+export const DAY_SHORT = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"] as const;
+export const DAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
 
 /** The six quick-message situations (D-042), as a rep reads them. */
 export const QUICK_SITUATION_LABELS: Record<QuickSituation, string> = {

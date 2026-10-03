@@ -19,7 +19,7 @@ import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
 import { LeadJourneyRail } from "./LeadJourneyRail";
 import { MiniRail } from "./MiniRail";
-import { SlaBadge } from "./SlaBadge";
+import { SlaBadge, SlaTimeLeft } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 import { atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM } from "../_lib/israelTime";
@@ -228,6 +228,7 @@ export function LeadDrawer({
             <p className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusPill status={lead.status} />
               <SlaBadge state={lead.sla_state} />
+              <SlaTimeLeft state={lead.sla_state} minutesLeft={lead.sla_minutes_left} />
             </p>
             <MiniRail row={lead} />
             {/* Unit B: the business behind the lead, its orders and its people. */}

@@ -13,7 +13,7 @@ import { MiniRail } from "./MiniRail";
 import type { AssigneeEntry, SalesLeadRow } from "../_lib/types";
 import { assigneeName } from "./AssigneePicker";
 import { CustomerBadge } from "./CustomerBadge";
-import { SlaBadge } from "./SlaBadge";
+import { SlaBadge, SlaTimeLeft } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 
 export interface LeadsTableProps {
@@ -36,6 +36,8 @@ function Badges({ row }: { row: SalesLeadRow }) {
     <span className="flex flex-wrap items-center gap-1">
       {row.is_existing_customer ? <CustomerBadge /> : null}
       <SlaBadge state={row.sla_state} />
+      {/* D-043: on time is quiet text, not a pill; the time left never widens the pill */}
+      <SlaTimeLeft state={row.sla_state} minutesLeft={row.sla_minutes_left} />
       {row.possible_duplicate_of ? (
         <span data-testid="duplicate-badge" className="s-badge s-badge-customer">
           {UI.duplicateBadge}
@@ -98,14 +100,15 @@ export function LeadsTable({
             >
               <span className="flex items-start justify-between gap-2">
                 <span className="min-w-0 flex-1">
+                  {/* Wraps, never truncates (tranche 204): the name and phone are what the rep acts on. */}
                   <span
-                    className="block truncate font-semibold"
+                    className="block break-words font-semibold"
                     style={{ color: "hsl(var(--s-fg))" }}
                   >
                     {row.org_name}
                   </span>
                   <span
-                    className="block truncate text-[13px]"
+                    className="block break-words text-[13px]"
                     style={{ color: "hsl(var(--s-fg-muted))" }}
                   >
                     {row.contact_name ? `${row.contact_name} · ` : ""}

@@ -15,6 +15,7 @@ import {
   useAddNote,
   useAssign,
   useAttention,
+  useResponseWeek,
   useLeadEvents,
   useLeads,
   useConvert,
@@ -32,6 +33,7 @@ import { UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { ActivityFeed } from "../../_components/ActivityFeed";
 import { AttentionList } from "../../_components/AttentionList";
+import { ResponseWeek } from "../../_components/ResponseWeek";
 import { LeadDrawer } from "../../_components/LeadDrawer";
 import { OutcomeSheet, nextBusinessTouchPreview } from "../../_components/OutcomeSheet";
 import type { UndoTarget } from "../../_lib/types";
@@ -40,6 +42,8 @@ import { Toast } from "../../_components/Toast";
 export default function AttentionPage() {
   const { session } = useSession();
   const attention = useAttention();
+  // D-043: each rep's last 7 days of first contacts, from the same read.
+  const week = useResponseWeek();
   const activity = useActivity(50);
   const settings = useSettings();
   const leads = useLeads();
@@ -143,6 +147,14 @@ export default function AttentionPage() {
           onOpen={setOpenId}
           onArm={arm}
         />
+      ) : null}
+
+      {/* The week per rep (D-043). Below the buckets: what is stuck now comes first, how
+          the week went second. An older server sends no week: the section stays away. */}
+      {week.isSuccess && week.data ? (
+        <div className="mt-6">
+          <ResponseWeek rows={week.data} roster={roster} />
+        </div>
       ) : null}
 
       {/* Given its own rule and card: on a wide screen the buckets end near the
