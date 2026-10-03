@@ -184,6 +184,7 @@ function DoneConfirmDialog({
             className="btn btn-primary btn-lg w-full gap-2"
             onClick={onConfirm}
             disabled={pending}
+            aria-busy={pending || undefined}
             data-testid="done-confirm-yes"
           >
             {pending ? (

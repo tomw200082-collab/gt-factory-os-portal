@@ -69,3 +69,15 @@ manifest:
 ## Rollback
 
 Revert the merge commit. No data, permission or API change.
+
+## Wave W2 files
+
+- src/app/(planning)/planning/procurement/_components/ActionList.tsx
+- src/app/(planning)/planning/procurement/_components/RecommendationsToConvert.tsx
+- src/app/(planning)/planning/forecast/new/page.tsx
+- src/app/(planning)/planning/runs/page.tsx
+- src/app/(planning)/planning/portal-catalog/page.tsx
+- src/app/(production)/production/_components/UnplannedRunDialog.tsx
+- src/app/(production)/production/runs/[run_id]/_components/AddMaterialControl.tsx
+- src/app/(production)/production/runs/[run_id]/_components/DoneBar.tsx
+- src/app/(production)/production/runs/[run_id]/report/_components/ReportForm.tsx

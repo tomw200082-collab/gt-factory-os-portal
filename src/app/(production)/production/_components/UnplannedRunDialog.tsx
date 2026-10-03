@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Minus, Plus, Search, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { cn } from "@/lib/cn";
 import { t } from "../_lib/copy";
 import { useDialogA11y } from "../_lib/use-dialog-a11y";
@@ -117,6 +118,8 @@ export function UnplannedRunDialog({
     onClose,
     closeDisabled: mutation.isPending,
   });
+
+  const startRef = useLockedWidth<HTMLButtonElement>(mutation.isPending);
 
   if (!open) return null;
 
@@ -358,10 +361,12 @@ export function UnplannedRunDialog({
         {/* Footer actions */}
         <div className="flex items-center gap-2 border-t border-border/70 px-5 py-4">
           <button
+            ref={startRef}
             type="button"
             className="btn btn-primary btn-lg flex-1 gap-2"
             onClick={handleStart}
             disabled={mutation.isPending}
+            aria-busy={mutation.isPending || undefined}
             data-testid="unplanned-run-start"
           >
             {mutation.isPending ? (
