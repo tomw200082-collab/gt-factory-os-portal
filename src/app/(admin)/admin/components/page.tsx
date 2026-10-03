@@ -878,7 +878,9 @@ function ComponentsPageInner(): JSX.Element {
                               handleToggleStatus(r);
                             }}
                             disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
+                            aria-busy={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? "true" : undefined}
                           >
+                            {statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? <span className="btn-spinner" aria-hidden /> : null}
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                           </button>
@@ -985,7 +987,9 @@ function ComponentsPageInner(): JSX.Element {
                         handleToggleStatus(r);
                       }}
                       disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
+                      aria-busy={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? "true" : undefined}
                     >
+                      {statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? <span className="btn-spinner" aria-hidden /> : null}
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                     </button>
@@ -1276,6 +1280,7 @@ function ComponentsPageInner(): JSX.Element {
                       className="btn-primary btn-sm"
                       onClick={handleSaveSupplier}
                       disabled={!pendingSupplier || supplierAssignMutation.isPending}
+                      aria-busy={supplierAssignMutation.isPending ? "true" : undefined}
                     >
                       {supplierAssignMutation.isPending ? "Saving…" : "Save"}
                     </button>

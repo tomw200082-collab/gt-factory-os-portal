@@ -1004,6 +1004,7 @@ function AdminSkuAliasesContent(): JSX.Element {
                           type="button"
                           className="btn btn-sm btn-primary px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                           disabled={!backendLive || !canSelect || approveMutation.isPending}
+                          aria-busy={approveMutation.isPending ? "true" : undefined}
                           onClick={() => {
                             if (!backendLive || !canSelect) return;
                             setBanner(null);
@@ -1024,6 +1025,7 @@ function AdminSkuAliasesContent(): JSX.Element {
                                 : "Assign an item first"
                           }
                         >
+                          {approveMutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
                           Approve
                         </button>
                       </td>
@@ -1051,12 +1053,14 @@ function AdminSkuAliasesContent(): JSX.Element {
                 "btn-primary disabled:cursor-not-allowed disabled:opacity-50",
                 canApprove && backendLive ? "ring-2 ring-accent/30 ring-offset-1" : "",
               )}
-              disabled={!backendLive || !canApprove}
+              disabled={!backendLive || !canApprove || approveMutation.isPending}
+              aria-busy={approveMutation.isPending ? "true" : undefined}
               onClick={handleApprove}
               title={
                 !backendLive ? "Alias approval is not yet available" : undefined
               }
             >
+              {approveMutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
               {approveMutation.isPending
                 ? "Approving…"
                 : selected.size > 0

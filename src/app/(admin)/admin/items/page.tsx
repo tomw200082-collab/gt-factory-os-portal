@@ -837,7 +837,9 @@ function ItemsPageInner(): JSX.Element {
                             className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                             onClick={() => handleToggleStatus(r)}
                             disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
+                            aria-busy={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? "true" : undefined}
                           >
+                            {statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? <span className="btn-spinner" aria-hidden /> : null}
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                           </button>
@@ -965,7 +967,9 @@ function ItemsPageInner(): JSX.Element {
                       className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
                       onClick={() => handleToggleStatus(r)}
                       disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
+                      aria-busy={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? "true" : undefined}
                     >
+                      {statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? <span className="btn-spinner" aria-hidden /> : null}
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                     </button>
