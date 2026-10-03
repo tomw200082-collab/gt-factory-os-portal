@@ -205,7 +205,7 @@ function JobCard({ row }: { row: JobRow }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-sm font-medium text-fg-strong">{row.job_name}</span>
-            <Badge tone={tone} dotted className={isRunning ? "animate-pulse" : undefined}>
+            <Badge tone={tone} dotted className={isRunning ? "animate-pulse-soft" : undefined}>
               {label}
             </Badge>
             {stale && !isFailed && (
@@ -318,7 +318,7 @@ export default function AdminJobsPage() {
                 <Badge tone="success" dotted>all healthy</Badge>
               )}
               {runningJobs > 0 && (
-                <Badge tone="info" dotted className="animate-pulse">
+                <Badge tone="info" dotted className="animate-pulse-soft">
                   {runningJobs} running
                 </Badge>
               )}

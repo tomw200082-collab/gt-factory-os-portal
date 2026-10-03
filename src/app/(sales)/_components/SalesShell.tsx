@@ -11,13 +11,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Activity, ArrowLeftRight, Building2, CalendarCheck, ChartColumn, Plus, Search, Settings, Users } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
 import { useControlAccess, useLeads, useQuickAdd } from "../_lib/api";
 import { noteSalesPath } from "../_lib/salesHistory";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
 import { Toast } from "./Toast";
+import { useRouteReveal } from "@/components/layout/useRouteReveal";
+import { ContentSkeleton } from "@/components/layout/ContentSkeleton";
 import { useSession } from "@/lib/auth/session-provider";
 
 interface Destination {
@@ -76,6 +78,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const destinations = canManageSales ? [...DESTINATIONS, REPORT_DESTINATION] : DESTINATIONS;
   const showControl = useControlAccess(canManageSales).data === true;
   const pathname = usePathname() ?? "";
+  const mainRef = useRouteReveal<HTMLElement>();
   // The report's month tables are the widest thing in the workspace: its body takes the room the page has
   // beyond the usual column, toward the far edge. The rail and the app bar stay exactly where they are on
   // every screen, so moving between screens never moves the navigation.
@@ -214,11 +217,12 @@ export function SalesShell({ children }: { children: ReactNode }) {
         </nav>
 
         <main
+          ref={mainRef}
           id="sales-main"
-          className="min-w-0 flex-1 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] md:pb-24"
+          className="gt-reveal min-w-0 flex-1 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] md:pb-24"
           style={wide ? { marginInlineEnd: "calc(-1 * clamp(0px, (100vw - 1024px) / 2 - 16px, 360px))" } : undefined}
         >
-          {children}
+          <Suspense fallback={<ContentSkeleton />}>{children}</Suspense>
         </main>
       </div>
 

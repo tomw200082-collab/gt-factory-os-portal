@@ -20,6 +20,7 @@ import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useSession } from "@/lib/auth/session-provider";
 import { Users, X, Eye, EyeOff, Copy, KeyRound, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { LockedButton } from "@/components/ui/LockedButton";
 import {
   MAX_PASSWORD_LENGTH,
   localPasswordError,
@@ -258,6 +259,7 @@ function PasswordCell({
           className="btn btn-ghost btn-sm w-fit"
           disabled={state.passwordPending}
           aria-label={`Show password for ${user.display_name}`}
+          aria-busy={state.passwordPending ? "true" : undefined}
           onClick={onReveal}
         >
           <Eye className="mr-1 h-3.5 w-3.5" strokeWidth={2} />
@@ -273,6 +275,7 @@ function PasswordCell({
             type="button"
             className="text-2xs text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
             disabled={state.passwordPending}
+            aria-busy={state.passwordPending ? "true" : undefined}
             onClick={onGenerate}
           >
             <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
@@ -962,11 +965,13 @@ export default function AdminUsersPage() {
                       <td className="px-3 py-2 text-right">
                         <div className="flex flex-col items-end gap-1">
                           {u.status === "active" ? (
-                            <button
+                            <LockedButton
+                              pending={rs.statusPending}
                               type="button"
                               className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger-softer"
                               disabled={rs.statusPending}
                               aria-label={`Deactivate ${u.display_name}`}
+                              aria-busy={rs.statusPending ? "true" : undefined}
                               onClick={async () => {
                                 // UX-flow audit (FLOW-A01): deactivation revokes
                                 // access immediately — confirm first, matching
@@ -986,13 +991,15 @@ export default function AdminUsersPage() {
                               }}
                             >
                               {rs.statusPending ? "…" : "Deactivate"}
-                            </button>
+                            </LockedButton>
                           ) : (
-                            <button
+                            <LockedButton
+                              pending={rs.statusPending}
                               type="button"
                               className="btn btn-ghost btn-sm text-success-fg hover:bg-success-softer"
                               disabled={rs.statusPending}
                               aria-label={`Activate ${u.display_name}`}
+                              aria-busy={rs.statusPending ? "true" : undefined}
                               onClick={async () => {
                                 // UX-flow audit (FLOW-A01): confirm to prevent an
                                 // accidental access re-grant.
@@ -1009,7 +1016,7 @@ export default function AdminUsersPage() {
                               }}
                             >
                               {rs.statusPending ? "…" : "Activate"}
-                            </button>
+                            </LockedButton>
                           )}
                           {rs.statusError && (
                             <span className="text-2xs text-danger-fg">

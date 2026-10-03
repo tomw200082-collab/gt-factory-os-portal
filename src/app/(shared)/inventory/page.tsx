@@ -1278,7 +1278,7 @@ export default function InventoryPage() {
                     className={cn(
                       "rounded-full px-1.5 py-0 text-sm tabular-nums ring-1",
                       isActive
-                        ? "bg-accent-softer text-accent-fg ring-accent/30"
+                        ? "bg-accent-softer text-accent ring-accent/30"
                         : "bg-bg-subtle text-fg-subtle ring-border",
                     )}
                   >
@@ -1527,15 +1527,6 @@ export default function InventoryPage() {
                   ))}
                 </select>
               </div>
-              {refreshing && !isLoading ? (
-                <span className="ml-auto inline-flex items-center gap-1.5 pb-1 text-sm text-fg-subtle">
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-info"
-                  />
-                  Refreshing
-                </span>
-              ) : null}
             </div>
           </div>
 

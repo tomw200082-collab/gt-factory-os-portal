@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Motion tokens — one set for both worlds (tranche 206). The sales tokens
+   (--s-motion, --s-ease, --s-spring, --s-settle) are aliases of these.
+   Exits run at roughly 70 % of the entrance. Animate transform and opacity
+   only. Ambient loops: the GT loader, skeletons and the pending spinners.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --motion-instant: 80ms;  /* press feedback, colour/opacity on hover */
+  --motion-fast: 140ms;    /* small reveals, menus, popovers, exits */
+  --motion-base: 200ms;    /* drawers, dialogs, page content reveal */
+  --motion-slow: 320ms;    /* first reveal of a large region (rare) */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);      /* entrances */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);          /* exits */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* selection/celebration (sales), never layout */
+}
+
 /* ── gt-shimmer — skeleton sweep (states.tsx, FlowNode, WeekPanel) ────── */
 @keyframes gt-shimmer     { from { left: -70%; } to { left: 160%; } }
 
@@ -21,7 +37,7 @@
    Motion is transform and opacity only.
    ══════════════════════════════════════════════════════════════════════════ */
 .gt-loader {
-  --gt-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --gt-settle: var(--ease-out);
   --gt-mark-h: clamp(96px, 28vw, 128px);
   --gt-orbit: calc(var(--gt-mark-h) * 1.9);
   /* A loader that joins a running one (a route boundary under the navigation
@@ -4291,5 +4307,247 @@
   .dash-week-row.is-link:hover {
     border-color: hsl(var(--accent) / 0.5);
     background-color: hsl(var(--accent) / 0.06);
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Tranche 206 — shared UX foundation. Plain CSS, after the Tailwind layers, so
+   none of it is purged and each rule can be placed against the utilities.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── In-world navigation bar (NavigationLoader) ───────────────────────────
+   2 px along the top edge, in the world's accent. Mounted by the loader after
+   120 ms; data-state: start -> creep (to 80 %) -> done (completes, fades). */
+.gt-navbar {
+  --gt-navbar-accent: var(--accent);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 9998; /* under the GT overlay (9999) */
+  pointer-events: none;
+  direction: ltr;
+  opacity: 1;
+}
+.gt-navbar[data-world="sales"] {
+  --gt-navbar-accent: 175 78% 44%; /* --s-action; the bar renders outside [data-app="sales"] */
+}
+.gt-navbar__bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: hsl(var(--gt-navbar-accent));
+  transform-origin: left center;
+  transform: scaleX(0.02);
+}
+.gt-navbar[data-state="creep"] .gt-navbar__bar {
+  transform: scaleX(0.8);
+  transition: transform 8s cubic-bezier(0.1, 0.6, 0.2, 1);
+}
+.gt-navbar[data-state="done"] {
+  opacity: 0;
+  transition: opacity var(--motion-fast) linear 60ms;
+}
+.gt-navbar[data-state="done"] .gt-navbar__bar {
+  transform: scaleX(1);
+  transition: transform 100ms var(--ease-out);
+}
+
+/* ── One skeleton look ────────────────────────────────────────────────────
+   `Skel` (feedback/states.tsx) is a muted block with a soft light sweep. The
+   Tailwind pulse (`animate-pulse`, ~230 uses) renders the same: the opacity
+   pulse is dropped and the sweep is laid over the element. Status dots that
+   pulse on purpose (bg-info/danger/success/warning/accent) keep the pulse.
+   position/overflow sit at zero specificity so a utility (absolute, sticky,
+   overflow-visible) always wins. */
+.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"]) {
+  animation: none;
+}
+:where(.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"])) {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(hsl(var(--fg) / var(--skel-base)), hsl(var(--fg) / var(--skel-base)));
+}
+:where(.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"]))::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 60%;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, hsl(var(--fg) / var(--skel-sweep)), transparent);
+  animation: gt-shimmer-x 1.5s ease-in-out infinite;
+}
+/* The sweep and the base are derived from the foreground, not from a surface
+   token: bg-raised on a bg-raised card (s-card, the forecast cards) drew
+   nothing. A wash of ink is visible on any surface, light or dark. The base
+   tint sits at zero specificity, over whatever background colour the block
+   has, so a utility that sets its own background-image still wins. */
+:root {
+  --skel-sweep: 0.07;
+  --skel-base: 0.05;
+}
+:root.dark {
+  --skel-sweep: 0.09;
+  --skel-base: 0.06;
+}
+/* The in-shell route skeleton (layout/ContentSkeleton). */
+.gt-skel-block {
+  border-radius: 6px;
+  background-color: hsl(var(--bg-subtle));
+}
+/* Same travel as gt-shimmer (left -70% -> 160% of the parent), on transform. */
+@keyframes gt-shimmer-x {
+  from { transform: translateX(-117%); }
+  to   { transform: translateX(267%); }
+}
+
+/* ── Viewport height that follows the mobile browser's bars ───────────────
+   100vh is the tallest viewport (bars hidden), so a min-height of it pushes
+   content under the address bar. dvh tracks the visible one; 100vh stays as
+   the fallback for a browser without it. */
+.min-h-screen-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.max-h-rail-dvh {
+  max-height: calc(100vh - 88px);
+  max-height: calc(100dvh - 88px);
+}
+
+/* ── Pending spinner (Button, the busy ring on .s-btn) ────────────────────────────── */
+@keyframes gt-btn-spin { to { transform: rotate(360deg); } }
+@keyframes gt-spinner-hold {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+.btn-spinner {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  animation: gt-btn-spin 700ms linear infinite;
+}
+/* The spinner replaces a leading icon that sits right after it, in a .btn or
+   in any other busy control (a plain button, a menu item). */
+[aria-busy="true"] > .btn-spinner + svg {
+  display: none;
+}
+/* A pending button is unavailable but still readable. */
+.btn[aria-busy="true"]:disabled {
+  opacity: 0.7;
+}
+
+/* ── Content reveal ───────────────────────────────────────────────────────
+   Page content fades in once per route mount (opacity only, no translate, so
+   layouts never jump). Applied to the shells' <main>; useRouteReveal restarts
+   it when the pathname changes, never on a refetch or a rerender. */
+@keyframes gt-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.gt-reveal {
+  animation: gt-reveal var(--motion-base) var(--ease-out) backwards;
+}
+
+/* ── Overlay motion (Drawer, ConfirmDialog, DropdownMenu) ─────────────────
+   Radix sets data-state="open|closed" and keeps the node mounted until the
+   exit animation ends, so one set of keyframes covers both directions. The
+   project has no tailwindcss-animate, so animate-in / slide-* classes did
+   nothing; these replace them. Drawer: from the edge, --motion-base in,
+   --motion-fast out. Dialog: opacity and scale .97 at --motion-fast. Menu:
+   opacity and a 4px slide away from the trigger at --motion-fast. Reduced
+   motion is the global rule (durations collapse, nothing repeats). */
+@keyframes gt-overlay-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gt-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gt-drawer-in   { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes gt-drawer-out  { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes gt-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes gt-dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+}
+@keyframes gt-menu-in {
+  from { opacity: 0; transform: translate(var(--gt-menu-x, 0), var(--gt-menu-y, 0)); }
+  to   { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes gt-menu-out {
+  from { opacity: 1; transform: translate(0, 0); }
+  to   { opacity: 0; transform: translate(var(--gt-menu-x, 0), var(--gt-menu-y, 0)); }
+}
+.gt-overlay[data-state="open"]  { animation: gt-overlay-in var(--gt-overlay-in, var(--motion-fast)) var(--ease-out) both; }
+.gt-overlay[data-state="closed"] { animation: gt-overlay-out var(--motion-fast) var(--ease-in) both; }
+.gt-drawer-panel[data-state="open"]  { animation: gt-drawer-in var(--motion-base) var(--ease-out) both; }
+.gt-drawer-panel[data-state="closed"] { animation: gt-drawer-out var(--motion-fast) var(--ease-in) both; }
+.gt-dialog-panel[data-state="open"]  { animation: gt-dialog-in var(--motion-fast) var(--ease-out) both; }
+.gt-dialog-panel[data-state="closed"] { animation: gt-dialog-out var(--motion-fast) var(--ease-in) both; }
+.gt-menu[data-side="bottom"] { --gt-menu-y: -4px; }
+.gt-menu[data-side="top"]    { --gt-menu-y: 4px; }
+.gt-menu[data-side="left"]   { --gt-menu-x: 4px; }
+.gt-menu[data-side="right"]  { --gt-menu-x: -4px; }
+.gt-menu[data-state="open"]  { animation: gt-menu-in var(--motion-fast) var(--ease-out) both; }
+.gt-menu[data-state="closed"] { animation: gt-menu-out var(--motion-fast) var(--ease-in) both; }
+
+/* ── Refresh hint (feedback/RefreshHint) ──────────────────────────────── */
+.gt-refresh-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.25rem; /* reserved: the hint appearing never moves the page */
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: hsl(var(--fg-subtle, var(--fg-muted)));
+}
+.gt-refresh-hint__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+.gt-refresh-hint[data-active="true"] .gt-refresh-hint__inner {
+  opacity: 1;
+}
+.gt-refresh-hint__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────
+   One global rule: animation and transition durations collapse to 0.01 ms and
+   nothing repeats. The GT loader keeps its own reduced variant (above), the
+   skeleton sweep is dropped (the block stays, static), and the pending
+   spinners fall back to a slow opacity pulse so "working" still reads.
+   :where() keeps the global rule at zero specificity, so the exceptions win. */
+@media (prefers-reduced-motion: reduce) {
+  :where(*:not(.gt-loader):not(.gt-loader *)),
+  :where(*:not(.gt-loader):not(.gt-loader *))::before,
+  :where(*:not(.gt-loader):not(.gt-loader *))::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-pulse::after {
+    display: none !important;
+  }
+  .btn-spinner,
+  .animate-spin,
+  [data-app="sales"] .s-btn[aria-busy="true"]::after {
+    animation: gt-spinner-hold 1.4s ease-in-out infinite !important;
+    border-inline-end-color: currentColor;
   }
 }

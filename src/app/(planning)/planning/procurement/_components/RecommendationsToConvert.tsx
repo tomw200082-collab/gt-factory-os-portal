@@ -189,6 +189,7 @@ export function RecommendationsToConvert(): JSX.Element | null {
                   type="button"
                   onClick={() => void handleConvert(rec)}
                   disabled={pending}
+                  aria-busy={pending || undefined}
                   className="btn btn-primary btn-sm"
                   data-testid="procurement-convert-rec"
                 >

@@ -29,6 +29,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { ErrorState, SkeletonRow } from "@/components/feedback/states";
 import { useCapability } from "@/lib/auth/role-gate";
 import { fetchJson } from "@/lib/http/fetchJson";
@@ -153,6 +154,8 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
   const set = (patch: Partial<Availability>) => setDraft((d) => ({ ...d, ...patch }));
   const text = (v: string) => (v.trim() === "" ? null : v);
 
+  const toggleRef = useLockedWidth<HTMLButtonElement>(save.isPending);
+
   return (
     <li className="space-y-3 px-5 py-4" data-testid={`catalog-row-${row.sku}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -171,10 +174,12 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
+            ref={toggleRef}
             type="button"
             role="switch"
             id={`avail-${row.sku}`}
             aria-checked={row.available}
+            aria-busy={save.isPending || undefined}
             disabled={!canEdit || save.isPending}
             onClick={() => save.mutate([[row.sku, { ...bodyOf(row), available: !row.available }]])}
             className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60"

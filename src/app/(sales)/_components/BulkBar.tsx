@@ -8,6 +8,7 @@
 // an assignment with no due date lands in a name but in nobody's queue.
 
 import { useState } from "react";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { UI } from "../_lib/labels";
 import { toDateInputValue } from "../_lib/format";
 import { AssigneePicker } from "./AssigneePicker";
@@ -28,6 +29,7 @@ export interface BulkBarProps {
 export function BulkBar({ count, roster, busy, error = null, onAssign, onClear }: BulkBarProps) {
   const [assignee, setAssignee] = useState<string | null>(null);
   const [date, setDate] = useState(toDateInputValue(new Date()));
+  const assignRef = useLockedWidth<HTMLButtonElement>(Boolean(busy));
 
   return (
     <div
@@ -58,10 +60,13 @@ export function BulkBar({ count, roster, busy, error = null, onAssign, onClear }
       />
 
       <button
+        ref={assignRef}
         type="button"
         data-testid="bulk-assign-confirm"
-        className="s-btn s-btn-primary"
+        // min-width holds the busy label and its ring (the lock covers only a shrink).
+        className="s-btn s-btn-primary min-w-[6.5rem]"
         disabled={busy || !assignee || !date}
+        aria-busy={busy || undefined}
         onClick={() => {
           if (!assignee || !date) return;
           onAssign(assignee, new Date(`${date}T09:00:00`).toISOString());

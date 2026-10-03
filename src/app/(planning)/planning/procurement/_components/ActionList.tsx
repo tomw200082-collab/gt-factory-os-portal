@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { formatIls } from "@/lib/utils/format-money";
 import { cn } from "@/lib/cn";
 import type {
@@ -155,12 +156,16 @@ function CountMarkToggle({
     },
   });
 
+  const ref = useLockedWidth<HTMLButtonElement>(mutation.isPending);
+
   return (
     <div className="flex items-center gap-2">
       <button
+        ref={ref}
         type="button"
         aria-pressed={isMarked}
         disabled={mutation.isPending || marksQuery.isLoading}
+        aria-busy={mutation.isPending || undefined}
         onClick={() => mutation.mutate(!isMarked)}
         title={
           isMarked
@@ -177,6 +182,7 @@ function CountMarkToggle({
         )}
         data-testid={`procurement-count-mark-${componentId}`}
       >
+        {mutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
         {isMarked ? (
           <CheckCircle2 className="h-3 w-3" aria-hidden />
         ) : (

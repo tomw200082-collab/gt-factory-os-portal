@@ -84,7 +84,7 @@ export default function ClickToSigninPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg p-6">
+    <div className="flex min-h-screen-dvh items-center justify-center bg-bg p-6">
       <div className="w-full max-w-sm rounded-lg border border-border/70 bg-bg-raised p-8 text-center shadow-sm">
         <h1 className="text-lg font-semibold text-fg-strong">
           Sign in to GT Factory OS

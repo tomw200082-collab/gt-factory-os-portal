@@ -268,6 +268,7 @@ export function FgOutPickUndoControl({
               )}
               onClick={() => mutation.mutate()}
               disabled={mutation.isPending}
+              aria-busy={mutation.isPending ? "true" : undefined}
               data-testid="fg-out-pick-undo-confirm"
             >
               {mutation.isPending ? "Undoing…" : "Confirm undo"}

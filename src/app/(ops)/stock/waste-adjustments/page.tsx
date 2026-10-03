@@ -854,7 +854,7 @@ export default function WasteAdjustmentPage() {
                     className={cn(
                       "input min-h-[3rem] w-full transition-colors duration-150",
                       notesRequired && notesAttempted && !notes.trim()
-                        ? "border-danger animate-pulse"
+                        ? "border-danger animate-pulse-soft"
                         : ""
                     )}
                     rows={2}

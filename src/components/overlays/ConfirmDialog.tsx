@@ -27,6 +27,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useRestoreFocus } from "./useRestoreFocus";
 
 export interface ConfirmOptions {
   /** Dialog heading — name the affected entity by its human name, not an id. */
@@ -104,8 +105,14 @@ function ConfirmDialogView({
   onSettle: (ok: ConfirmResult) => void;
 }): JSX.Element {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRestoreFocus();
   const open = pending !== null;
-  const tone = pending?.tone ?? "default";
+  // Keep the last request while the exit animation runs, so the dialog fades
+  // out with its own text instead of blanking first.
+  const lastRef = useRef<Pending | null>(null);
+  if (pending) lastRef.current = pending;
+  const shown = pending ?? lastRef.current;
+  const tone = shown?.tone ?? "default";
 
   return (
     <Dialog.Root
@@ -118,14 +125,14 @@ function ConfirmDialogView({
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            "fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]",
-            "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out data-[state=open]:fade-in",
+            "gt-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]",
           )}
         />
         <Dialog.Content
           role="alertdialog"
+          onCloseAutoFocus={restoreFocus.onCloseAutoFocus}
           onOpenAutoFocus={(e) => {
+            restoreFocus.onOpenAutoFocus();
             // Default focus to Cancel so an accidental Enter never confirms.
             e.preventDefault();
             cancelRef.current?.focus();
@@ -133,22 +140,20 @@ function ConfirmDialogView({
           className={cn(
             "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2",
             "rounded-lg border border-border/70 bg-bg-raised p-5 shadow-pop",
-            "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out data-[state=open]:fade-in",
-            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "gt-dialog-panel",
           )}
         >
           <Dialog.Title className="text-base font-semibold tracking-tightish text-fg-strong">
-            {pending?.title ?? ""}
+            {shown?.title ?? ""}
           </Dialog.Title>
-          {pending?.description ? (
+          {shown?.description ? (
             <Dialog.Description className="mt-2 text-sm leading-relaxed text-fg-muted">
-              {pending.description}
+              {shown.description}
             </Dialog.Description>
           ) : (
             // Radix warns without a Description; emit a visually-hidden one.
             <Dialog.Description className="sr-only">
-              {pending?.srFallbackDescription ?? "Please confirm this action."}
+              {shown?.srFallbackDescription ?? "Please confirm this action."}
             </Dialog.Description>
           )}
           <div className="mt-5 flex justify-end gap-2">
@@ -158,16 +163,16 @@ function ConfirmDialogView({
               className="btn btn-ghost btn-sm"
               onClick={() => onSettle(false)}
             >
-              {pending?.cancelLabel ?? "Cancel"}
+              {shown?.cancelLabel ?? "Cancel"}
             </button>
-            {pending?.extraLabel ? (
+            {shown?.extraLabel ? (
               <button
                 type="button"
                 className="btn btn-sm"
                 onClick={() => onSettle("extra")}
                 data-testid="confirm-dialog-extra"
               >
-                {pending.extraLabel}
+                {shown.extraLabel}
               </button>
             ) : null}
             <button
@@ -178,7 +183,7 @@ function ConfirmDialogView({
               )}
               onClick={() => onSettle(true)}
             >
-              {pending?.confirmLabel ?? "Confirm"}
+              {shown?.confirmLabel ?? "Confirm"}
             </button>
           </div>
         </Dialog.Content>

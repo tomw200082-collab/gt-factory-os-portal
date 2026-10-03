@@ -119,12 +119,12 @@
   /* The 1px of light along a surface's top edge. Cheap, and it is most of the
      difference between "a rectangle" and "a thing sitting under a light". */
   --s-sheen: inset 0 1px 0 hsl(0 0% 100% / 0.7);
-  --s-motion: 170ms;
-  --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --s-motion: var(--motion-fast);
+  --s-ease: var(--ease-out);
   /* D1 motion: a spring that overshoots once for things that arrive, an
      expo-out for things that settle. Neither is linear or ease-in-out. */
-  --s-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --s-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --s-spring: var(--ease-spring);
+  --s-settle: var(--ease-out);
   /* the journey flow's stage inks (fills and strokes on petrol, never text) */
   --s-flow-created: 217 88% 66%;
   --s-flow-outreach: 199 88% 62%;
@@ -722,9 +722,6 @@
   [data-app="sales"] .s-tab {
     transition: none;
   }
-  [data-app="sales"] .s-btn[aria-busy="true"]::after {
-    animation: none;
-  }
   /* The loading skeleton uses Tailwind's animate-pulse. This portal has no
      global reduced-motion rule — it disables motion class by class — so
      without this line the skeleton keeps pulsing at someone who asked it not
@@ -1245,10 +1242,19 @@
   border-radius: 50%;
   border: 2px solid currentColor;
   border-inline-end-color: transparent;
-  animation: s-spin 700ms linear infinite;
+  animation: gt-btn-spin 700ms linear infinite;
 }
-@keyframes s-spin {
-  to { transform: rotate(360deg); }
+
+/* The skeleton look on the sales card: the card's own ground hides the
+   factory tint and sweep, so both come from the sales ink. */
+[data-app="sales"] .animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"]) {
+  background-image: linear-gradient(hsl(var(--s-fg) / var(--skel-base)), hsl(var(--s-fg) / var(--skel-base)));
+}
+[data-app="sales"] .s-card.animate-pulse::after {
+  background: linear-gradient(to right, transparent, hsl(var(--s-fg) / var(--skel-sweep)), transparent);
+}
+[data-app="sales"] .gt-skel-block {
+  background-color: hsl(var(--s-fg) / 0.04);
 }
 
 /* --- GT Pulse D1, corridor-wide (tranche 187) ------------------------------ */

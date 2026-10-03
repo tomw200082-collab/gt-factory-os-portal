@@ -242,6 +242,7 @@ export function BomLineRow({
               type="button"
               onClick={() => del.mutate()}
               disabled={del.isPending}
+              aria-busy={del.isPending ? "true" : undefined}
               className="rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {del.isPending ? "Removing…" : "Delete"}

@@ -387,14 +387,15 @@ function UserMenu({ compact = false }: UserMenuProps) {
 
 function BrandMark() {
   // GT Everyday brand logo. Source asset at /public/brand/logo.png is
-  // white-on-transparent. Tailwind `invert dark:invert-0` flips the colors:
+  // white-on-transparent; it is 971px, so the bar draws logo-80.png (the same
+  // art at 80x80, alpha kept: 2x for the 40px it is shown at). Tailwind `invert dark:invert-0` flips the colors:
   //   light theme → invert(100%) → renders BLACK on the page background
   //   dark  theme → invert(0)    → stays WHITE
   // (Tom-locked 2026-04-28: white in dark, black in light — logo only.)
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/brand/logo.png"
+      src="/brand/logo-80.png"
       alt="GT Everyday"
       width={40}
       height={40}

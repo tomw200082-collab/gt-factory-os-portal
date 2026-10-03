@@ -100,6 +100,7 @@ function InlineRestoreConfirm({
         type="button"
         className="font-semibold underline hover:no-underline"
         disabled={isPending}
+        aria-busy={isPending ? "true" : undefined}
         onClick={onConfirm}
       >
         {isPending ? "Restoring…" : "Yes, restore"}

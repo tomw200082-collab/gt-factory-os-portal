@@ -1033,6 +1033,7 @@ export function PlacementRow({
               // INTER-104 — the late-reason requirement used to fire only after
               // the click, unlike every other gate on this surface.
               disabled={scheduleMut.isPending || !!scheduleBlockedReason}
+              aria-busy={scheduleMut.isPending ? "true" : undefined}
               title={scheduleBlockedReason ?? undefined}
               data-testid={`placement-schedule-submit-${po.po_id}`}
             >
@@ -1152,6 +1153,7 @@ export function PlacementRow({
               type="button"
               onClick={() => void handleCancel()}
               disabled={!composedReason || cancelMut.isPending}
+              aria-busy={cancelMut.isPending ? "true" : undefined}
               title={!composedReason ? "יש לבחור סיבת ביטול" : undefined}
               className="btn btn-sm border border-danger/50 bg-danger-softer text-danger-fg hover:bg-danger/10"
               data-testid={`placement-cancel-submit-${po.po_id}`}
@@ -1647,6 +1649,7 @@ export function PlacementRow({
                   }}
                   aria-disabled={!canPlace || undefined}
                   disabled={placeMut.isPending}
+                  aria-busy={placeMut.isPending ? "true" : undefined}
                   aria-describedby={
                     !canPlace ? `placement-blocked-${po.po_id}` : undefined
                   }

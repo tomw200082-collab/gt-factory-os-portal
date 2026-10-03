@@ -27,13 +27,14 @@
 //  19. Mobile card layout at <md — touch targets ≥44px, no horizontal scroll.
 //  20. Click row → side drawer with full row detail incl. raw IDs collapsed.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { FgOutPauseControl } from "@/components/stock/FgOutPauseControl";
+import { RefreshHint } from "@/components/feedback/RefreshHint";
 import { FgOutPickUndoControl } from "@/components/stock/FgOutPickUndoControl";
 import { useSession } from "@/lib/auth/session-provider";
 import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
@@ -454,6 +455,19 @@ function DetailsDrawer({
     setUndoDone(false);
   }, [row?.movement_id]);
 
+  // Focus moves into the drawer when it opens and goes back to whatever opened
+  // it (the table row) when it closes, instead of dropping to <body>.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const isOpen = row !== null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => {
+      opener?.focus?.();
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (!row) return;
     function onKey(e: KeyboardEvent) {
@@ -508,7 +522,9 @@ function DetailsDrawer({
         aria-hidden
       />
       <div
-        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-bg shadow-xl sm:w-[28rem]"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-bg shadow-xl outline-none sm:w-[28rem]"
         role="dialog"
         aria-modal="true"
         aria-label="Movement details"
@@ -1563,18 +1579,7 @@ export default function MovementLogPage() {
           >
             Clear
           </button>
-          {isFetching && !isLoading ? (
-            <span
-              className="ml-1 inline-flex items-center gap-1.5 text-2xs text-fg-subtle"
-              aria-live="polite"
-            >
-              <span
-                aria-hidden
-                className="h-1.5 w-1.5 animate-pulse rounded-full bg-info"
-              />
-              Refreshing
-            </span>
-          ) : null}
+          <RefreshHint active={isFetching && !isLoading} className="ml-1" />
         </div>
       </SectionCard>
 
@@ -1676,7 +1681,8 @@ export default function MovementLogPage() {
                     iso={dayRows[0].event_at}
                     count={dayRows.length}
                   />
-                  <table className="min-w-full text-sm">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-border/40 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         <th className="py-2 pr-4">Time</th>
@@ -1760,6 +1766,7 @@ export default function MovementLogPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               ))}
             </div>

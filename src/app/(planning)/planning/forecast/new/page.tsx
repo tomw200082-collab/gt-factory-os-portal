@@ -57,6 +57,7 @@ import {
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { NotesBox } from "@/components/fields/NotesBox";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
 import { cn } from "@/lib/cn";
@@ -164,6 +165,9 @@ export default function NewForecastDraftPage() {
     },
   });
 
+  const isSubmitting = openMut.isPending;
+  const submitRef = useLockedWidth<HTMLButtonElement>(isSubmitting);
+
   if (!canAuthor) {
     return (
       <>
@@ -221,7 +225,6 @@ export default function NewForecastDraftPage() {
         : "Daily";
   const horizonText =
     cadence === "monthly" ? "2-month horizon" : "8-week horizon";
-  const isSubmitting = openMut.isPending;
 
   // Field validation — show inline below input. Pure derivation, no state.
   const horizonError =
@@ -490,9 +493,11 @@ export default function NewForecastDraftPage() {
 
             <div className="flex items-center gap-2">
               <button
+                ref={submitRef}
                 type="submit"
                 className="btn btn-primary btn-sm cta-arrow-host gap-1.5"
                 disabled={isSubmitting || !!horizonError}
+                aria-busy={isSubmitting || undefined}
                 data-testid="forecast-new-submit"
               >
                 {isSubmitting ? (

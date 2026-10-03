@@ -24,6 +24,7 @@ import { Play, Loader2 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
@@ -243,6 +244,8 @@ export default function PlanningRunsListPage() {
 
   const filteredRows = useMemo(() => rows, [rows]);
 
+  const triggerRef = useLockedWidth<HTMLButtonElement>(triggerMutation.isPending);
+
   return (
     <div className="space-y-6">
       <WorkflowHeader
@@ -253,9 +256,11 @@ export default function PlanningRunsListPage() {
         actions={
           canAuthor ? (
             <button
+              ref={triggerRef}
               type="button"
               onClick={() => triggerMutation.mutate()}
               disabled={triggerMutation.isPending}
+              aria-busy={triggerMutation.isPending || undefined}
               className="btn btn-primary btn-sm gap-1.5"
               data-testid="planning-runs-trigger-btn"
             >

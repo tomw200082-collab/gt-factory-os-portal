@@ -28,7 +28,7 @@ export function QuantityInput({
         <span className="text-xs font-bold uppercase tracking-sops text-fg-subtle">
           Target output
         </span>
-        <div className="flex items-baseline gap-2 rounded-md border border-border/70 bg-bg-raised px-4 transition-colors focus-within:border-accent">
+        <div className="flex items-baseline gap-2 rounded-md border border-border/70 bg-bg-raised px-4 transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
           <input
             type="number"
             inputMode="numeric"

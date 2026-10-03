@@ -38,8 +38,8 @@ export default function SignOutPage() {
 
   return (
     <main
+      className="min-h-screen-dvh"
       style={{
-        minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",

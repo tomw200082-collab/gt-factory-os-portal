@@ -393,7 +393,7 @@ export default function PlanningBlockersPage() {
         <>
           {/* Desktop table */}
           <div
-            className="hidden sm:block card overflow-hidden p-0"
+            className="hidden sm:block card overflow-x-auto p-0"
             data-testid="blockers-table"
           >
             <table className="w-full text-sm">

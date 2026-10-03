@@ -193,7 +193,7 @@ describe("NavigationLoader: links that do not change the pathname", () => {
   });
 
   it("does treat the root as its own page", () => {
-    nav.pathname = "/home";
+    nav.pathname = "/sales/today";
     render(<NavigationLoader />);
     fireEvent.click(link("/"));
     expect(loader()).not.toBeNull();
@@ -609,5 +609,190 @@ describe("NavigationLoader: hard load with a server-rendered loader", () => {
     expect(loader()!.getAttribute("data-leaving")).toBe("true");
     advance(EXIT_MS);
     expect(loader()).toBeNull();
+  });
+});
+
+
+// ── Tranche 206: inside one world there is no overlay, only a thin bar ───────
+// Factory to factory and sales to sales keep the shell interactive: a 2 px bar
+// in the world's accent, shown only after 120 ms, creeping to about 80 % and
+// completing on the pathname commit, with aria-busy on <main> while it is
+// pending. Only a move across worlds mounts the GT overlay (tests above).
+describe("NavigationLoader: same world shows a progress bar, not the overlay", () => {
+  const BAR_DELAY_MS = 120;
+  const BAR_REMOVE_MS = 240;
+  const extras: HTMLElement[] = [];
+  function mainEl() {
+    const el = document.createElement("main");
+    el.id = "main-content";
+    document.body.appendChild(el);
+    extras.push(el);
+    return el;
+  }
+  const bar = () => document.querySelector<HTMLElement>("[data-gt-navbar]");
+  afterEach(() => {
+    for (const e of extras.splice(0)) e.remove();
+  });
+
+  it("mounts no overlay for a factory to factory link, and nothing is inert", () => {
+    const main = mainEl();
+    nav.pathname = "/home";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    expect(loader()).toBeNull();
+    advance(1000);
+    expect(loader()).toBeNull();
+    expect(document.querySelector("[inert]")).toBeNull();
+    expect(main.hasAttribute("inert")).toBe(false);
+  });
+
+  it("mounts no overlay for a sales to sales link", () => {
+    mainEl();
+    nav.pathname = "/sales/today";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/leads"));
+    advance(1000);
+    expect(loader()).toBeNull();
+    expect(bar()!.getAttribute("data-world")).toBe("sales");
+  });
+
+  it("shows the bar only after 120 ms, in the world's accent", () => {
+    mainEl();
+    nav.pathname = "/home";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(BAR_DELAY_MS - 1);
+    expect(bar()).toBeNull();
+    advance(1);
+    expect(bar()).not.toBeNull();
+    expect(bar()!.getAttribute("data-world")).toBe("factory");
+    expect(bar()!.getAttribute("data-state")).toBe("creep");
+    expect(bar()!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("sets aria-busy on <main> from the click until the commit", () => {
+    const main = mainEl();
+    const { rerender } = render(<NavigationLoader />);
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+    fireEvent.click(link("/stock/receipts"));
+    expect(main.getAttribute("aria-busy")).toBe("true");
+    advance(500);
+    expect(main.getAttribute("aria-busy")).toBe("true");
+    nav.pathname = "/stock/receipts";
+    rerender(<NavigationLoader />);
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("completes and fades on the pathname commit, then unmounts", () => {
+    mainEl();
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(BAR_DELAY_MS + 200);
+    expect(bar()!.getAttribute("data-state")).toBe("creep");
+    nav.pathname = "/stock/receipts";
+    rerender(<NavigationLoader />);
+    expect(bar()!.getAttribute("data-state")).toBe("done");
+    advance(BAR_REMOVE_MS - 1);
+    expect(bar()).not.toBeNull();
+    advance(1);
+    expect(bar()).toBeNull();
+  });
+
+  it("never shows a bar when the page commits within 120 ms", () => {
+    const main = mainEl();
+    const { rerender } = render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(BAR_DELAY_MS - 40);
+    nav.pathname = "/stock/receipts";
+    rerender(<NavigationLoader />);
+    advance(1000);
+    expect(bar()).toBeNull();
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("gives up at the 6 s safety valve: busy cleared, bar completed", () => {
+    const main = mainEl();
+    render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(5999);
+    expect(main.getAttribute("aria-busy")).toBe("true");
+    advance(1);
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+    expect(bar()!.getAttribute("data-state")).toBe("done");
+    advance(BAR_REMOVE_MS);
+    expect(bar()).toBeNull();
+  });
+
+  it("a click on the current page abandons a pending bar", () => {
+    const main = mainEl();
+    nav.pathname = "/stock/receipts";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/home"));
+    advance(BAR_DELAY_MS + 50);
+    expect(bar()).not.toBeNull();
+    fireEvent.click(link("/stock/receipts?tab=2"));
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+    advance(BAR_REMOVE_MS);
+    expect(bar()).toBeNull();
+  });
+
+  it("a cross-world click replaces the bar with the overlay", () => {
+    const main = mainEl();
+    nav.pathname = "/home";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(BAR_DELAY_MS + 50);
+    expect(bar()).not.toBeNull();
+    fireEvent.click(link("/sales/today"));
+    expect(loader()!.getAttribute("data-variant")).toBe("sales");
+    expect(bar()).toBeNull();
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("while the overlay is up, a same-world click keeps the one overlay", () => {
+    mainEl();
+    nav.pathname = "/home";
+    render(<NavigationLoader />);
+    fireEvent.click(link("/sales/today"));
+    advance(BAR_DELAY_MS + 50);
+    fireEvent.click(link("/stock/receipts"));
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    advance(1000);
+    expect(bar()).toBeNull();
+  });
+
+  it.each([
+    ["a modified click", { metaKey: true }],
+    ["a middle click", { button: 1 }],
+  ])("ignores %s", (_n, init) => {
+    const main = mainEl();
+    render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"), init);
+    advance(1000);
+    expect(bar()).toBeNull();
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("a second same-world click does not restart or stack the bar", () => {
+    mainEl();
+    render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(BAR_DELAY_MS + 50);
+    const first = bar();
+    fireEvent.click(link("/inventory"));
+    advance(200);
+    expect(document.querySelectorAll("[data-gt-navbar]")).toHaveLength(1);
+    expect(bar()).toBe(first);
+  });
+
+  it("clears its timers and aria-busy on unmount", () => {
+    const main = mainEl();
+    const { unmount } = render(<NavigationLoader />);
+    fireEvent.click(link("/stock/receipts"));
+    advance(BAR_DELAY_MS + 50);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(main.hasAttribute("aria-busy")).toBe(false);
+    expect(bar()).toBeNull();
   });
 });

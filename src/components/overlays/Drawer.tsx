@@ -43,6 +43,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/cn";
+import { useRestoreFocus } from "./useRestoreFocus";
 
 // ---------------------------------------------------------------------------
 // Stack context — tracks open drawers in insertion order.
@@ -210,6 +211,7 @@ export function Drawer({
   const reactId = useId();
   const id = testId ?? reactId;
   const stack = useDrawerStack();
+  const restoreFocus = useRestoreFocus();
 
   // Register/unregister with the stack based on open state.
   useEffect(() => {
@@ -291,19 +293,20 @@ export function Drawer({
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            "fixed inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity duration-200",
+            "gt-overlay [--gt-overlay-in:var(--motion-base)] fixed inset-0 bg-black/40 backdrop-blur-[1px]",
             // Each nested overlay dims the area a bit more than its parent.
             zClass.overlay,
           )}
         />
         <Dialog.Content
+          onOpenAutoFocus={restoreFocus.onOpenAutoFocus}
+          onCloseAutoFocus={restoreFocus.onCloseAutoFocus}
           onEscapeKeyDown={handleEscapeKeyDown}
           onInteractOutside={handleInteractOutside}
           className={cn(
             "fixed right-0 top-0 flex h-full w-full flex-col bg-bg-raised shadow-xl",
             "border-l border-border/70",
-            "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+            "gt-drawer-panel",
             DRAWER_WIDTH_CLASS[width],
             zClass.content,
           )}
