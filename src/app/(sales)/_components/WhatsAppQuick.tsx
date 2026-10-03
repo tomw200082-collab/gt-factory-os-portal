@@ -10,7 +10,7 @@
 // button that says why, and nothing is armed. The call next to it stays.
 
 import { useId, useRef, useState } from "react";
-import { MessageCircle } from "lucide-react";
+import { Check, MessageCircle } from "lucide-react";
 import { QUICK_SITUATION_LABELS, UI } from "../_lib/labels";
 import { waHref } from "../_lib/wa";
 import { QUICK_SITUATIONS, isOptedOut, quickMessageFor, suggestedSituation, type QuickLead } from "../_lib/quickMessages";
@@ -108,6 +108,10 @@ export function WhatsAppQuick({ leadId, phone, lead, settings, onArm, testId, to
                   setPicking(false);
                 }}
               >
+                {/* the current choice is marked by a check, not by colour alone */}
+                <span className="s-wa-situation-mark" aria-hidden>
+                  {s === situation ? <Check size={16} /> : null}
+                </span>
                 {QUICK_SITUATION_LABELS[s]}
               </button>
             </li>

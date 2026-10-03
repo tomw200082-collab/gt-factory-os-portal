@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BulkBar } from "@/app/(sales)/_components/BulkBar";
 import { SettingsForm } from "@/app/(sales)/_components/SettingsForm";
+import { SignersArea } from "@/app/(sales)/_components/SignersArea";
 import { AttentionList } from "@/app/(sales)/_components/AttentionList";
 import { LeadsTable } from "@/app/(sales)/_components/LeadsTable";
 import { UI } from "@/app/(sales)/_lib/labels";
@@ -79,8 +80,10 @@ describe("settings form", () => {
   it("will not offer to save an invalid daily cap", () => {
     // The submit handler already refused it; the button did not, so the only
     // feedback for a bad value was a press that did nothing.
+    // Tranche 205: the queue has its own save, offered once something changed.
     render(<SettingsForm settings={settings} onSave={noop} />);
-    const save = screen.getByTestId("settings-save") as HTMLButtonElement;
+    const save = screen.getByTestId("queue-save") as HTMLButtonElement;
+    fireEvent.change(screen.getByTestId("queue-cap"), { target: { value: "12" } });
     expect(save.disabled).toBe(false);
 
     fireEvent.change(screen.getByTestId("queue-cap"), { target: { value: "0" } });
@@ -102,10 +105,12 @@ describe("settings form", () => {
     // deactivated in /admin/users, which is the only registry now (D6) — but the
     // count is exactly the fact an admin needs before going there, so it stays
     // and is no longer conditional on anything.
+    // Tranche 205: the roster lives in the signers area now.
     render(
-      <SettingsForm
-        settings={settings}
+      <SignersArea
+        assignees={settings.assignees}
         openLeadsByAssignee={{ "dana@gt.co.il": 4 }}
+        change={null} saving={false} saved={false} error={null}
         onSave={noop}
       />,
     );
@@ -124,7 +129,7 @@ describe("settings form", () => {
 
   it("sends the reader to the one place a person can be added or removed", () => {
     // A list you cannot edit and that does not say why reads as broken.
-    render(<SettingsForm settings={settings} onSave={noop} />);
+    render(<SignersArea assignees={settings.assignees} change={null} saving={false} saved={false} error={null} onSave={noop} />);
     expect(screen.getByTestId("people-registry-link").getAttribute("href")).toBe(
       "/admin/users",
     );

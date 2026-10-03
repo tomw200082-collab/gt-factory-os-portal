@@ -7,7 +7,7 @@
 // synthetic lead, signed by the person looking at it — the same signer the WhatsApp
 // button uses for them.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { QUICK_SITUATION_LABELS, QUICK_VARIABLE_LABELS, UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
 import { QUICK_SITUATIONS, QUICK_VARIABLES, fillQuickMessage, insertAtCursor } from "../_lib/quickMessages";
@@ -25,6 +25,8 @@ export interface QuickMessagesSectionProps {
   savingSituation: QuickSituation | null;
   savedSituation: QuickSituation | null;
   error: { situation: QuickSituation; message: string } | null;
+  /** D-045: the key's last 20 changes (SettingHistory), under the list */
+  history?: ReactNode;
 }
 
 function QuickRow({
@@ -153,7 +155,7 @@ function QuickRow({
 }
 
 export function QuickMessagesSection({
-  messages, changes, signer, onSave, savingSituation, savedSituation, error,
+  messages, changes, signer, onSave, savingSituation, savedSituation, error, history,
 }: QuickMessagesSectionProps) {
   return (
     <section className="s-panel flex w-full max-w-2xl flex-col gap-3" aria-labelledby="settings-quick-title" data-testid="settings-quick">
@@ -174,6 +176,7 @@ export function QuickMessagesSection({
           />
         ))}
       </ul>
+      {history}
     </section>
   );
 }

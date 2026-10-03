@@ -43,6 +43,12 @@ import type {
   QueueSettings,
   SalesSettings,
   Journey,
+  ControlRoom,
+  HistoryKey,
+  MenuFileInput,
+  MenuFileRow,
+  MenuKey,
+  SettingHistoryRow,
   QuickSituation,
   ResponseTime,
   ResponseWeekRow,
@@ -124,6 +130,9 @@ export const salesKeys = {
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
   journey: () => ["sales", "journey"] as const,
+  menus: () => ["sales", "menus"] as const,
+  history: (key: HistoryKey) => ["sales", "settings-history", key] as const,
+  control: () => ["sales", "control"] as const,
   report: () => ["sales", "report"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
 };
@@ -355,6 +364,38 @@ export function useJourney(enabled = true): UseQueryResult<Journey, SalesApiErro
     enabled,
     queryFn: async () => request<Journey>("/api/sales/journey"),
     staleTime: 5 * 60_000,
+  });
+}
+
+/** D-045: the menu file per line and its state (the server's HEAD, cached 10 minutes). */
+export function useMenuFiles(enabled = true): UseQueryResult<MenuFileRow[], SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.menus(),
+    enabled,
+    queryFn: async () => (await request<{ menus: MenuFileRow[] }>("/api/sales/menus")).menus,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** D-045: one settings key's last 20 changes, read when its list is opened. */
+export function useSettingHistory(key: HistoryKey, enabled: boolean): UseQueryResult<SettingHistoryRow[], SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.history(key),
+    enabled,
+    queryFn: async () =>
+      (await request<{ changes: SettingHistoryRow[] }>(`/api/sales/settings/history?key=${encodeURIComponent(key)}`)).changes,
+    staleTime: 30_000,
+  });
+}
+
+/** D-045: the control room. The server answers 404 to everyone but Tom; that is not retried. */
+export function useControlRoom(enabled = true): UseQueryResult<ControlRoom, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.control(),
+    enabled,
+    queryFn: async () => request<ControlRoom>("/api/sales/control"),
+    retry: (count, err) => err.status !== 404 && err.status !== 403 && count < 1,
+    staleTime: 60_000,
   });
 }
 
@@ -676,6 +717,34 @@ export function useSaveResponseTime() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ response_time: value }),
+    }),
+  );
+}
+
+const putSettings = (body: unknown) =>
+  request("/api/sales/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** D-045: signers by roster email; the server merges them, null takes one away. */
+export function useSaveSigners() {
+  return useSalesMutation<Record<string, string | null>, unknown>((map) => putSettings({ lead_journey_signers_by_email: map }));
+}
+
+/** D-045: one line's menu file, merged per line. */
+export function useSaveMenuFile() {
+  return useSalesMutation<{ key: MenuKey; file: MenuFileInput }, unknown>(({ key, file }) => putSettings({ lead_menus: { [key]: file } }));
+}
+
+/** D-045: the lead line's test phones (Tom only; the server answers 404 to anyone else). */
+export function useSaveTestPhones() {
+  return useSalesMutation<string[], { test_phones: string[] }>((phones) =>
+    request("/api/sales/control/test-phones", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phones }),
     }),
   );
 }

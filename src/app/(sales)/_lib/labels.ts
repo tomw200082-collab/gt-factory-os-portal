@@ -769,6 +769,8 @@ export const NAV_LABELS = {
   /** the desktop rail and the page title */
   reportFull: "דוח מכירות",
   settings: "הגדרות",
+  /** D-045: Tom only — the entry is shown only for his session, the server guards the page */
+  control: "חדר בקרה",
 } as const;
 
 /**
@@ -816,7 +818,7 @@ export const UI = {
   // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
   // past. This one states the lead's age as a property of the lead, which is
   // what makes an old lead feel old on the card.
-  ageInDays: (days: number) => (days === 1 ? "בן יום" : `בן ${days} ימים`),
+  ageInDays: (days: number) => (days <= 0 ? "חדש מהיום" : days === 1 ? "בן יום" : `בן ${days} ימים`),
   uncontactableChip: (n: number) => `ללא פרטי קשר (${n})`,
   sortByAge: "מיין לפי גיל",
   nextTouchPreview: (date: string) => `המגע הבא: ${date}`,
@@ -1146,8 +1148,10 @@ export const UI = {
   /** Working time left: minutes under an hour; hours in words up to two and a half. */
   workLeft: (amount: string) => `עוד ${amount} עבודה`,
   workMinutes: (m: number) => (m === 1 ? "דקת" : `${m} דקות`),
+  // From 3 hours up, whole hours only (rounded down): "5 שעות", never "5.5 שעות".
   workHours: (h: number) =>
-    h === 1 ? "שעה" : h === 1.5 ? "שעה וחצי" : h === 2 ? "שעתיים" : h === 2.5 ? "שעתיים וחצי" : `${h} שעות`,
+    h === 1 ? "שעה" : h === 1.5 ? "שעה וחצי" : h === 2 ? "שעתיים" : h === 2.5 ? "שעתיים וחצי"
+      : h >= 3 ? `${Math.floor(h)} שעות` : `${h} שעות`,
 
   // Settings: זמני תגובה (D-043)
   rtTitle: "זמני תגובה",
@@ -1228,6 +1232,8 @@ export const AUTO_KIND_LABELS: Record<string, string> = {
 /** Server rule codes (SALES_*) rendered in Hebrew. */
 export const RULE_MESSAGES: Record<string, string> = {
   AUTH_EXPIRED: UI.sessionExpired,
+  SALES_SIGNER_NOT_ON_ROSTER: "האדם הזה לא ברשימת אנשי המכירות הפעילים.",
+  SALES_TEST_PHONE_INVALID: "אחד המספרים אינו מספר ישראלי תקין.",
   SALES_LOST_REQUIRES_REASON: "צריך לציין סיבה לאובדן.",
   SALES_WON_IS_EVIDENCE_ONLY: "סטטוס 'הומר' נכתב מהזמנה ב-Shopify, ולא ידנית.",
   SALES_NEXT_TOUCH_REQUIRED: "צריך לקבוע מתי חוזרים לליד.",
@@ -1251,4 +1257,189 @@ export const RULE_MESSAGES: Record<string, string> = {
   SALES_IDENTITY_NOT_A_CANDIDATE: "הלקוח הזה כבר אינו מועמד לעסק. רעננו את הרשימה.",
   SALES_CONTACT_NOT_FOUND: "איש הקשר לא נמצא.",
   SALES_LEAD_OPTED_OUT: "הליד ביקש לא לקבל הודעות («הסר»). אפשר להתקשר.",
+};
+
+/** Settings phase 3, "צוות וכללים" (D-045, tranche 205). */
+export const TEAM_UI = {
+  title: "צוות וכללים",
+  hint: "מי חותם על ההודעות, איזה תפריט יוצא לכל קו, וצורת התור.",
+  changedBy: (actor: string, when: string) => `שונה ע״י ${actor} ${when}`,
+  saved: "נשמר ✓",
+  unsaved: "לא נשמר",
+  retry: "נסו שוב",
+
+  signersTitle: "אנשי מכירות ושמות חתימה",
+  signersHint: "השם שחותם על הודעות ההמשך האוטומטיות ועל ההודעות המהירות. הוא מקושר לחשבון של כל אחד, לא לשם התצוגה.",
+  signerLabel: (name: string) => `שם החתימה של ${name}`,
+  signerPlaceholder: "למשל: אבי",
+  signerNone: (name: string) => `אין שם חתימה, ולכן הודעות ההמשך האוטומטיות ללידים של ${name} לא יוצאות.`,
+  signerLegacy: "נקרא כרגע לפי שם התצוגה. שמרו כדי לקשר אותו לחשבון.",
+  signerTooLong: "עד 30 תווים",
+  signersSave: "שמירת שמות החתימה",
+
+  menusTitle: "קובץ התפריט לכל קו",
+  menusHint: "הקובץ שנשלח לליד בהודעה הראשונה, לפי הקו שבחר באתר.",
+  menusWarn: "בלי קובץ, הליד מקבל את התשובה הכללית במקום התפריט.",
+  menusLoadError: "לא הצלחנו לבדוק את קובצי התפריט.",
+  menuState: { ok: "תקין", missing: "חסר קובץ", unchecked: "לא נבדק" } as const,
+  menuReason: (reason: string | null): string => {
+    if (!reason) return "";
+    if (reason === "no_file") return "לא הוגדר קובץ";
+    if (reason === "unreachable") return "לא הצלחנו להגיע לקובץ";
+    if (reason === "host_not_allowed") return "הקישור לא בכתובת מורשית, ולכן לא נבדק";
+    const http = /^http_(\d{3})$/.exec(reason);
+    if (http) return http[1] === "404" ? "הקובץ לא נמצא בכתובת" : `הכתובת החזירה שגיאה ${http[1]}`;
+    return "";
+  },
+  menuCheckedAt: (when: string) => `נבדק ${when}`,
+  menuLine: (line: string) => `קו: ${line}`,
+  menuEdit: "עריכה",
+  menuEditNamed: (label: string) => `עריכת ${label}`,
+  menuCancel: "ביטול",
+  menuLabel: "שם התפריט",
+  menuFilename: "שם הקובץ",
+  menuFilenameHint: "השם שהליד רואה בוואטסאפ, למשל Matcha.pdf",
+  menuUrl: "קישור לקובץ",
+  menuUrlHint: "קישור שמתחיל ב־https://cdn.shopify.com/",
+  menuSave: "שמירת הקובץ",
+  menuLabelRequired: "כתבו שם לתפריט, עד 60 תווים",
+  menuFilenameBad: "שם הקובץ צריך להסתיים ב־.pdf, בלי / ועד 120 תווים",
+  menuUrlBad: "הקישור צריך להתחיל ב־https://cdn.shopify.com/",
+
+  queueSave: "שמירת צורת התור",
+  lostReasonsSave: "שמירת סיבות האבוד",
+
+  historyShow: "היסטוריית שינויים",
+  historyTitle: (what: string) => `היסטוריית שינויים: ${what}`,
+  historyEmpty: "אין עדיין שינויים.",
+  historyError: "לא הצלחנו לטעון את ההיסטוריה.",
+  historyLoading: "טוענים…",
+  historyAdded: (items: string) => `נוסף: ${items}`,
+  historyRemoved: (items: string) => `הוסר: ${items}`,
+  historyChanged: (items: string) => `שונה: ${items}`,
+  historyFirst: "ערך ראשון נשמר",
+  historyUpdated: "עודכן",
+} as const;
+
+/** The control room (D-045, tranche 205). Tom only. */
+export const CONTROL_UI = {
+  title: "חדר בקרה",
+  hint: "מצב המערכות של המכירות, במבט אחד. רק תום רואה את הדף הזה.",
+  notFound: "הדף לא נמצא",
+  notFoundHint: "אין כאן דף. אפשר לחזור לעמוד היום.",
+  backToToday: "לעמוד היום",
+  /** completes UI.loadError: "לא הצלחנו לטעון את …" */
+  loadError: "חדר הבקרה",
+  generatedAt: (when: string) => `עודכן ${when}`,
+  tile: {
+    intake: "קליטת לידים",
+    whatsapp: "קו הוואטסאפ ללידים",
+    wake: "הודעות המשך",
+    mirror: "המראה של Shopify",
+    report: "דוח המכירות",
+    radar: "רדאר הלקוחות הרדומים",
+    settings: "יומן שינויי הגדרות",
+  } as const,
+  state: { green: "תקין", amber: "לבדוק", red: "תקלה" } as const,
+  lastSuccess: (when: string) => `הצלחה אחרונה ${when}`,
+  noSuccess: "עוד לא נרשמה הצלחה",
+  action: {
+    ok: "אין מה לעשות.",
+    intake_pulse_stale: "הדופק של Make לא הגיע יותר מיממה. בדקו את החיבור לפייסבוק ב־Make.",
+    intake_poll_stale: "המשיכה מ־Meta לא הצליחה יותר מיממה. בדקו את הטוקן.",
+    intake_unalerted: "יש לידים מהיומיים האחרונים בלי התראה. בדקו את שליחת המיילים.",
+    intake_rejects: "לידים נדחו ביממה האחרונה. בדקו מה חסר בהם.",
+    wa_off: "הקו לא מחובר. חסר מזהה המספר בשרת.",
+    wa_failed: "הודעות נכשלו בשבוע האחרון. בדקו את סיבת הכישלון בלוג.",
+    wa_test: "הקו במצב בדיקה: רק הטלפונים לבדיקה מקבלים הודעות באמת.",
+    wake_no_runs: "עוד לא נרשמה ריצה. הריצות נרשמות מהעדכון הזה והלאה.",
+    wake_error: "הריצה האחרונה נעצרה בשגיאה. בדקו את הלוג של השרת.",
+    wake_quiet: "אין ריצה מוצלחת בשעה האחרונה. בדקו את משימת ה־cron.",
+    wake_no_signer: "הודעות לא יצאו כי חסר שם חתימה. השלימו אותו בהגדרות.",
+    wake_no_menu_file: "הודעות לא יצאו כי חסר קובץ תפריט. השלימו אותו בהגדרות.",
+    wake_failed: "הודעות נכשלו בריצה האחרונה. בדקו את הלוג.",
+    mirror_failed: "הריצה האחרונה נכשלה. בדקו את פירוט השגיאה.",
+    mirror_stale: "אין ריצה מוצלחת יותר מ־30 שעות. בדקו את משימת ה־cron.",
+    mirror_exceptions: "יש חריגים פתוחים. עברו עליהם.",
+    report_failed: "הריצה האחרונה נכשלה. בדקו את פירוט השגיאה.",
+    report_stale: "אין עדכון מוצלח בשעתיים האחרונות. בדקו את משימת ה־cron.",
+    report_full_stale: "הדוח המלא לא נבנה יותר מיממה.",
+    radar_stale: "הרדאר לא רץ יותר מ־30 שעות. בדקו את משימת ה־cron.",
+  } as Record<string, string>,
+  // facts, one short line each
+  intakeMode: (mode: string) => (mode === "make" ? "מסלול: Make" : "מסלול: משיכה מ־Meta"),
+  lastLead: (when: string) => `ליד אחרון ${when}`,
+  leads24h: (n: number) => `${n} לידים ב־24 השעות האחרונות`,
+  pulse: (mode: string, when: string) => (mode === "make" ? `דופק אחרון ${when}` : `משיכה מוצלחת אחרונה ${when}`),
+  rejects24h: (n: number) => `${n} נדחו ב־24 שעות`,
+  unalerted48h: (n: number) => `${n} בלי התראה ב־48 שעות`,
+  waMode: { live: "פעיל: כל ליד מקבל הודעות", test: "מצב בדיקה", off: "לא מחובר" } as Record<string, string>,
+  waWindow: "7 הימים האחרונים",
+  waStatus: { sent: "נשלחו", delivered: "נמסרו", read: "נקראו", failed: "נכשלו", dry_run: "הרצה יבשה" } as Record<string, string>,
+  optOuts: (total: number, week: number) => `ביקשו להפסיק: ${total} בסך הכל, ${week} השבוע`,
+  templateApproval: "אישור התבניות ב־Meta: לא נשמר",
+  wakeLast: (when: string) => `ריצה אחרונה ${when}`,
+  wakeCounts: (considered: number, sent: number, dry: number, failed: number) =>
+    `נבדקו ${considered} · נשלחו ${sent} · יבש ${dry} · נכשלו ${failed}`,
+  wake24h: (runs: number, sent: number) => `${runs} ריצות ו־${sent} הודעות ב־24 שעות`,
+  wakeSkipped: "דילוגים ב־24 שעות",
+  // the wake job's skip reasons (gt-factory-os wake.ts), in words; an unknown one shows as sent
+  skipReason: {
+    no_signer: "חסר שם חתימה",
+    no_menu_file: "חסר קובץ תפריט",
+    no_menu: "לא נשלח תפריט ראשון",
+    no_name: "אין שם לפנייה",
+    already_claimed: "כבר נשלח",
+    state_changed: "המצב השתנה",
+    not_due: "עוד לא הזמן",
+    outside_slot: "מחוץ לשעות השליחה",
+    within_48h: "פחות מ־48 שעות מהקודמת",
+    already_sent_today: "כבר נשלחה היום",
+    not_eligible: "ההודעה הראשונה לא נמסרה",
+    opted_out: "ביקשו להפסיק",
+    ordered: "כבר הזמינו",
+    replied: "ענו לנו",
+    waiting_for_customer: "מחכים ללקוח",
+    staff_wrote_within_24h: "כתבנו להם ב־24 שעות",
+    sequence_complete: "הרצף הסתיים",
+    step_already_sent: "השלב כבר נשלח",
+    marketing_cap_retry_later: "מגבלת שיווק של Meta, ננסה שוב",
+    no_such_step: "אין שלב כזה",
+  } as Record<string, string>,
+  remove: "הסרה",
+  wakeError: (msg: string) => `שגיאה: ${msg}`,
+  mirrorLast: (kind: string, status: string) => `ריצה אחרונה: ${kind} · ${status}`,
+  openExceptions: (n: number) => (n === 0 ? "אין חריגים פתוחים" : `${n} חריגים פתוחים`),
+  reportLast: (kind: string, status: string) => `ריצה אחרונה: ${kind} · ${status}`,
+  reportFull: (when: string) => `דוח מלא אחרון ${when}`,
+  radarCounts: (flagged: number, orgs: number) => `${flagged} מתוך ${orgs} עסקים סומנו לבדיקה`,
+  settingsRecent: "שינויים אחרונים",
+  settingsNone: "אין עדיין שינויים.",
+  technicalTitle: "הגדרות טכניות",
+  testPhonesTitle: "טלפונים לבדיקה",
+  testPhonesHint: "כשהקו במצב בדיקה, רק המספרים האלה מקבלים את ההודעות האוטומטיות באמת.",
+  testPhonesEmpty: "אין טלפונים לבדיקה.",
+  testPhoneNew: "מספר חדש",
+  testPhoneAdd: "הוספה",
+  testPhoneRemove: (p: string) => `הסרת ${p}`,
+  testPhoneBad: "כתבו מספר ישראלי, למשל 050-1234567",
+  testPhonesSave: "שמירת הטלפונים",
+  intakeModeTitle: "מסלול הקליטה",
+  intakeModeReadOnly: "לקריאה בלבד. שינוי נעשה במיגרציה.",
+  intakeModeValue: (mode: string | null) => (mode === "make" ? "Make מעביר את הלידים" : mode === "poll" ? "משיכה ישירה מ־Meta" : "לא הוגדר"),
+  intakeModeChanged: (when: string) => `שונה ${when}`,
+  intakePulseExpected: (v: string) => (v === "hourly" ? "דופק צפוי: כל שעה" : `דופק צפוי: ${v}`),
+} as const;
+
+/** Settings keys as a manager names them, for the history and the settings log. */
+export const SETTING_KEY_LABELS: Record<string, string> = {
+  whatsapp_quick_messages: "הודעות מהירות",
+  response_time: "זמני תגובה",
+  lead_journey_signers_by_email: "שמות חתימה",
+  lead_menus: "קובצי תפריט",
+  queue: "צורת התור",
+  lost_reasons: "סיבות אבוד",
+  lead_journey_test_phones: "טלפונים לבדיקה",
+  sla_hours: "זמן תגובה (ישן)",
+  whatsapp_templates: "תבניות WhatsApp (ישן)",
 };

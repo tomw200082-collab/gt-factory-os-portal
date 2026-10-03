@@ -16,14 +16,35 @@ import type { Journey, JourneyStep } from "../_lib/types";
 const range = (from: string, to: string) => <bdi dir="ltr" className="s-nums">{`${from}–${to}`}</bdi>;
 
 /** The server's texts carry {{name}}, {{menu}}, {{rep}}: shown here as Hebrew pills, each
- *  bidi-isolated so the signature line keeps its order. lead_texts.ts is not touched. */
+ *  bidi-isolated so the signature line keeps its order. lead_texts.ts is not touched.
+ *  A pill followed by punctuation ("{{rep}}, GT Everyday") is glued to it: no margin on that
+ *  side and no line break between them, so the comma sits against the pill as it would
+ *  against a word. */
 export function withPills(text: string): ReactNode[] {
-  return text.split(/(\{\{\s*(?:name|menu|rep|business)\s*\}\})/).map((part, i) => {
+  const parts = text.split(/(\{\{\s*(?:name|menu|rep|business)\s*\}\})/);
+  const out: ReactNode[] = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
     const m = /^\{\{\s*(name|menu|rep|business)\s*\}\}$/.exec(part);
-    return m
-      ? <bdi key={i} className="s-var-pill">{`‹${QUICK_VARIABLE_LABELS[m[1] as keyof typeof QUICK_VARIABLE_LABELS]}›`}</bdi>
-      : <Fragment key={i}>{part}</Fragment>;
-  });
+    if (!m) {
+      if (part) out.push(<Fragment key={i}>{part}</Fragment>);
+      continue;
+    }
+    const label = `‹${QUICK_VARIABLE_LABELS[m[1] as keyof typeof QUICK_VARIABLE_LABELS]}›`;
+    const next = parts[i + 1] ?? "";
+    const punct = /^[,.!?:;)]+/.exec(next)?.[0];
+    if (punct) {
+      out.push(
+        <span key={i} className="whitespace-nowrap">
+          <bdi className="s-var-pill s-var-pill-tight">{label}</bdi>{punct}
+        </span>,
+      );
+      parts[i + 1] = next.slice(punct.length);
+    } else {
+      out.push(<bdi key={i} className="s-var-pill">{label}</bdi>);
+    }
+  }
+  return out;
 }
 
 function whenOf(step: JourneyStep, journey: Journey, titles: Record<string, string>): ReactNode {
