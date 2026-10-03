@@ -9,10 +9,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, ArrowLeftRight, Building2, CalendarCheck, ChartColumn, Gauge, Plus, Search, Settings, Users } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Activity, ArrowLeftRight, Building2, CalendarCheck, ChartColumn, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
-import { useLeads, useQuickAdd } from "../_lib/api";
+import { useControlAccess, useLeads, useQuickAdd } from "../_lib/api";
 import { noteSalesPath } from "../_lib/salesHistory";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
@@ -47,13 +48,11 @@ const REPORT_DESTINATION: Destination = {
   icon: ChartColumn,
 };
 
-// The control room (D-045) is Tom's. The entry is shown only to his session; the page's data
-// comes from a server check on the same email, which answers 404 to everyone else.
-export const CONTROL_EMAIL = "tom@gteveryday.com";
+// The control room (D-045) is Tom's. The entry follows the server's can_control flag, so the
+// client never carries the email it is decided by; the route itself answers 404 to anyone else.
+// Loaded on demand, only for a session the server allows: the label stays out of everyone else's bundle.
 const CONTROL_HREF = "/sales/control";
-export function canSeeControl(email: string | null | undefined): boolean {
-  return (email ?? "").trim().toLowerCase() === CONTROL_EMAIL;
-}
+const ControlNavEntry = dynamic(() => import("./ControlNavEntry"), { ssr: false });
 
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -75,7 +74,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const { session } = useSession();
   const canManageSales = session?.role === "admin" || session?.role === "planner";
   const destinations = canManageSales ? [...DESTINATIONS, REPORT_DESTINATION] : DESTINATIONS;
-  const showControl = canSeeControl(session?.email);
+  const showControl = useControlAccess(canManageSales).data === true;
   const pathname = usePathname() ?? "";
   // The report's month tables are the widest thing in the workspace: its body takes the room the page has
   // beyond the usual column, toward the far edge. The rail and the app bar stay exactly where they are on
@@ -158,17 +157,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
           </Link> : null}
 
           {/* Phones only: on desktop the rail carries the entry. */}
-          {showControl ? <Link
-            href={CONTROL_HREF}
-            aria-label={NAV_LABELS.control}
-            title={NAV_LABELS.control}
-            data-testid="sales-control-icon"
-            aria-current={isActive(pathname, CONTROL_HREF) ? "page" : undefined}
-            className="grid h-11 w-11 place-items-center rounded-full md:hidden"
-            style={{ color: "hsl(var(--s-fg-muted))" }}
-          >
-            <Gauge size={18} aria-hidden />
-          </Link> : null}
+          {showControl ? <ControlNavEntry variant="icon" active={isActive(pathname, CONTROL_HREF)} /> : null}
 
           {/* The phone is the primary device, and it had no way back to the
               factory at all — the bottom bar holds the three sales
@@ -221,15 +210,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             <Settings size={17} aria-hidden />
             {NAV_LABELS.settings}
           </Link> : null}
-          {showControl ? <Link
-            href={CONTROL_HREF}
-            data-testid="sales-rail-control"
-            aria-current={isActive(pathname, CONTROL_HREF) ? "page" : undefined}
-            className={`s-tab justify-start ${isActive(pathname, CONTROL_HREF) ? "s-tab-active" : ""}`}
-          >
-            <Gauge size={17} aria-hidden />
-            {NAV_LABELS.control}
-          </Link> : null}
+          {showControl ? <ControlNavEntry variant="rail" active={isActive(pathname, CONTROL_HREF)} /> : null}
         </nav>
 
         <main

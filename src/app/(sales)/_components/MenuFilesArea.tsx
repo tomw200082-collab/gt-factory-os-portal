@@ -18,6 +18,10 @@ import { fmtRelative } from "../_lib/format";
 import type { MenuFileInput, MenuFileRow, MenuKey } from "../_lib/types";
 
 export const MENU_FILE_HOSTS = ["cdn.shopify.com"] as const;
+export const MENU_URL_PREFIX = "https://cdn.shopify.com/";
+// URLs and file names inside a Hebrew line are isolated left-to-right (UX gate #7)
+const LTR_TAIL: Partial<Record<MenuField, string>> = { pdf_url: MENU_URL_PREFIX };
+const HINT_TAIL: Partial<Record<MenuField, string>> = { pdf_url: MENU_URL_PREFIX, filename: "Matcha.pdf" };
 export type MenuField = "label" | "filename" | "pdf_url";
 
 /** The server's rules (gt-factory-os schemas.ts menuFileSchema), said before a save is refused. */
@@ -68,7 +72,11 @@ function MenuEditor({ row, saving, error, onSave, onCancel }: {
     return (
       <div className="flex flex-col gap-1">
         <label htmlFor={id} className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>{label}</label>
-        {hint ? <p id={`${id}-hint`} className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>{hint}</p> : null}
+        {hint ? (
+          <p id={`${id}-hint`} className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+            {hint}{HINT_TAIL[k] ? <bdi dir="ltr">{HINT_TAIL[k]}</bdi> : null}
+          </p>
+        ) : null}
         <input
           id={id}
           ref={(el) => { refs.current[k] = el; if (k === "label") first.current = el; }}
@@ -81,7 +89,9 @@ function MenuEditor({ row, saving, error, onSave, onCancel }: {
           aria-invalid={problem(k) ? true : undefined}
           aria-describedby={`${hint ? `${id}-hint ` : ""}${id}-error`}
         />
-        <p id={`${id}-error`} aria-live="polite" className="text-[12px]" style={ERR}>{problem(k) ?? ""}</p>
+        <p id={`${id}-error`} aria-live="polite" className="text-[12px]" style={ERR}>
+          {problem(k) ?? ""}{problem(k) && LTR_TAIL[k] ? <bdi dir="ltr">{LTR_TAIL[k]}</bdi> : null}
+        </p>
       </div>
     );
   };
@@ -120,12 +130,20 @@ function MenuEditor({ row, saving, error, onSave, onCancel }: {
 
 export function MenuFilesArea({ menus, loading, loadError, onRetry, change, savingKey, savedKey, error, onSave, history }: MenuFilesAreaProps) {
   const [editing, setEditing] = useState<MenuKey | null>(null);
+  // where focus goes once the editor has closed and the edit button is back in the DOM
+  const [returnTo, setReturnTo] = useState<MenuKey | null>(null);
   const editBtn = useRef<Partial<Record<MenuKey, HTMLButtonElement | null>>>({});
+  useEffect(() => {
+    if (returnTo && editing === null) {
+      editBtn.current[returnTo]?.focus();
+      setReturnTo(null);
+    }
+  }, [returnTo, editing]);
   // a save that landed closes its editor and returns focus to the line's edit button
   useEffect(() => {
     if (savedKey && savedKey === editing) {
       setEditing(null);
-      editBtn.current[savedKey]?.focus();
+      setReturnTo(savedKey);
     }
   }, [savedKey, editing]);
   const anyMissing = (menus ?? []).some((m) => m.state === "missing");
@@ -175,7 +193,7 @@ export function MenuFilesArea({ menus, loading, loadError, onRetry, change, savi
                     saving={savingKey === m.key}
                     error={error?.key === m.key ? error.message : null}
                     onSave={(file) => onSave(m.key, file)}
-                    onCancel={() => { setEditing(null); editBtn.current[m.key]?.focus(); }}
+                    onCancel={() => { setEditing(null); setReturnTo(m.key); }}
                   />
                 ) : (
                   <div className="flex flex-wrap items-center gap-3">

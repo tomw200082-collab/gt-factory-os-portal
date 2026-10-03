@@ -1,8 +1,9 @@
 // Tranche 205 (D-045): team and rules, the control room, and the five small fold-ins.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const pathname = { current: "/sales/today" };
 const currentSession = vi.hoisted(() => ({ value: { role: "admin", email: "other-admin@synthetic.invalid" } as Record<string, string> }));
@@ -16,13 +17,14 @@ import { SignersArea } from "@/app/(sales)/_components/SignersArea";
 import { MenuFilesArea, validateMenuFile } from "@/app/(sales)/_components/MenuFilesArea";
 import { SettingsForm } from "@/app/(sales)/_components/SettingsForm";
 import { SettingHistoryList } from "@/app/(sales)/_components/SettingHistory";
-import { ControlRoomView, TestPhonesEditor, normalizeTestPhone } from "@/app/(sales)/_components/ControlRoomView";
-import { SalesShell, canSeeControl } from "@/app/(sales)/_components/SalesShell";
+import { ControlRoomView, TestPhonesEditor, normalizeTestPhone } from "@/app/(sales)/sales/control/ControlRoomView";
+import { CONTROL_UI } from "@/app/(sales)/sales/control/copy";
+import { SalesShell } from "@/app/(sales)/_components/SalesShell";
 import { ResponseTimeSection } from "@/app/(sales)/_components/ResponseTimeSection";
 import { withPills } from "@/app/(sales)/_components/JourneySection";
 import { WhatsAppQuick } from "@/app/(sales)/_components/WhatsAppQuick";
 import { describeChange } from "@/app/(sales)/_lib/settingHistory";
-import { CONTROL_UI, NAV_LABELS, TEAM_UI, UI } from "@/app/(sales)/_lib/labels";
+import { TEAM_UI, UI } from "@/app/(sales)/_lib/labels";
 import type { ControlRoom, MenuFileRow, SalesSettings } from "@/app/(sales)/_lib/types";
 
 afterEach(() => {
@@ -130,6 +132,14 @@ describe("signers by account", () => {
     expect(saves).toEqual([{ "dana@synthetic.invalid": null, "yoav@synthetic.invalid": "יואבי", "roni@synthetic.invalid": "רוני" }]);
   });
 
+  it("emptying a name read from the old map sends null, so the old map stops signing too", () => {
+    const saves: Array<Record<string, string | null>> = [];
+    render(<SignersArea assignees={ASSIGNEES} signers={SIGNERS} change={null} saving={false} saved={false} error={null} onSave={(m) => saves.push(m)} />);
+    fireEvent.change(screen.getByTestId("signer-input-Yoav@synthetic.invalid"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("signers-save"));
+    expect(saves).toEqual([{ "yoav@synthetic.invalid": null }]);
+  });
+
   it("refuses a name over 30 characters and moves focus to it", () => {
     const saves: unknown[] = [];
     render(<SignersArea assignees={ASSIGNEES} signers={SIGNERS} change={null} saving={false} saved={false} error={null} onSave={(m) => saves.push(m)} />);
@@ -158,6 +168,7 @@ describe("menu file per line", () => {
     const ok = { label: "x", filename: "a.pdf", pdf_url: "https://cdn.shopify.com/a.pdf" };
     expect(validateMenuFile(ok)).toEqual({});
     expect(validateMenuFile({ ...ok, pdf_url: "http://cdn.shopify.com/a.pdf" }).pdf_url).toBe(TEAM_UI.menuUrlBad);
+    expect(validateMenuFile({ ...ok, pdf_url: "https://cdn.shopify.com/a.pdf" })).toEqual({});
     expect(validateMenuFile({ ...ok, pdf_url: "https://cdn.shopify.com.evil.example/a.pdf" }).pdf_url).toBe(TEAM_UI.menuUrlBad);
     expect(validateMenuFile({ ...ok, filename: "a.docx" }).filename).toBe(TEAM_UI.menuFilenameBad);
     expect(validateMenuFile({ ...ok, filename: "a/b.pdf" }).filename).toBe(TEAM_UI.menuFilenameBad);
@@ -175,6 +186,17 @@ describe("menu file per line", () => {
     expect(screen.getByTestId("menus-warn").textContent).toBe(TEAM_UI.menusWarn);
   });
 
+  it("the edit button's name starts with its visible word, and cancel returns focus to it", () => {
+    render(<MenuFilesArea menus={MENUS} loading={false} loadError={false} onRetry={noop} change={null}
+      savingKey={null} savedKey={null} error={null} onSave={noop} />);
+    const edit = screen.getByTestId("menu-ube-edit");
+    expect(edit.getAttribute("aria-label")).toBe("עריכה: תפריט האובה");
+    expect(edit.getAttribute("aria-label")).toContain(edit.textContent!);
+    fireEvent.click(edit);
+    fireEvent.click(screen.getByTestId("menu-ube-cancel"));
+    expect(document.activeElement).toBe(screen.getByTestId("menu-ube-edit"));
+  });
+
   it("edits a line: a bad link is refused with focus on it; a good one is saved trimmed", () => {
     const saves: unknown[] = [];
     render(<MenuFilesArea menus={MENUS} loading={false} loadError={false} onRetry={noop} change={null}
@@ -187,7 +209,11 @@ describe("menu file per line", () => {
     fireEvent.click(screen.getByTestId("menu-opening-save"));
     expect(saves).toHaveLength(0);
     expect(document.activeElement).toBe(screen.getByTestId("menu-opening-pdf_url"));
-    expect(within(editor).getByText(TEAM_UI.menuUrlBad)).toBeTruthy();
+    // the error names the link, isolated left-to-right
+    const err = editor.querySelector("#menu-opening-pdf_url-error")!;
+    expect(err.textContent).toBe(`${TEAM_UI.menuUrlBad}https://cdn.shopify.com/`);
+    expect(err.querySelector('bdi[dir="ltr"]')?.textContent).toBe("https://cdn.shopify.com/");
+    expect(editor.querySelector('#menu-opening-pdf_url-hint bdi[dir="ltr"]')?.textContent).toBe("https://cdn.shopify.com/");
     fireEvent.change(screen.getByTestId("menu-opening-pdf_url"), { target: { value: " https://cdn.shopify.com/o.pdf " } });
     fireEvent.click(screen.getByTestId("menu-opening-save"));
     expect(saves).toEqual([["opening", { label: "תפריט הפתיחה", filename: "Opening.pdf", pdf_url: "https://cdn.shopify.com/o.pdf" }]]);
@@ -257,26 +283,37 @@ const ROOM: ControlRoom = {
   technical: { test_phones: ["972500000001"], intake_mode: { mode: "make", reason: "synthetic", changed_at: null, pulse_expected: "hourly" } },
 };
 describe("control room", () => {
-  it("only Tom's email sees the entry", () => {
-    expect(canSeeControl("tom@gteveryday.com")).toBe(true);
-    expect(canSeeControl(" Tom@GTEveryday.com ")).toBe(true);
-    expect(canSeeControl("admin@gteveryday.com")).toBe(false);
-    expect(canSeeControl(undefined)).toBe(false);
-  });
-
-  it("the nav shows no control-room entry to another admin, and shows it to Tom", () => {
-    const withQuery = (ui: ReactNode) => (
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, queryFn: async () => [] } } })}>{ui}</QueryClientProvider>
-    );
-    const { unmount } = render(withQuery(<SalesShell><p>x</p></SalesShell>));
-    expect(screen.queryByTestId("sales-rail-control")).toBeNull();
-    expect(screen.queryByTestId("sales-control-icon")).toBeNull();
-    expect(screen.queryByText(NAV_LABELS.control)).toBeNull();
-    unmount();
-    currentSession.value = { role: "admin", email: "tom@gteveryday.com" };
-    render(withQuery(<SalesShell><p>x</p></SalesShell>));
-    expect(screen.getByTestId("sales-rail-control").getAttribute("href")).toBe("/sales/control");
-    expect(screen.getByTestId("sales-control-icon").getAttribute("aria-label")).toBe(NAV_LABELS.control);
+  it("the nav shows the entry only when the server says can_control, and never carries the email", async () => {
+    const mk = (can: boolean) => new QueryClient({ defaultOptions: { queries: { retry: false, queryFn: async ({ queryKey }) =>
+      (queryKey[1] === "control-access" ? can : []) } } });
+    // the hook asks the server; the stub answers through fetch
+    const realFetch = globalThis.fetch;
+    let answer = false;
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes("/api/sales/control/access")) return new Response(JSON.stringify({ can_control: answer }), { status: 200 });
+      return new Response(JSON.stringify({ rows: [] }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      const { unmount } = render(<QueryClientProvider client={mk(false)}><SalesShell><p>x</p></SalesShell></QueryClientProvider>);
+      await new Promise((r) => setTimeout(r, 30));
+      expect(screen.queryByTestId("sales-rail-control")).toBeNull();
+      expect(screen.queryByTestId("sales-control-icon")).toBeNull();
+      expect(screen.queryByText("חדר בקרה")).toBeNull();
+      unmount();
+      answer = true;
+      render(<QueryClientProvider client={mk(true)}><SalesShell><p>x</p></SalesShell></QueryClientProvider>);
+      expect((await screen.findByTestId("sales-rail-control", {}, { timeout: 3000 })).getAttribute("href")).toBe("/sales/control");
+      expect(screen.getByTestId("sales-control-icon").getAttribute("aria-label")).toBe("חדר בקרה");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const shellSrc = readFileSync(join(process.cwd(), "src/app/(sales)/_components/SalesShell.tsx"), "utf8");
+    const labelsSrc = readFileSync(join(process.cwd(), "src/app/(sales)/_lib/labels.ts"), "utf8");
+    expect(shellSrc).not.toContain("tom@gteveryday.com");
+    expect(labelsSrc).not.toContain("tom@gteveryday.com");
+    expect(labelsSrc).not.toContain("CONTROL_UI");
+    expect(labelsSrc).not.toContain("חדר בקרה");
+    expect(shellSrc).not.toContain("חדר בקרה");
   });
 
   it("each tile says its state in words, its last success, and one action; the template approval is not stored", () => {
@@ -289,6 +326,26 @@ describe("control room", () => {
     expect(screen.getByTestId("tile-whatsapp").textContent).toContain("נקראו 3");
     expect(screen.getByTestId("tile-settings").textContent).toContain("צורת התור");
     expect(screen.getByTestId("control-intake-mode").textContent).toContain(CONTROL_UI.intakeModeReadOnly);
+    // the settings log is a record: no state pill, "שינוי אחרון"
+    expect(screen.queryByTestId("tile-settings-state")).toBeNull();
+    expect(screen.queryByTestId("tile-settings-action")).toBeNull();
+    expect(screen.getByTestId("tile-settings-when").textContent).toMatch(/^שינוי אחרון /);
+    expect(screen.getByTestId("tile-intake-when").textContent).toMatch(/^הצלחה אחרונה /);
+  });
+
+  it("a silent live line, a job that never ran, and an action this copy does not know", () => {
+    const room: ControlRoom = { ...ROOM, tiles: [
+      { id: "whatsapp", state: "amber", last_success_at: null, action: "wa_silent", facts: { mode: "live" } },
+      { id: "mirror", state: "red", last_success_at: null, action: "never_ran", facts: { open_exceptions: 0 } },
+      { id: "report", state: "red", last_success_at: null, action: "something_new", facts: {} },
+      { id: "radar", state: "green", last_success_at: new Date().toISOString(), action: "something_new", facts: {} },
+    ] };
+    render(<ControlRoomView room={room} phones={{ phones: [], saving: false, saved: false, error: null, onSave: noop }} />);
+    expect(screen.getByTestId("tile-whatsapp-action").textContent).toBe("אף הודעה לא נמסרה ב־7 הימים האחרונים. בדקו את הקו.");
+    expect(screen.getByTestId("tile-mirror-action").textContent).toBe("עוד לא נרשמה ריצה. בדקו שמשימת ה־cron קיימת");
+    expect(screen.getByTestId("tile-mirror").textContent).toContain("סנכרון מ־Shopify");
+    expect(screen.getByTestId("tile-report-action").textContent).toBe("בדקו את הלוג");
+    expect(screen.getByTestId("tile-radar-action").textContent).toBe("אין מה לעשות.");
   });
 
   it("test phones: normalised like the server, added, removed and saved", () => {
@@ -303,6 +360,7 @@ describe("control room", () => {
     expect(document.activeElement).toBe(screen.getByTestId("test-phone-new"));
     fireEvent.change(screen.getByTestId("test-phone-new"), { target: { value: "052-999 8888" } });
     fireEvent.click(screen.getByTestId("test-phone-add"));
+    expect(screen.getByTestId("control-test-phones").textContent).toContain("050-0000001");
     fireEvent.click(screen.getByTestId("test-phone-remove-972500000001"));
     fireEvent.click(screen.getByTestId("test-phones-save"));
     expect(saves).toEqual([["972529998888"]]);

@@ -3,18 +3,19 @@
 // /sales/control — the control room (D-045, tranche 205), Tom only.
 //
 // The guard is the server: GET /api/v1/queries/sales/control allows only the session email
-// tom@gteveryday.com and answers 404 to everyone else. This page shows exactly what the server
-// gives: the tiles for Tom, and for anyone else a plain "not found" — no data and no hint.
-// The navigation entry is shown only to Tom's session (SalesShell), but that is courtesy, not
-// the guard.
+// tom@gteveryday.com and answers 404 to everyone else. The route's server layout answers 404
+// first (the portal's own not-found, identical to an unknown route), and this page calls
+// notFound() too if the API refuses. The navigation entry follows the server's can_control
+// flag (SalesShell), which is courtesy, not the guard.
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { notFound } from "next/navigation";
 import { useControlRoom, useSaveTestPhones } from "../../_lib/api";
-import { CONTROL_UI, RULE_MESSAGES, UI } from "../../_lib/labels";
+import { RULE_MESSAGES, UI } from "../../_lib/labels";
+import { CONTROL_UI } from "./copy";
 import { fmtRelative } from "../../_lib/format";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
-import { ControlRoomView } from "../../_components/ControlRoomView";
+import { ControlRoomView } from "./ControlRoomView";
 
 export default function ControlPage() {
   const room = useControlRoom();
@@ -26,15 +27,9 @@ export default function ControlPage() {
     return () => clearTimeout(t);
   }, [saved]);
 
-  if (room.isError && (room.error.status === 404 || room.error.status === 403)) {
-    return (
-      <div className="flex flex-col gap-2" data-testid="control-not-found">
-        <h1 className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>{CONTROL_UI.notFound}</h1>
-        <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{CONTROL_UI.notFoundHint}</p>
-        <Link href="/sales/today" className="s-btn s-btn-ghost self-start">{CONTROL_UI.backToToday}</Link>
-      </div>
-    );
-  }
+  // The server said this session has no control room: the same 404 as any unknown route.
+  // (The route's server layout already answers 404 before this renders; this is the fallback.)
+  if (room.isError && (room.error.status === 404 || room.error.status === 403)) notFound();
 
   return (
     <div className="flex flex-col gap-4">

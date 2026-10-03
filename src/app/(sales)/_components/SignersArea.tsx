@@ -54,6 +54,9 @@ export function SignersArea({
       const v = (draft[r.email] ?? "").trim();
       if (r.source === "account") {
         if (v !== (r.signer ?? "")) out[r.email.toLowerCase()] = v === "" ? null : v;
+      } else if (r.source === "legacy") {
+        // emptied: null, so the old name map stops signing for this person too (UX gate #10)
+        out[r.email.toLowerCase()] = v === "" ? null : v;
       } else if (v !== "") {
         out[r.email.toLowerCase()] = v;
       }

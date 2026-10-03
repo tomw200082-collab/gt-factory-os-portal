@@ -133,6 +133,7 @@ export const salesKeys = {
   menus: () => ["sales", "menus"] as const,
   history: (key: HistoryKey) => ["sales", "settings-history", key] as const,
   control: () => ["sales", "control"] as const,
+  controlAccess: () => ["sales", "control-access"] as const,
   report: () => ["sales", "report"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
 };
@@ -385,6 +386,17 @@ export function useSettingHistory(key: HistoryKey, enabled: boolean): UseQueryRe
     queryFn: async () =>
       (await request<{ changes: SettingHistoryRow[] }>(`/api/sales/settings/history?key=${encodeURIComponent(key)}`)).changes,
     staleTime: 30_000,
+  });
+}
+
+/** D-045: may this session open the control room? The server decides; false on any error. */
+export function useControlAccess(enabled = true): UseQueryResult<boolean, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.controlAccess(),
+    enabled,
+    queryFn: async () => (await request<{ can_control?: boolean }>("/api/sales/control/access")).can_control === true,
+    retry: false,
+    staleTime: 10 * 60_000,
   });
 }
 

@@ -6,8 +6,8 @@ import { setFakeRole } from "./helpers";
 // @mocked — tranche 205 (D-045): team and rules, and the control room for Tom only.
 //   settings:  "צוות וכללים" — signers by account, the menu file per line (state, warning,
 //              edit), the queue and lost reasons with their own saves, a history per area
-//   control:   Tom's session sees the entry and the tiles; another admin sees no entry, and the
-//              page shows "not found" when the server answers 404
+//   control:   Tom's session sees the entry and the tiles; for another admin there is no entry,
+//              and /sales/control is the same 404 (status, title, text) as an unknown route
 //
 // Screenshots (320, 390 and 1280, light and dark) are taken when P3_SHOTS names a directory.
 // All data is synthetic.
@@ -71,6 +71,7 @@ const ROOM = {
 interface Sent { url: string; body: unknown }
 async function stub(page: Page, control: "tom" | "404" = "tom"): Promise<Sent[]> {
   const sent: Sent[] = [];
+  await page.route("**/api/sales/control/access", (r) => r.fulfill({ json: { can_control: control === "tom" } }));
   await page.route("**/api/sales/settings/history**", (r) => r.fulfill({ json: { key: "lead_journey_signers_by_email", changes: HISTORY } }));
   await page.route(/\/api\/sales\/settings(\?.*)?$/, (r) => {
     if (r.request().method() === "PUT") {
@@ -97,9 +98,16 @@ async function stub(page: Page, control: "tom" | "404" = "tom"): Promise<Sent[]>
   return sent;
 }
 
+// The dev-shim session lives in localStorage; the control route's server layout reads the shim's
+// email from the gt.devshim.email cookie (honoured only with the shim on, never in production).
 async function asTom(page: Page) {
   await page.addInitScript((value: string) => window.localStorage.setItem("gt.fakeauth.v1", value),
     JSON.stringify({ user_id: "u_tom_01", display_name: "Tom", email: "tom@gteveryday.com", role: "admin" }));
+  await page.context().addCookies([{ name: "gt.devshim.email", value: encodeURIComponent("tom@gteveryday.com"), url: "http://127.0.0.1:3737" }]);
+}
+async function asOtherAdmin(page: Page) {
+  await setFakeRole(page, "admin");
+  await page.context().addCookies([{ name: "gt.devshim.email", value: encodeURIComponent("admin@fake.gtfactory"), url: "http://127.0.0.1:3737" }]);
 }
 
 async function axeClean(page: Page, where: string) {
@@ -219,17 +227,29 @@ test("control room: Tom sees the entry and the tiles, edits the test phones; int
   await expect(page.getByTestId("sales-control-icon")).toBeVisible();
 });
 
-test("control room: another admin sees no entry, and the page shows only 'not found' when the server answers 404 @mocked", async ({ page }) => {
-  await setFakeRole(page, "admin");
+test("control room: another admin sees no entry, and /sales/control is the same 404 as an unknown route @mocked", async ({ page }) => {
+  await asOtherAdmin(page);
   await stub(page, "404");
   await page.goto("/sales/today");
   await expect(page.getByTestId("sales-rail-/sales/today")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("sales-rail-control")).toHaveCount(0);
   await expect(page.getByText("חדר בקרה")).toHaveCount(0);
-  await page.goto("/sales/control");
-  await expect(page.getByTestId("control-not-found")).toBeVisible({ timeout: 30_000 });
+
+  // a real unknown route, for comparison
+  const unknown = await page.goto("/sales/nope");
+  await expect(page.getByTestId("not-found")).toBeVisible({ timeout: 30_000 });
+  const unknownTitle = await page.title();
+  const unknownText = (await page.getByTestId("not-found").innerText()).trim();
+
+  const control = await page.goto("/sales/control");
+  await expect(page.getByTestId("not-found")).toBeVisible({ timeout: 30_000 });
+  expect(control?.status()).toBe(404);
+  expect(control?.status()).toBe(unknown?.status());
+  expect(await page.title()).toBe(unknownTitle);
+  expect((await page.getByTestId("not-found").innerText()).trim()).toBe(unknownText);
   await expect(page.getByTestId("control-tiles")).toHaveCount(0);
   await expect(page.getByText("טלפונים לבדיקה")).toHaveCount(0);
+  await expect(page.locator('[data-app="sales"]')).toHaveCount(0);
   await axeBoth(page, "control not found");
   await shoot(page, "control-not-found", null);
 });

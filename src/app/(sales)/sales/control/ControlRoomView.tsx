@@ -14,9 +14,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CircleAlert, CircleCheck, OctagonAlert } from "lucide-react";
-import { CONTROL_UI, SETTING_KEY_LABELS, TEAM_UI, actorLabel } from "../_lib/labels";
-import { fmtRelative } from "../_lib/format";
-import type { ControlRoom, ControlTile } from "../_lib/types";
+import { TEAM_UI, actorLabel } from "../../_lib/labels";
+import { fmtPhone, fmtRelative } from "../../_lib/format";
+import type { ControlRoom, ControlTile } from "../../_lib/types";
+import { CONTROL_UI, SETTING_KEY_LABELS } from "./copy";
 
 const STATE_ICON = { green: CircleCheck, amber: CircleAlert, red: OctagonAlert } as const;
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
@@ -76,28 +77,36 @@ function factsOf(t: ControlTile): string[] {
 
 function Tile({ t }: { t: ControlTile }) {
   const Icon = STATE_ICON[t.state];
-  const recent = t.id === "settings" ? ((t.facts as { recent?: Array<{ key: string; actor: string; at: string }> }).recent ?? []) : [];
+  const isLog = t.id === "settings";
+  const recent = isLog ? ((t.facts as { recent?: Array<{ key: string; actor: string; at: string }> }).recent ?? []) : [];
   return (
-    <li className="s-panel s-tile" data-state={t.state} data-testid={`tile-${t.id}`} aria-labelledby={`tile-${t.id}-title`}>
+    <li className="s-panel s-tile" data-state={isLog ? undefined : t.state} data-testid={`tile-${t.id}`} aria-labelledby={`tile-${t.id}-title`}>
       <div className="flex flex-wrap items-center gap-2">
         <h2 id={`tile-${t.id}-title`} className="s-section-heading">{CONTROL_UI.tile[t.id]}</h2>
-        <span className={`s-tile-state s-tile-state-${t.state}`} data-testid={`tile-${t.id}-state`}>
-          <Icon size={14} aria-hidden />
-          {CONTROL_UI.state[t.state]}
-        </span>
+        {/* the settings log is a record, not a system with a health: no state pill */}
+        {isLog ? null : (
+          <span className={`s-tile-state s-tile-state-${t.state}`} data-testid={`tile-${t.id}-state`}>
+            <Icon size={14} aria-hidden />
+            {CONTROL_UI.state[t.state]}
+          </span>
+        )}
       </div>
-      <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-        {t.last_success_at ? CONTROL_UI.lastSuccess(fmtRelative(t.last_success_at)) : CONTROL_UI.noSuccess}
+      <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }} data-testid={`tile-${t.id}-when`}>
+        {isLog
+          ? ((t.last_success_at ?? recent[0]?.at) ? CONTROL_UI.lastChange(fmtRelative(t.last_success_at ?? recent[0]?.at)) : CONTROL_UI.settingsNone)
+          : (t.last_success_at ? CONTROL_UI.lastSuccess(fmtRelative(t.last_success_at)) : CONTROL_UI.noSuccess)}
       </p>
-      <p className="s-tile-action" data-testid={`tile-${t.id}-action`}>{CONTROL_UI.action[t.action] ?? CONTROL_UI.action.ok}</p>
-      {t.id === "settings" ? (
-        recent.length === 0 ? (
-          <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>{CONTROL_UI.settingsNone}</p>
-        ) : (
+      {isLog ? null : (
+        <p className="s-tile-action" data-testid={`tile-${t.id}-action`}>
+          {CONTROL_UI.action[t.action] ?? CONTROL_UI.fallbackAction(t.state)}
+        </p>
+      )}
+      {isLog ? (
+        recent.length === 0 ? null : (
           <ul className="s-tile-facts" aria-label={CONTROL_UI.settingsRecent}>
             {recent.map((r, i) => (
               <li key={`${r.key}-${r.at}-${i}`}>
-                {SETTING_KEY_LABELS[r.key] ?? r.key} · {actorLabel(r.actor)} · {fmtRelative(str(r.at))}
+                {SETTING_KEY_LABELS[r.key] ?? r.key} · {actorLabel(r.actor)} · {fmtRelative(r.at)}
               </li>
             ))}
           </ul>
@@ -143,12 +152,12 @@ export function TestPhonesEditor({ phones, saving, saved, error, onSave }: TestP
         <ul className="flex flex-col gap-1">
           {list.map((p) => (
             <li key={p} className="flex items-center gap-3">
-              <bdi dir="ltr" className="s-nums" style={{ color: "hsl(var(--s-fg))" }}>{p}</bdi>
+              <bdi dir="ltr" className="s-nums" style={{ color: "hsl(var(--s-fg))" }}>{fmtPhone(`+${p}`)}</bdi>
               <button
                 type="button"
                 className="inline-flex min-h-[44px] items-center px-3 underline"
                 style={{ color: "hsl(var(--s-danger-quiet))" }}
-                aria-label={CONTROL_UI.testPhoneRemove(p)}
+                aria-label={CONTROL_UI.testPhoneRemove(fmtPhone(`+${p}`))}
                 data-testid={`test-phone-remove-${p}`}
                 onClick={() => setList((l) => l.filter((x) => x !== p))}
               >
