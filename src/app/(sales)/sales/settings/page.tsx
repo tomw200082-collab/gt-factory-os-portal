@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useLeads, useSaveSettings, useSettings } from "../../_lib/api";
-import { UI } from "../../_lib/labels";
+import { useJourney, useLeads, useSaveQuickMessage, useSaveSettings, useSettings } from "../../_lib/api";
+import { RULE_MESSAGES, UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { SettingsForm } from "../../_components/SettingsForm";
+import { JourneySection } from "../../_components/JourneySection";
+import { QuickMessagesSection } from "../../_components/QuickMessagesSection";
+import type { QuickSituation } from "../../_lib/types";
 import { useSession } from "@/lib/auth/session-provider";
 
 export default function SettingsPage() {
@@ -20,6 +23,17 @@ export default function SettingsPage() {
     return () => clearTimeout(timer);
   }, [saved]);
   const leads = useLeads();
+  const manager = Boolean(session) && session?.role !== "sales_rep";
+  // D-044: the automatic sequence, read-only. D-042: the quick messages, one save each.
+  const journey = useJourney(manager);
+  const saveQuick = useSaveQuickMessage();
+  const [quickSaved, setQuickSaved] = useState<QuickSituation | null>(null);
+  const [quickError, setQuickError] = useState<{ situation: QuickSituation; message: string } | null>(null);
+  useEffect(() => {
+    if (!quickSaved) return;
+    const timer = setTimeout(() => setQuickSaved(null), 3000);
+    return () => clearTimeout(timer);
+  }, [quickSaved]);
 
   const openLeadsByAssignee = useMemo(() => {
     const out: Record<string, number> = {};
@@ -52,6 +66,31 @@ export default function SettingsPage() {
       ) : null}
       {session?.role !== "sales_rep" && settings.isLoading ? <QueueLoading /> : null}
       {session?.role !== "sales_rep" && settings.isError ? <QueueError onRetry={() => void settings.refetch()} what={UI.loadErrorSettings} /> : null}
+
+      {manager && journey.isLoading ? <QueueLoading /> : null}
+      {manager && journey.isError ? (
+        <QueueError onRetry={() => void journey.refetch()} what={UI.journeyLoadError} />
+      ) : null}
+      {manager && journey.isSuccess ? <JourneySection journey={journey.data} /> : null}
+
+      {session?.role !== "sales_rep" && settings.isSuccess && settings.data.whatsapp_quick_messages ? (
+        <QuickMessagesSection
+          messages={settings.data.whatsapp_quick_messages}
+          changes={settings.data.quick_message_changes ?? {}}
+          signer={settings.data.quick_message_signer ?? ""}
+          savingSituation={saveQuick.isPending ? (saveQuick.variables?.situation ?? null) : null}
+          savedSituation={quickSaved}
+          error={quickError}
+          onSave={(situation, text) => {
+            setQuickSaved(null);
+            setQuickError(null);
+            saveQuick.mutate({ situation, text }, {
+              onSuccess: () => setQuickSaved(situation),
+              onError: (e) => setQuickError({ situation, message: (e.code && RULE_MESSAGES[e.code]) || UI.saveFailed }),
+            });
+          }}
+        />
+      ) : null}
 
       {session?.role !== "sales_rep" && settings.isSuccess ? (
         <SettingsForm

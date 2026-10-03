@@ -190,6 +190,7 @@ export default function AttentionPage() {
           events={events.data ?? []}
           eventsLoading={events.isLoading}
           templates={settings.data?.whatsapp_templates ?? null}
+          settings={settings.data ?? null}
           roster={roster}
           lostReasons={settings.data?.lost_reasons}
           savingStatus={setStatus.isPending}

@@ -70,6 +70,8 @@ export interface SalesLeadRow {
   next_touch_overdue: boolean;
   /** Neither phone nor email: real history, but nobody can call it (0326). */
   uncontactable: boolean;
+  /** D-042: what the lead line sent automatically, and the suggested quick message. */
+  conversation?: LeadConversation | null;
 }
 
 export interface TodayRow {
@@ -97,6 +99,86 @@ export interface TodayRow {
   sla_state: SlaState;
   age_days: number;
   uncontactable: boolean;
+  conversation?: LeadConversation | null;
+}
+
+// ---- the lead conversation (tranche 203, D-042 / D-044) ----------------------
+
+/** The six situations a rep can send a quick message in, in priority order. */
+export type QuickSituation =
+  | "returning_customer"
+  | "tapped_order_no_order"
+  | "asked_more"
+  | "no_answer"
+  | "menu_no_reply"
+  | "no_auto";
+export type Situation = "opted_out" | QuickSituation;
+
+/** One automatic message that really left (dry runs and failed sends never appear). */
+export interface AutoSent {
+  kind: string;
+  step: string | null;
+  at: string;
+  menu: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
+  failed: boolean;
+}
+
+export interface LeadConversation {
+  suggested_situation: Situation;
+  opted_out: boolean;
+  menu_key: string | null;
+  menu_label: string | null;
+  auto: AutoSent[];
+  /** title: the button as the lead saw it (server, from lead_texts BUTTONS). */
+  taps: Array<{ button_id: string; at: string; title?: string | null }>;
+}
+
+export interface JourneyButton {
+  kind: "reply" | "link";
+  id?: string;
+  title: string;
+}
+
+export type JourneyTrigger =
+  | { kind: "first_message"; when: "menu" | "menu_opening" | "no_menu" }
+  | { kind: "button"; button_id: string; known_customer?: boolean }
+  | { kind: "free_text" }
+  | { kind: "stop_text" }
+  | { kind: "wake"; step: number; slots: "any" | "morning"; on: "after_conversation" | "follow_up_date"; template: string };
+
+export interface JourneyStep {
+  id: string;
+  trigger: JourneyTrigger;
+  text: string;
+  footer: string | null;
+  buttons: JourneyButton[];
+  effects: string[];
+}
+
+export interface WakeRules {
+  timezone: string;
+  days: string;
+  slots: { morning: { from: string; to: string }; afternoon: { from: string; to: string } };
+  first_after_hours: number;
+  min_hours_between: number;
+  quiet_after_staff_hours: number;
+  retry_after_hours: number;
+  max_messages: number;
+}
+
+/** GET /api/sales/journey — the lead line's automatic sequence, read-only (D-044). */
+export interface Journey {
+  mode: {
+    state: "live" | "test" | "off";
+    outreach_gate_open: boolean;
+    test_phone_count: number;
+    phone_number_id_set: boolean;
+    send_token_set: boolean;
+  };
+  steps: JourneyStep[];
+  wake_rules: WakeRules;
 }
 
 export interface LeadEventRow {
@@ -154,6 +236,11 @@ export interface SalesSettings {
   queue: QueueSettings;
   assignees: AssigneeEntry[];
   last_changes: SettingChange[];
+  /** D-042 (0376). Optional: an API without them still renders (old templates). */
+  whatsapp_quick_messages?: Record<QuickSituation, string>;
+  quick_message_changes?: Partial<Record<QuickSituation, { actor: string; at: string }>>;
+  /** The signer for THIS session: the person who sends signs the message. */
+  quick_message_signer?: string;
 }
 
 /** One row of the attention screen (0326). A lead can appear in two buckets —

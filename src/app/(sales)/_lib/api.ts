@@ -42,6 +42,8 @@ import type {
   SalesTaskScope,
   QueueSettings,
   SalesSettings,
+  Journey,
+  QuickSituation,
   WeekStats,
   WhatsappTemplates,
 } from "./types";
@@ -119,6 +121,7 @@ export const salesKeys = {
   identityReview: () => ["sales", "identity-review"] as const,
   weekStats: () => ["sales", "week-stats"] as const,
   settings: () => ["sales", "settings"] as const,
+  journey: () => ["sales", "journey"] as const,
   report: () => ["sales", "report"] as const,
   tasks: (scope: SalesTaskScope) => ["sales", "tasks", scope] as const,
 };
@@ -321,6 +324,16 @@ export function useSettings(enabled = true): UseQueryResult<SalesSettings, Sales
     queryKey: salesKeys.settings(),
     enabled,
     queryFn: async () => request<SalesSettings>("/api/sales/settings"),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** The lead line's automatic sequence, read-only (tranche 203, D-044). Managers only. */
+export function useJourney(enabled = true): UseQueryResult<Journey, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.journey(),
+    enabled,
+    queryFn: async () => request<Journey>("/api/sales/journey"),
     staleTime: 5 * 60_000,
   });
 }
@@ -621,6 +634,18 @@ export interface QuickAddVars {
 export function useQuickAdd() {
   return useSalesMutation<QuickAddVars, { lead_id: string; org_id: string; was_new: boolean }>(
     (vars) => request("/api/sales/quick-add", jsonBody(vars)),
+  );
+}
+
+/** One quick message (D-042). The server merges it into the stored map, so saving one
+ *  situation never overwrites another. */
+export function useSaveQuickMessage() {
+  return useSalesMutation<{ situation: QuickSituation; text: string }, unknown>(({ situation, text }) =>
+    request("/api/sales/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ whatsapp_quick_messages: { [situation]: text } }),
+    }),
   );
 }
 

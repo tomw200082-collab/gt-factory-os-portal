@@ -7,11 +7,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Building2, Mail, MessageCircle, Phone, X } from "lucide-react";
+import { Building2, Mail, Phone, X } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtPhone } from "../_lib/format";
 import { LOST_REASONS, STATUS_LABELS, UI } from "../_lib/labels";
-import { mailtoHref, telHref, waHref, fillTemplate, templateFor } from "../_lib/wa";
-import type { AssigneeEntry, LeadEventRow, SalesLeadRow, WhatsappTemplates } from "../_lib/types";
+import { mailtoHref, telHref } from "../_lib/wa";
+import type { AssigneeEntry, LeadEventRow, SalesLeadRow, SalesSettings, WhatsappTemplates } from "../_lib/types";
+import { AutoSentLine } from "./AutoSentLine";
+import { WhatsAppQuick } from "./WhatsAppQuick";
 import { AssigneePicker } from "./AssigneePicker";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
@@ -29,7 +31,10 @@ export interface LeadDrawerProps {
   suspended?: boolean;
   events: LeadEventRow[];
   eventsLoading: boolean;
-  templates: WhatsappTemplates | null;
+  /** Legacy: the old three templates. The WhatsApp button reads `settings` (D-042). */
+  templates?: WhatsappTemplates | null;
+  /** The quick messages, the sender's signer, and the old templates as a fallback. */
+  settings?: SalesSettings | null;
   /** Per-action, not one shared flag: saving a note must not freeze the date. */
   savingNote?: boolean;
   savingNextTouch?: boolean;
@@ -91,7 +96,7 @@ export function LeadDrawer({
   suspended = false,
   events,
   eventsLoading,
-  templates,
+  settings = null,
   savingNote = false,
   savingNextTouch = false,
   savingAssignee = false,
@@ -175,19 +180,6 @@ export function LeadDrawer({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose, dirty, suspended]);
 
-  const name = lead.contact_name ?? lead.org_name;
-  const wa = waHref(
-    lead.phone_e164,
-    templates
-      ? fillTemplate(
-          templateFor(templates, {
-            isExistingCustomer: lead.is_existing_customer,
-            alreadyTouched: Boolean(lead.first_touch_at),
-          }),
-          name,
-        )
-      : "",
-  );
   const [noteSaved, setNoteSaved] = useState(false);
   useEffect(() => {
     if (!noteSaved) return;
@@ -287,7 +279,7 @@ export function LeadDrawer({
 
         {/* contact */}
         {!canEdit && !won ? <p className="mt-3 text-sm" role="status">הליד אינו משויך אליך. מנהל יכול לשייך אותו לפני יצירת קשר.</p> : null}
-        {canEdit ? <div className="mt-3 flex flex-wrap gap-2">
+        {canEdit ? <div className="mt-3 flex flex-wrap items-start gap-2">
           {tel ? (
             <a
               href={tel}
@@ -299,19 +291,16 @@ export function LeadDrawer({
               {UI.call}
             </a>
           ) : null}
-          {wa ? (
-            <a
-              href={wa}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="drawer-whatsapp"
-              className="s-btn s-btn-ghost flex-1"
-              onClick={() => onArm?.(lead.id, "whatsapp")}
-            >
-              <MessageCircle size={16} aria-hidden />
-              {UI.whatsapp}
-            </a>
-          ) : null}
+          {/* D-042: the message for the lead's situation, signed by the sender;
+              disabled, with the reason, for a lead who opted out. */}
+          <WhatsAppQuick
+            leadId={lead.id}
+            phone={lead.phone_e164}
+            lead={lead}
+            settings={settings}
+            onArm={onArm}
+            testId="drawer-whatsapp"
+          />
           {mail ? (
             <a href={mail} className="s-btn s-btn-ghost" onClick={() => onArm?.(lead.id, "email")}>
               <Mail size={16} aria-hidden />
@@ -319,6 +308,9 @@ export function LeadDrawer({
             </a>
           ) : null}
         </div> : null}
+
+        {/* D-042: what the lead line already sent, before the rep writes. */}
+        <AutoSentLine conversation={lead.conversation} />
 
         {lead.is_existing_customer ? (
           <div className="mt-3">
