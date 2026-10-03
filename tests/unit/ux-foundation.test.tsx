@@ -8,23 +8,12 @@ vi.mock("next/navigation", () => ({
   usePathname: () => nav.pathname,
 }));
 
-import { SBtnSpinner } from "@/app/(sales)/_components/SBtnSpinner";
 import { useRouteReveal } from "@/components/layout/useRouteReveal";
 
 beforeEach(() => {
   nav.pathname = "/home";
 });
 afterEach(cleanup);
-
-describe("SBtnSpinner", () => {
-  it("is a decorative 14px spinner span with the sales class", () => {
-    const { container } = render(<SBtnSpinner />);
-    const el = container.firstElementChild as HTMLElement;
-    expect(el.tagName).toBe("SPAN");
-    expect(el.classList.contains("s-btn-spinner")).toBe(true);
-    expect(el.getAttribute("aria-hidden")).toBe("true");
-  });
-});
 
 function Page({ extra }: { extra?: string }) {
   const ref = useRouteReveal<HTMLElement>();
@@ -99,5 +88,40 @@ describe("globals.css contract", () => {
   it("styles the sales busy button and the factory spinner", () => {
     expect(sales).toContain('.s-btn[aria-busy="true"]');
     expect(css).toContain('.btn[aria-busy="true"]');
+  });
+
+  it("derives the skeleton sweep and base from the ink, and has a sales card override", () => {
+    expect(css).toContain("hsl(var(--fg) / var(--skel-sweep))");
+    expect(css).toContain("hsl(var(--fg) / var(--skel-base))");
+    expect(css).not.toContain("hsl(var(--bg-raised) / 0.8), transparent)");
+    expect(sales).toContain('.s-card.animate-pulse::after');
+  });
+
+  it("keeps one pending ring on sales buttons: the ::after ring, no SBtnSpinner", () => {
+    expect(sales).toContain('.s-btn[aria-busy="true"]::after');
+    expect(sales).not.toContain("s-btn-spinner");
+    expect(css).not.toContain("s-btn-spinner");
+  });
+
+  it("holds the spinners as a slow pulse under reduced motion", () => {
+    const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reduced).toContain(".animate-spin");
+    expect(reduced).toContain('.s-btn[aria-busy="true"]::after');
+    expect(reduced).toContain("gt-spinner-hold");
+  });
+
+  it("hides a leading icon behind the spinner in any busy control", () => {
+    expect(css).toContain('[aria-busy="true"] > .btn-spinner + svg');
+  });
+
+  it("has real overlay keyframes wired to the Radix data-state attributes", () => {
+    for (const k of ["gt-drawer-in", "gt-drawer-out", "gt-dialog-in", "gt-dialog-out", "gt-menu-in", "gt-menu-out"]) {
+      expect(css).toContain(`@keyframes ${k}`);
+    }
+    expect(css).toContain('.gt-drawer-panel[data-state="open"]');
+    expect(css).toContain("animation: gt-drawer-in var(--motion-base)");
+    expect(css).toContain("animation: gt-drawer-out var(--motion-fast)");
+    expect(css).toContain("animation: gt-menu-in var(--motion-fast)");
+    expect(css).toContain("scale(0.97)");
   });
 });

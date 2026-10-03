@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { usePathname } from "next/navigation";
+
+// useLayoutEffect warns during server render; there is nothing to restart there.
+// Layout timing restarts the animation before paint, so the new page never shows one frame at full opacity.
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * The content reveal (`.gt-reveal`, an opacity fade over --motion-base) runs
@@ -20,7 +24,7 @@ export function useRouteReveal<T extends HTMLElement>(): RefObject<T> {
   const pathname = usePathname();
   const previous = useRef(pathname);
 
-  useEffect(() => {
+  useIsoLayoutEffect(() => {
     if (previous.current === pathname) return;
     previous.current = pathname;
     const el = ref.current;

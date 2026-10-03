@@ -26,8 +26,7 @@ const DropdownMenuContent = React.forwardRef<
       align={align}
       className={cn(
         "z-50 min-w-[14rem] overflow-hidden rounded-md border border-border/70 bg-bg-raised p-1 text-fg shadow-pop",
-        "data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-in",
-        "[animation-duration:var(--motion-fast)]",
+        "gt-menu",
         "outline-none",
         className,
       )}

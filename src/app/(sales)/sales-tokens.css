@@ -454,27 +454,6 @@
   pointer-events: none;
 }
 
-/* A save in flight: set aria-busy="true" (with disabled) and put <SBtnSpinner/>
-   first inside the button. It stays readable (the label does not change) and
-   the spinner replaces a leading icon that follows it. */
-[data-app="sales"] .s-btn[aria-busy="true"]:disabled {
-  opacity: 0.75;
-}
-[data-app="sales"] .s-btn-spinner {
-  display: inline-block;
-  flex: none;
-  box-sizing: border-box;
-  width: 14px;
-  height: 14px;
-  border-radius: 9999px;
-  border: 2px solid currentColor;
-  border-inline-end-color: transparent;
-  animation: gt-btn-spin 700ms linear infinite;
-}
-[data-app="sales"] .s-btn[aria-busy="true"] > .s-btn-spinner + svg {
-  display: none;
-}
-
 [data-app="sales"] .s-btn-primary {
   background: hsl(var(--s-action));
   color: hsl(var(--s-action-fg));
@@ -1267,6 +1246,18 @@
 }
 @keyframes s-spin {
   to { transform: rotate(360deg); }
+}
+
+/* The skeleton look on the sales card: the card's own ground hides the
+   factory tint and sweep, so both come from the sales ink. */
+[data-app="sales"] .animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"]) {
+  background-image: linear-gradient(hsl(var(--s-fg) / var(--skel-base)), hsl(var(--s-fg) / var(--skel-base)));
+}
+[data-app="sales"] .s-card.animate-pulse::after {
+  background: linear-gradient(to right, transparent, hsl(var(--s-fg) / var(--skel-sweep)), transparent);
+}
+[data-app="sales"] .gt-skel-block {
+  background-color: hsl(var(--s-fg) / 0.04);
 }
 
 /* --- GT Pulse D1, corridor-wide (tranche 187) ------------------------------ */

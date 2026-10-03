@@ -20,6 +20,7 @@ import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useSession } from "@/lib/auth/session-provider";
 import { Users, X, Eye, EyeOff, Copy, KeyRound, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { LockedButton } from "@/components/ui/LockedButton";
 import {
   MAX_PASSWORD_LENGTH,
   localPasswordError,
@@ -964,7 +965,8 @@ export default function AdminUsersPage() {
                       <td className="px-3 py-2 text-right">
                         <div className="flex flex-col items-end gap-1">
                           {u.status === "active" ? (
-                            <button
+                            <LockedButton
+                              pending={rs.statusPending}
                               type="button"
                               className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger-softer"
                               disabled={rs.statusPending}
@@ -989,9 +991,10 @@ export default function AdminUsersPage() {
                               }}
                             >
                               {rs.statusPending ? "…" : "Deactivate"}
-                            </button>
+                            </LockedButton>
                           ) : (
-                            <button
+                            <LockedButton
+                              pending={rs.statusPending}
                               type="button"
                               className="btn btn-ghost btn-sm text-success-fg hover:bg-success-softer"
                               disabled={rs.statusPending}
@@ -1013,7 +1016,7 @@ export default function AdminUsersPage() {
                               }}
                             >
                               {rs.statusPending ? "…" : "Activate"}
-                            </button>
+                            </LockedButton>
                           )}
                           {rs.statusError && (
                             <span className="text-2xs text-danger-fg">

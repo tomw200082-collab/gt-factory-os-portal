@@ -27,7 +27,7 @@
 //  19. Mobile card layout at <md — touch targets ≥44px, no horizontal scroll.
 //  20. Click row → side drawer with full row detail incl. raw IDs collapsed.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -455,6 +455,19 @@ function DetailsDrawer({
     setUndoDone(false);
   }, [row?.movement_id]);
 
+  // Focus moves into the drawer when it opens and goes back to whatever opened
+  // it (the table row) when it closes, instead of dropping to <body>.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const isOpen = row !== null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => {
+      opener?.focus?.();
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (!row) return;
     function onKey(e: KeyboardEvent) {
@@ -509,7 +522,9 @@ function DetailsDrawer({
         aria-hidden
       />
       <div
-        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-bg shadow-xl sm:w-[28rem]"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-bg shadow-xl outline-none sm:w-[28rem]"
         role="dialog"
         aria-modal="true"
         aria-label="Movement details"

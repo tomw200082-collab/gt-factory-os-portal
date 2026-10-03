@@ -213,7 +213,7 @@ export function Skel({
       style={{ height: h ?? 16, width: w ?? "100%" }}
     >
       <div
-        className="absolute inset-y-0 w-3/5 bg-gradient-to-r from-transparent via-bg-raised/80 to-transparent motion-reduce:hidden"
+        className="absolute inset-y-0 w-3/5 bg-gradient-to-r from-transparent via-fg/[0.07] to-transparent motion-reduce:hidden"
         style={{ animation: "gt-shimmer 1.5s ease-in-out infinite" }}
         aria-hidden
       />

@@ -21,6 +21,7 @@ import { CheckCircle2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useLockedWidth } from "@/components/ui/useLockedWidth";
+import { LockedButton } from "@/components/ui/LockedButton";
 import { useSession } from "@/lib/auth/session-provider";
 import {
   DetailPage,
@@ -1238,15 +1239,15 @@ export default function PurchaseOrderDetailPage({
                             {lineEditError && (
                               <span className="text-xs text-danger-fg">{lineEditError}</span>
                             )}
-                            <button
-                              type="button"
-                              className="btn btn-sm"
+                            <LockedButton
+                              pending={lineUpdateMut.isPending}
+                              className="btn btn-sm min-w-[4.5rem]"
                               onClick={() => lineUpdateMut.mutate(line.po_line_id)}
                               disabled={lineUpdateMut.isPending}
                               aria-busy={lineUpdateMut.isPending && lineUpdateMut.variables === line.po_line_id ? "true" : undefined}
                             >
                               {lineUpdateMut.isPending ? "Saving…" : "Save"}
-                            </button>
+                            </LockedButton>
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
@@ -1398,15 +1399,15 @@ export default function PurchaseOrderDetailPage({
               {editError && (
                 <span className="text-xs text-danger-fg">{editError}</span>
               )}
-              <button
-                type="button"
-                className="btn btn-sm"
+              <LockedButton
+                pending={updateMut.isPending}
+                className="btn btn-sm min-w-[4.5rem]"
                 onClick={() => updateMut.mutate()}
                 disabled={updateMut.isPending}
                 aria-busy={updateMut.isPending ? "true" : undefined}
               >
                 {updateMut.isPending ? "Saving…" : "Save"}
-              </button>
+              </LockedButton>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"

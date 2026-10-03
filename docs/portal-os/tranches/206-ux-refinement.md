@@ -143,3 +143,30 @@ Revert the merge commit. No data, permission or API change.
 - src/app/(ops)/stock/waste-adjustments/page.tsx
 - src/app/(admin)/admin/jobs/page.tsx
 - src/app/(inbox)/inbox/page.tsx
+
+## Gate fixes
+
+- src/components/layout/ContentSkeleton.tsx
+- src/components/layout/AppShellChrome.tsx
+- src/app/(sales)/_components/SalesShell.tsx
+- src/app/(sales)/_components/SBtnSpinner.tsx
+- src/app/(sales)/_components/QuickAddSheet.tsx
+- src/app/(sales)/_components/OutcomeSheet.tsx
+- src/app/(sales)/_components/BulkBar.tsx
+- src/app/(sales)/sales-tokens.css
+- src/app/globals.css
+- src/app/(shared)/inventory/page.tsx
+- src/app/(shared)/stock/movement-log/page.tsx
+- src/components/layout/useRouteReveal.ts
+- src/components/layout/CommandPalette.tsx
+- src/components/fields/SearchableSelect.tsx
+- src/components/ui/dropdown-menu.tsx
+- src/components/overlays/Drawer.tsx
+- src/components/overlays/ConfirmDialog.tsx
+- src/app/(admin)/admin/users/page.tsx
+- src/app/(po)/purchase-orders/[po_id]/page.tsx
+- tests/unit/ux-foundation.test.tsx
+- tests/unit/navigation-loader.test.tsx
+- src/components/ui/LockedButton.tsx
+- src/components/feedback/states.tsx
+- src/components/overlays/useRestoreFocus.ts

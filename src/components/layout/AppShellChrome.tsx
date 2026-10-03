@@ -1,9 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { TopBar } from "./TopBar";
 import { SideNav } from "./SideNav";
 import { useRouteReveal } from "./useRouteReveal";
+import { ContentSkeleton } from "./ContentSkeleton";
 
 export function AppShellChrome({ children }: { children: ReactNode }) {
   const mainRef = useRouteReveal<HTMLElement>();
@@ -28,7 +29,7 @@ export function AppShellChrome({ children }: { children: ReactNode }) {
           tabIndex={-1}
           className="gt-reveal min-w-0 flex-1 outline-none pb-[max(4rem,env(safe-area-inset-bottom,0px))]"
         >
-          {children}
+          <Suspense fallback={<ContentSkeleton />}>{children}</Suspense>
         </main>
       </div>
     </div>

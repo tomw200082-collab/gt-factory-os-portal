@@ -4377,8 +4377,29 @@
   left: 0;
   width: 60%;
   pointer-events: none;
-  background: linear-gradient(to right, transparent, hsl(var(--bg-raised) / 0.8), transparent);
+  background: linear-gradient(to right, transparent, hsl(var(--fg) / var(--skel-sweep)), transparent);
   animation: gt-shimmer-x 1.5s ease-in-out infinite;
+}
+/* The sweep and the base are derived from the foreground, not from a surface
+   token: bg-raised on a bg-raised card (s-card, the forecast cards) drew
+   nothing. A wash of ink is visible on any surface, light or dark. The base
+   tint sits at zero specificity, over whatever background colour the block
+   has, so a utility that sets its own background-image still wins. */
+:root {
+  --skel-sweep: 0.07;
+  --skel-base: 0.05;
+}
+:root.dark {
+  --skel-sweep: 0.09;
+  --skel-base: 0.06;
+}
+:where(.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"])) {
+  background-image: linear-gradient(hsl(var(--fg) / var(--skel-base)), hsl(var(--fg) / var(--skel-base)));
+}
+/* The in-shell route skeleton (layout/ContentSkeleton). */
+.gt-skel-block {
+  border-radius: 6px;
+  background-color: hsl(var(--bg-subtle));
 }
 /* Same travel as gt-shimmer (left -70% -> 160% of the parent), on transform. */
 @keyframes gt-shimmer-x {
@@ -4399,7 +4420,7 @@
   max-height: calc(100dvh - 88px);
 }
 
-/* ── Pending spinner (Button, SBtnSpinner) ────────────────────────────── */
+/* ── Pending spinner (Button, the busy ring on .s-btn) ────────────────────────────── */
 @keyframes gt-btn-spin { to { transform: rotate(360deg); } }
 @keyframes gt-spinner-hold {
   0%, 100% { opacity: 0.35; }
@@ -4416,8 +4437,9 @@
   border-inline-end-color: transparent;
   animation: gt-btn-spin 700ms linear infinite;
 }
-/* The spinner replaces a leading icon that sits right after it. */
-.btn[aria-busy="true"] > .btn-spinner + svg {
+/* The spinner replaces a leading icon that sits right after it, in a .btn or
+   in any other busy control (a plain button, a menu item). */
+[aria-busy="true"] > .btn-spinner + svg {
   display: none;
 }
 /* A pending button is unavailable but still readable. */
@@ -4436,6 +4458,47 @@
 .gt-reveal {
   animation: gt-reveal var(--motion-base) var(--ease-out) backwards;
 }
+
+/* ── Overlay motion (Drawer, ConfirmDialog, DropdownMenu) ─────────────────
+   Radix sets data-state="open|closed" and keeps the node mounted until the
+   exit animation ends, so one set of keyframes covers both directions. The
+   project has no tailwindcss-animate, so animate-in / slide-* classes did
+   nothing; these replace them. Drawer: from the edge, --motion-base in,
+   --motion-fast out. Dialog: opacity and scale .97 at --motion-fast. Menu:
+   opacity and a 4px slide away from the trigger at --motion-fast. Reduced
+   motion is the global rule (durations collapse, nothing repeats). */
+@keyframes gt-overlay-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gt-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gt-drawer-in   { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes gt-drawer-out  { from { transform: translateX(0); } to { transform: translateX(100%); } }
+@keyframes gt-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes gt-dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+}
+@keyframes gt-menu-in {
+  from { opacity: 0; transform: translate(var(--gt-menu-x, 0), var(--gt-menu-y, 0)); }
+  to   { opacity: 1; transform: translate(0, 0); }
+}
+@keyframes gt-menu-out {
+  from { opacity: 1; transform: translate(0, 0); }
+  to   { opacity: 0; transform: translate(var(--gt-menu-x, 0), var(--gt-menu-y, 0)); }
+}
+.gt-overlay[data-state="open"]  { animation: gt-overlay-in var(--gt-overlay-in, var(--motion-fast)) var(--ease-out) both; }
+.gt-overlay[data-state="closed"] { animation: gt-overlay-out var(--motion-fast) var(--ease-in) both; }
+.gt-drawer-panel[data-state="open"]  { animation: gt-drawer-in var(--motion-base) var(--ease-out) both; }
+.gt-drawer-panel[data-state="closed"] { animation: gt-drawer-out var(--motion-fast) var(--ease-in) both; }
+.gt-dialog-panel[data-state="open"]  { animation: gt-dialog-in var(--motion-fast) var(--ease-out) both; }
+.gt-dialog-panel[data-state="closed"] { animation: gt-dialog-out var(--motion-fast) var(--ease-in) both; }
+.gt-menu[data-side="bottom"] { --gt-menu-y: -4px; }
+.gt-menu[data-side="top"]    { --gt-menu-y: 4px; }
+.gt-menu[data-side="left"]   { --gt-menu-x: 4px; }
+.gt-menu[data-side="right"]  { --gt-menu-x: -4px; }
+.gt-menu[data-state="open"]  { animation: gt-menu-in var(--motion-fast) var(--ease-out) both; }
+.gt-menu[data-state="closed"] { animation: gt-menu-out var(--motion-fast) var(--ease-in) both; }
 
 /* ── Refresh hint (feedback/RefreshHint) ──────────────────────────────── */
 .gt-refresh-hint {
@@ -4484,7 +4547,8 @@
     display: none !important;
   }
   .btn-spinner,
-  [data-app="sales"] .s-btn-spinner {
+  .animate-spin,
+  [data-app="sales"] .s-btn[aria-busy="true"]::after {
     animation: gt-spinner-hold 1.4s ease-in-out infinite !important;
     border-inline-end-color: currentColor;
   }

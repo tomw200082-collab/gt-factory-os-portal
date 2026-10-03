@@ -21,7 +21,6 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { ReconcileBadge } from "@/components/stock/ReconcileBadge";
-import { RefreshHint } from "@/components/feedback/RefreshHint";
 import { StockTruthDrawer } from "@/components/stock/StockTruthDrawer";
 import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
 import {
@@ -1279,7 +1278,7 @@ export default function InventoryPage() {
                     className={cn(
                       "rounded-full px-1.5 py-0 text-sm tabular-nums ring-1",
                       isActive
-                        ? "bg-accent-softer text-accent-fg ring-accent/30"
+                        ? "bg-accent-softer text-accent ring-accent/30"
                         : "bg-bg-subtle text-fg-subtle ring-border",
                     )}
                   >
@@ -1528,7 +1527,6 @@ export default function InventoryPage() {
                   ))}
                 </select>
               </div>
-              <RefreshHint active={refreshing && !isLoading} className="ml-auto pb-1" />
             </div>
           </div>
 
