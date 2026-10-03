@@ -9,7 +9,7 @@
 // A lead whose phone opted out («הסר», «תודה, לא כרגע», or Meta's stop) gets a disabled
 // button that says why, and nothing is armed. The call next to it stays.
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { QUICK_SITUATION_LABELS, UI } from "../_lib/labels";
 import { waHref } from "../_lib/wa";
@@ -33,6 +33,7 @@ export function WhatsAppQuick({ leadId, phone, lead, settings, onArm, testId, to
   const [picked, setPicked] = useState<QuickSituation | null>(null);
   const [picking, setPicking] = useState(false);
   const listId = useId();
+  const otherRef = useRef<HTMLButtonElement>(null);
   if (!phone) return null;
 
   const shell = `s-btn w-full ${tone === "ghost-on-tint" ? "s-btn-ghost-on-tint" : "s-btn-ghost"}`;
@@ -55,7 +56,18 @@ export function WhatsAppQuick({ leadId, phone, lead, settings, onArm, testId, to
   const canPick = Boolean(settings?.whatsapp_quick_messages);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div
+      className="flex min-w-0 flex-1 flex-col"
+      // Escape closes the picker first; only a closed picker lets the drawer hear it.
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && picking) {
+          e.stopPropagation();
+          e.nativeEvent.stopImmediatePropagation();
+          setPicking(false);
+          otherRef.current?.focus();
+        }
+      }}
+    >
       <a
         href={href}
         target="_blank"
@@ -70,6 +82,7 @@ export function WhatsAppQuick({ leadId, phone, lead, settings, onArm, testId, to
       </a>
       {canPick ? (
         <button
+          ref={otherRef}
           type="button"
           data-testid={`${testId}-other`}
           aria-expanded={picking}
@@ -77,7 +90,8 @@ export function WhatsAppQuick({ leadId, phone, lead, settings, onArm, testId, to
           className="s-wa-other"
           onClick={() => setPicking((p) => !p)}
         >
-          {UI.waOther}
+          {/* after a pick it names what the button will open */}
+          {picked ? QUICK_SITUATION_LABELS[picked] : UI.waOther}
         </button>
       ) : null}
       {picking ? (

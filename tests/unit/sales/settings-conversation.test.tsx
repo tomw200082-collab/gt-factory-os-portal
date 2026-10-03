@@ -4,6 +4,7 @@ import { QuickMessagesSection } from "@/app/(sales)/_components/QuickMessagesSec
 import { JourneySection } from "@/app/(sales)/_components/JourneySection";
 import { QUICK_SITUATION_LABELS, UI } from "@/app/(sales)/_lib/labels";
 import type { Journey, QuickSituation } from "@/app/(sales)/_lib/types";
+import { REAL_JOURNEY } from "../../e2e/_fixtures/salesJourney";
 
 afterEach(cleanup);
 
@@ -47,6 +48,32 @@ describe("quick messages in settings", () => {
     fireEvent.select(ta);
     fireEvent.click(within(screen.getByTestId("quick-no_answer")).getByTestId("quick-chip-name"));
     expect(ta.value).toBe("היי {{name}}, ניסיתי\n{{rep}}");
+  });
+
+  it("names each chip in Hebrew (its accessible name too) and inserts the token (F6)", () => {
+    renderQuick();
+    const row = within(screen.getByTestId("quick-no_auto"));
+    for (const [label, token] of [["שם הליד", "{{name}}"], ["שם הנציג", "{{rep}}"], ["שם העסק", "{{business}}"], ["שם התפריט", "{{menu}}"]]) {
+      const chip = row.getByRole("button", { name: label });
+      expect(chip.textContent).toBe(label);
+      const ta = screen.getByTestId("quick-text-no_auto") as HTMLTextAreaElement;
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      fireEvent.click(chip);
+      expect(ta.value.endsWith(token)).toBe(true);
+    }
+  });
+
+  it("lets the text decide its own direction (F7)", () => {
+    renderQuick();
+    expect(screen.getByTestId("quick-text-no_auto").className).toContain("s-quick-text");
+  });
+
+  it("marks a row with unsaved edits (F9)", () => {
+    renderQuick();
+    expect(screen.queryByTestId("quick-dirty-asked_more")).toBeNull();
+    fireEvent.change(screen.getByTestId("quick-text-asked_more"), { target: { value: "חדש" } });
+    expect(screen.getByTestId("quick-dirty-asked_more").textContent).toBe(UI.quickUnsaved);
   });
 
   it("previews the message on a synthetic lead, with the sender as signer", () => {
@@ -100,11 +127,38 @@ const JOURNEY: Journey = {
   },
 };
 
+describe("the journey in settings, on the real 13-step shape", () => {
+  it("renders all 13 steps with their footers", () => {
+    render(<JourneySection journey={REAL_JOURNEY} />);
+    expect(REAL_JOURNEY.steps).toHaveLength(13);
+    for (const step of REAL_JOURNEY.steps) {
+      const el = screen.getByTestId(`journey-step-${step.id}`);
+      if (step.footer) expect(el.textContent).toContain(step.footer);
+    }
+  });
+
+  it("shows no raw token; variables are Hebrew pills isolated with bdi (F3)", () => {
+    render(<JourneySection journey={REAL_JOURNEY} />);
+    const section = screen.getByTestId("settings-journey");
+    expect(section.textContent).not.toMatch(/\{\{/);
+    const wake1 = screen.getByTestId("journey-step-wake_1");
+    const pills = Array.from(wake1.querySelectorAll("bdi.s-var-pill")).map((p) => p.textContent);
+    expect(pills).toEqual(["‹שם הליד›", "‹שם התפריט›", "‹שם הנציג›"]);
+  });
+
+  it("isolates every time range left-to-right so it never reads reversed (F2)", () => {
+    render(<JourneySection journey={REAL_JOURNEY} />);
+    const ranges = (id: string) => Array.from(screen.getByTestId(`journey-when-${id}`).querySelectorAll('bdi[dir="ltr"]')).map((b) => b.textContent);
+    expect(ranges("wake_2")).toEqual(["10:00–11:30"]);
+    expect(ranges("wake_1")).toEqual(["10:00–11:30", "15:00–17:00"]);
+  });
+});
+
 describe("the journey in settings (read-only)", () => {
   it("shows every step's exact text, footer and buttons, with no control to edit them", () => {
     render(<JourneySection journey={JOURNEY} />);
     const section = screen.getByTestId("settings-journey");
-    expect(screen.getByTestId("journey-step-first_menu").textContent).toContain("הנה {{menu}} שלנו");
+    expect(screen.getByTestId("journey-step-first_menu").textContent).toContain("הנה ‹שם התפריט› שלנו");
     expect(screen.getByTestId("journey-step-first_menu").textContent).toContain("אני רוצה להזמין");
     expect(screen.getByTestId("journey-step-more_info").textContent).toContain("שאלות ותשובות");
     expect(section.querySelectorAll("textarea, input").length).toBe(0);

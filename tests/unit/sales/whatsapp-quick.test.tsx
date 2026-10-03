@@ -54,6 +54,22 @@ describe("the WhatsApp quick button", () => {
     fireEvent.click(within(list).getByText(QUICK_SITUATION_LABELS.menu_no_reply));
     expect(textOf(screen.getByTestId("wa").getAttribute("href"))).toBe("תפריט תפריט האובה דנה אבי");
     expect(screen.queryByTestId("wa-situations")).toBeNull();
+    // the picker now names what it will open (F8)
+    expect(screen.getByTestId("wa-other").textContent).toBe(QUICK_SITUATION_LABELS.menu_no_reply);
+  });
+
+  it("closes the picker on Escape before anything behind it hears the key (F9)", () => {
+    const outside = vi.fn();
+    document.addEventListener("keydown", outside);
+    render(<WhatsAppQuick leadId="L1" phone="+972521234567" lead={lead} settings={SETTINGS} onArm={() => {}} testId="wa" />);
+    fireEvent.click(screen.getByTestId("wa-other"));
+    fireEvent.keyDown(screen.getByTestId("wa-situation-no_auto"), { key: "Escape" });
+    expect(screen.queryByTestId("wa-situations")).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+    // with the picker closed, Escape is the drawer's again
+    fireEvent.keyDown(screen.getByTestId("wa-other"), { key: "Escape" });
+    expect(outside).toHaveBeenCalledTimes(1);
+    document.removeEventListener("keydown", outside);
   });
 
   it("is disabled, with the reason in words, for a lead who opted out; nothing is armed", () => {

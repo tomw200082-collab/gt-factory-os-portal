@@ -1,5 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 import { setFakeRole } from "./helpers";
+import { REAL_JOURNEY } from "./_fixtures/salesJourney";
 
 // @mocked — tranche 203 (D-042, D-044): the lead conversation.
 //   settings: the automatic sequence read-only, and the quick messages saved one by one
@@ -16,13 +19,14 @@ const STATS = {
   unassigned_open_count: 2, never_contacted_count: 2, uncontactable_count: 0,
 };
 
+// The 0376 seeds, verbatim: plural throughout, no prefix letter on a variable.
 const QUICK = {
-  returning_customer: "היי {{name}}, איזה כיף לשמוע ממך שוב!\n{{rep}}, GT Everyday",
-  tapped_order_no_order: "היי {{name}}, ראיתי שרציתם להזמין, מעולה!\n{{rep}}, GT Everyday",
-  asked_more: "היי {{name}}, ראיתי שביקשתם לשמוע עוד, איזה כיף!\nמתי נוח לך לשיחה קצרה? אספר על המשקאות ונמצא יחד מה הכי מתאים ל־{{business}}.\n{{rep}}, GT Everyday",
-  no_answer: "היי {{name}}, ניסיתי להשיג אותך בטלפון ולא הצלחתי.\n{{rep}}, GT Everyday",
-  menu_no_reply: "היי {{name}}, מה שלומך?\nרציתי לוודא שקיבלתם את {{menu}}.\n{{rep}}, GT Everyday",
-  no_auto: "היי {{name}}, תודה שפניתם ל־GT Everyday!\n{{rep}}, GT Everyday",
+  returning_customer: "היי {{name}}, איזה כיף לשמוע מכם שוב!\nראיתי שפניתם אלינו. במה אפשר לעזור הפעם?\n{{rep}}, GT Everyday",
+  tapped_order_no_order: "היי {{name}}, ראיתי שרציתם להזמין, מעולה!\nאם משהו לא הסתדר בדרך או שיש שאלה לפני ההזמנה, אני כאן ואשמח לעזור.\n{{rep}}, GT Everyday",
+  asked_more: "היי {{name}}, ראיתי שביקשתם לשמוע עוד, איזה כיף!\nמתי נוח לכם לשיחה קצרה? אספר על המשקאות ונמצא יחד מה הכי מתאים בשביל {{business}}.\n{{rep}}, GT Everyday",
+  no_answer: "היי {{name}}, ניסיתי להשיג אתכם בטלפון ולא הצלחתי.\nמתי נוח לכם שנדבר? אפשר גם פשוט לכתוב לי כאן.\n{{rep}}, GT Everyday",
+  menu_no_reply: "היי {{name}}, מה שלומכם?\nרציתי לוודא שקיבלתם את {{menu}}. יש משקה שתפס לכם את העין?\nאשמח לעזור לבחור מה הכי מתאים בשביל {{business}}, ולכל שאלה אני כאן (:\n{{rep}}, GT Everyday",
+  no_auto: "היי {{name}}, תודה שפניתם ל־GT Everyday!\nאשמח לספר על המשקאות שלנו ולמצוא יחד מה הכי מתאים בשביל {{business}}.\nמתי נוח לכם לשיחה קצרה?\n{{rep}}, GT Everyday",
 };
 
 const SETTINGS = {
@@ -37,32 +41,7 @@ const SETTINGS = {
   quick_message_signer: "אבי",
 };
 
-const JOURNEY = {
-  mode: { state: "test", outreach_gate_open: false, test_phone_count: 1, phone_number_id_set: true, send_token_set: true },
-  steps: [
-    { id: "first_menu", trigger: { kind: "first_message", when: "menu" },
-      text: "היי, כיף שפניתם ל־GT Everyday!\nהנה {{menu}} שלנו: משקאות שהאורחים שלכם יצלמו, והצוות שלכם ילמד להכין כבר ביום הראשון.\nויש עוד הרבה מאיפה שזה בא (:\nאיך תרצו להמשיך?",
-      footer: "מדי פעם נשלח לכם עדכונים על המוצרים. לא מתאים? כתבו \"הסר\"",
-      buttons: [
-        { kind: "reply", id: "lj.order", title: "אני רוצה להזמין" },
-        { kind: "reply", id: "lj.more", title: "רוצה לשמוע עוד" },
-        { kind: "reply", id: "lj.not_now", title: "תודה, לא כרגע" },
-      ], effects: [] },
-    { id: "more_info", trigger: { kind: "button", button_id: "lj.more" },
-      text: "בשמחה! נתקשר אליכם בהקדם לשיחה קצרה.", footer: null,
-      buttons: [{ kind: "link", title: "שאלות ותשובות" }], effects: ["owner_alerted"] },
-    { id: "not_now", trigger: { kind: "button", button_id: "lj.not_now" },
-      text: "מבינים לגמרי, ותודה רבה שהתעניינתם ב־GT Everyday.", footer: null, buttons: [], effects: ["lost_not_now", "opted_out"] },
-    { id: "wake_2", trigger: { kind: "wake", step: 2, slots: "morning", on: "follow_up_date", template: "gt_lead_wake_2" },
-      text: "בוקר טוב {{name}}!\nאתקשר אליך היום להמשך השיחה שלנו.\n{{rep}}, GT Everyday", footer: "להסרה מהעדכונים אפשר להשיב \"הסר\"",
-      buttons: [{ kind: "link", title: "שאלות ותשובות" }], effects: [] },
-  ],
-  wake_rules: {
-    timezone: "Asia/Jerusalem", days: "sun_thu",
-    slots: { morning: { from: "10:00", to: "11:30" }, afternoon: { from: "15:00", to: "17:00" } },
-    first_after_hours: 2, min_hours_between: 48, quiet_after_staff_hours: 24, retry_after_hours: 24, max_messages: 4,
-  },
-};
+const JOURNEY = REAL_JOURNEY;
 
 const conversation = (over: Record<string, unknown> = {}) => ({
   suggested_situation: "asked_more",
@@ -132,6 +111,19 @@ async function stub(page: Page): Promise<Sent[]> {
 const waText = (href: string | null) => decodeURIComponent(new URL(href ?? "").searchParams.get("text") ?? "");
 const SHOTS = process.env.P1_SHOTS;
 
+/** axe WCAG 2.x A/AA on the page; every violation listed by rule and target. */
+async function axeClean(page: Page, where: string) {
+  await page.waitForTimeout(150);
+  const src = fs.readFileSync(path.join(process.cwd(), "node_modules/axe-core/axe.min.js"), "utf8");
+  await page.evaluate(src);
+  const violations = await page.evaluate(async () => {
+    const r = await (window as unknown as { axe: { run: (c: Document, o: unknown) => Promise<{ violations: Array<{ id: string; nodes: Array<{ target: string[] }> }> }> } })
+      .axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"] } });
+    return r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`);
+  });
+  expect(violations, where).toEqual([]);
+}
+
 async function shoot(page: Page, name: string, target: string) {
   if (!SHOTS) return;
   for (const width of [390, 1280]) {
@@ -162,7 +154,14 @@ test("settings show the automatic sequence read-only, and save a quick message o
   await expect(page.getByTestId("journey-mode")).toHaveText("מצב בדיקה: ההודעות יוצאות רק לטלפון בדיקה אחד.");
   await expect(page.getByTestId("journey-step-first_menu")).toContainText("אני רוצה להזמין");
   await expect(page.getByTestId("journey-when-more_info")).toContainText("רוצה לשמוע עוד");
-  await expect(page.getByTestId("journey-when-wake_2")).toContainText("10:00–11:30");
+  await expect(page.getByTestId("journey-when-wake_2").locator('bdi[dir="ltr"]')).toHaveText("10:00–11:30");
+  await expect(journey).not.toContainText("{{");
+  await expect(page.getByTestId("journey-step-wake_1").locator("bdi.s-var-pill")).toHaveText(["‹שם הליד›", "‹שם התפריט›", "‹שם הנציג›"]);
+  await expect(journey.locator('[data-testid^="journey-step-"]')).toHaveCount(13);
+  await axeClean(page, "settings light");
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await axeClean(page, "settings dark");
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
   await expect(journey.locator("textarea, input")).toHaveCount(0);
   await expect(journey).toContainText("שינוי בנוסח עובר דרך תום");
 
@@ -179,7 +178,7 @@ test("settings show the automatic sequence read-only, and save a quick message o
   const ta = page.getByTestId("quick-text-no_answer");
   await ta.click();
   await ta.press("Control+End");
-  await page.getByTestId("quick-no_answer").getByTestId("quick-chip-business").click();
+  await page.getByTestId("quick-no_answer").getByRole("button", { name: "שם העסק" }).click();
   await expect(ta).toHaveValue(/GT Everyday\{\{business\}\}$/);
   await page.getByTestId("quick-save-no_answer").click();
   await expect.poll(() => sent.filter((s) => s.method === "PUT").length).toBe(1);
@@ -211,13 +210,24 @@ test("the drawer shows what was sent automatically and opens the suggested messa
   await expect(wa).toHaveAttribute("data-situation", "asked_more");
   const text = waText(await wa.getAttribute("href"));
   expect(text).toContain("היי דנה, ראיתי שביקשתם לשמוע עוד");
-  expect(text).toContain("ל־קפה נחת");
+  expect(text).toContain("בשביל קפה נחת");
+  expect(text).not.toContain("ל־קפה");
   expect(text).toContain("אבי, GT Everyday");
   expect(text).not.toContain("תום");
 
   await page.getByTestId("drawer-whatsapp-other").click();
   await page.getByTestId("drawer-whatsapp-situation-menu_no_reply").click();
   await expect(wa).toHaveAttribute("data-situation", "menu_no_reply");
+  await expect(page.getByTestId("drawer-whatsapp-other")).toHaveText("קיבל תפריט ולא ענה");
+  // Escape closes the picker, not the drawer
+  await page.getByTestId("drawer-whatsapp-other").click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("drawer-whatsapp-situations")).toHaveCount(0);
+  await expect(drawer).toBeVisible();
+  await axeClean(page, "drawer light");
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await axeClean(page, "drawer dark");
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
   expect(waText(await wa.getAttribute("href"))).toContain("תפריט המאצ׳ה");
 
   await shoot(page, "drawer", "lead-drawer");

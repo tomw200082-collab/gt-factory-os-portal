@@ -1086,6 +1086,7 @@ export const UI = {
   quickPreview: "תצוגה מקדימה, על ליד לדוגמה",
   quickSave: "שמירה",
   quickSaved: "נשמר ✓",
+  quickUnsaved: "לא נשמר",
   quickEmpty: "ההודעה ריקה.",
   quickTooLong: "עד 1000 תווים.",
   quickCount: (n: number) => `${n}/1000`,
@@ -1113,7 +1114,8 @@ export const UI = {
   journeyWhenStop: "כשהליד כותב «הסר»",
   journeyWhenWake1: (hours: number) => `הודעת המשך 1: ${hours} שעות אחרי שיחה שנרשמה, עד יום המעקב הבא`,
   journeyWhenWakeN: (step: number) => `הודעת המשך ${step}: בבוקר של יום המעקב שנקבע`,
-  journeySlots: (slots: string) => `בשעות ${slots}, ראשון עד חמישי, לא בחגים`,
+  journeySlotsAt: "בשעות",
+  journeySlotsDays: "ראשון עד חמישי, לא בחגים",
   journeyRules: (between: number, quiet: number, max: number) =>
     `לפחות ${between} שעות בין הודעות, לא אם מישהו מהצוות כתב בוואטסאפ ב-${quiet} השעות האחרונות, ${max} הודעות המשך לכל היותר. נעצר כשהליד עונה, מזמין או מבקש להסיר.`,
   journeyEffectLost: "הליד נסגר כאבוד («לא כרגע») ומוסר מהעדכונים",
@@ -1159,6 +1161,14 @@ export const QUICK_SITUATION_LABELS: Record<QuickSituation, string> = {
   no_answer: "לא ענה לשיחה",
   menu_no_reply: "קיבל תפריט ולא ענה",
   no_auto: "לא קיבל הודעה אוטומטית",
+};
+
+/** The quick-message variables, as a person reads them: the chips' names and the journey's pills. */
+export const QUICK_VARIABLE_LABELS: Record<"name" | "rep" | "business" | "menu", string> = {
+  name: "שם הליד",
+  rep: "שם הנציג",
+  business: "שם העסק",
+  menu: "שם התפריט",
 };
 
 /** What each automatic message is, in the drawer's line. A first menu shows its menu's label. */

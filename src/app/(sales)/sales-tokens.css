@@ -3562,7 +3562,6 @@
   background: hsl(var(--s-surface-sunken));
   color: hsl(var(--s-fg));
   font-size: 13px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   cursor: pointer;
 }
 [data-app="sales"] .s-quick-chip:hover {
@@ -3632,4 +3631,32 @@
 }
 [data-app="sales"] .s-journey-button-link {
   border-style: dashed;
+}
+
+/* gate r2 (tranche 203): plaintext bidi for message drafts, the journey's variable
+   pills, and the unsaved tag */
+[data-app="sales"] .s-quick-text {
+  unicode-bidi: plaintext;
+}
+[data-app="sales"] .s-var-pill {
+  display: inline-block;
+  padding-inline: 6px;
+  margin-inline: 1px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-surface));
+  border: 1px solid hsl(var(--s-border-strong));
+  color: hsl(var(--s-fg));
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+[data-app="sales"] .s-quick-dirty {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 8px;
+  border-radius: var(--s-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  background: hsl(var(--s-surface-sunken));
+  border: 1px solid hsl(var(--s-status-working) / 0.6);
+  color: hsl(var(--s-status-working));
 }

@@ -43,6 +43,7 @@ manifest:
   - tests/unit/sales/whatsapp-quick.test.tsx
   - tests/unit/sales/settings-conversation.test.tsx
   - tests/e2e/sales-conversation.spec.ts
+  - tests/e2e/_fixtures/salesJourney.ts
 
 ## Gates
 

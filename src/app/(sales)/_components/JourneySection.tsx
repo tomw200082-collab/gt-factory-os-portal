@@ -8,10 +8,25 @@
 // live, in test mode or off. There is no control to change a text: that goes through Tom,
 // the playbook, then Meta.
 
-import { UI } from "../_lib/labels";
+import { Fragment, type ReactNode } from "react";
+import { QUICK_VARIABLE_LABELS, UI } from "../_lib/labels";
 import type { Journey, JourneyStep } from "../_lib/types";
 
-function whenOf(step: JourneyStep, journey: Journey, titles: Record<string, string>): string {
+/** A time range, isolated left-to-right: in an RTL line "10:00–11:30" otherwise reads reversed. */
+const range = (from: string, to: string) => <bdi dir="ltr" className="s-nums">{`${from}–${to}`}</bdi>;
+
+/** The server's texts carry {{name}}, {{menu}}, {{rep}}: shown here as Hebrew pills, each
+ *  bidi-isolated so the signature line keeps its order. lead_texts.ts is not touched. */
+export function withPills(text: string): ReactNode[] {
+  return text.split(/(\{\{\s*(?:name|menu|rep|business)\s*\}\})/).map((part, i) => {
+    const m = /^\{\{\s*(name|menu|rep|business)\s*\}\}$/.exec(part);
+    return m
+      ? <bdi key={i} className="s-var-pill">{`‹${QUICK_VARIABLE_LABELS[m[1] as keyof typeof QUICK_VARIABLE_LABELS]}›`}</bdi>
+      : <Fragment key={i}>{part}</Fragment>;
+  });
+}
+
+function whenOf(step: JourneyStep, journey: Journey, titles: Record<string, string>): ReactNode {
   const t = step.trigger;
   const r = journey.wake_rules;
   switch (t.kind) {
@@ -24,10 +39,13 @@ function whenOf(step: JourneyStep, journey: Journey, titles: Record<string, stri
     case "stop_text": return UI.journeyWhenStop;
     case "wake": {
       const head = t.step === 1 ? UI.journeyWhenWake1(r.first_after_hours) : UI.journeyWhenWakeN(t.step);
-      const slots = t.slots === "morning"
-        ? `${r.slots.morning.from}–${r.slots.morning.to}`
-        : `${r.slots.morning.from}–${r.slots.morning.to}, ${r.slots.afternoon.from}–${r.slots.afternoon.to}`;
-      return `${head}. ${UI.journeySlots(slots)}`;
+      return (
+        <>
+          {head}. {UI.journeySlotsAt} {range(r.slots.morning.from, r.slots.morning.to)}
+          {t.slots === "morning" ? null : <>, {range(r.slots.afternoon.from, r.slots.afternoon.to)}</>}
+          , {UI.journeySlotsDays}
+        </>
+      );
     }
   }
 }
@@ -88,9 +106,10 @@ export function JourneySection({ journey }: { journey: Journey }) {
                     {whenOf(step, journey, titles)}
                   </p>
                   <div className="s-quick-bubble mt-1">
-                    <p className="whitespace-pre-line text-[14px]">{step.text}</p>
+                    <p className="whitespace-pre-line text-[14px]">{withPills(step.text)}</p>
                     {step.footer ? (
-                      <p className="mt-2 text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+                      // --s-fg-muted, not faint: on the bubble's tint faint ink fell to 4.44:1 (light) and 3.55:1 (dark)
+                      <p className="mt-2 text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
                         <span className="sr-only">{UI.journeyFooter} </span>{step.footer}
                       </p>
                     ) : null}

@@ -8,7 +8,7 @@
 // button uses for them.
 
 import { useEffect, useRef, useState } from "react";
-import { QUICK_SITUATION_LABELS, UI, actorLabel } from "../_lib/labels";
+import { QUICK_SITUATION_LABELS, QUICK_VARIABLE_LABELS, UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
 import { QUICK_SITUATIONS, QUICK_VARIABLES, fillQuickMessage, insertAtCursor } from "../_lib/quickMessages";
 import type { QuickSituation } from "../_lib/types";
@@ -56,16 +56,22 @@ function QuickRow({
 
   return (
     <li data-testid={id} className="s-quick-row flex flex-col gap-2">
-      <label htmlFor={`${id}-text`} className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>
-        {QUICK_SITUATION_LABELS[situation]}
-      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={`${id}-text`} className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>
+          {QUICK_SITUATION_LABELS[situation]}
+        </label>
+        {dirty ? (
+          <span data-testid={`quick-dirty-${situation}`} className="s-quick-dirty">{UI.quickUnsaved}</span>
+        ) : null}
+      </div>
       <div className="flex flex-wrap items-center gap-1" role="group" aria-label={UI.quickVariables}>
         <span className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }} aria-hidden>{UI.quickVariables}</span>
         {QUICK_VARIABLES.map((v) => (
           <button
             key={v}
             type="button"
-            dir="ltr"
+            // the chip is named in Hebrew (and so is its accessible name); it inserts the token
+            title={v}
             data-testid={`quick-chip-${v.slice(2, -2)}`}
             className="s-quick-chip"
             // keep the textarea's caret: a mouse-down on a chip would blur it first
@@ -83,7 +89,7 @@ function QuickRow({
               });
             }}
           >
-            {v}
+            {QUICK_VARIABLE_LABELS[v.slice(2, -2) as keyof typeof QUICK_VARIABLE_LABELS]}
           </button>
         ))}
       </div>
@@ -91,7 +97,9 @@ function QuickRow({
         ref={ref}
         id={`${id}-text`}
         data-testid={`quick-text-${situation}`}
-        className="s-input"
+        // s-quick-text: unicode-bidi plaintext, so a line that opens with a Latin token
+        // ("{{rep}}, GT Everyday") still lays out in the direction its text has
+        className="s-input s-quick-text"
         dir="rtl"
         rows={4}
         value={text}
