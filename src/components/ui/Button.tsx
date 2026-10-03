@@ -86,7 +86,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         type={type}
         className={cn("btn", VARIANT_CLASS[variant], SIZE_CLASS[size], className)}
         disabled={disabled || pending}
-        {...(pending ? { "aria-busy": true } : {})}
+        aria-busy={pending || undefined}
         {...rest}
       >
         {pending ? <span className="btn-spinner" aria-hidden="true" /> : null}

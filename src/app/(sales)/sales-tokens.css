@@ -1242,10 +1242,7 @@
   border-radius: 50%;
   border: 2px solid currentColor;
   border-inline-end-color: transparent;
-  animation: s-spin 700ms linear infinite;
-}
-@keyframes s-spin {
-  to { transform: rotate(360deg); }
+  animation: gt-btn-spin 700ms linear infinite;
 }
 
 /* The skeleton look on the sales card: the card's own ground hides the

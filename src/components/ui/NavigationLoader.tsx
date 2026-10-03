@@ -48,9 +48,9 @@ import { loaderVariantFor, type LoaderVariant } from "./loader-variant";
 
 const SAFETY_MS = 6000;
 /** The bar stays invisible this long, so a fast navigation never flashes it. */
-export const NAV_BAR_DELAY_MS = 120;
+const NAV_BAR_DELAY_MS = 120;
 /** Mirrors the done-state fade in globals.css (.gt-navbar, --motion-fast). */
-export const NAV_BAR_FADE_MS = 140;
+const NAV_BAR_FADE_MS = 140;
 /** The fade starts a frame or two after the state change; remove with slack. */
 const NAV_BAR_REMOVE_MS = NAV_BAR_FADE_MS + 100;
 const WATCH_POLL_MS = 50;
@@ -190,10 +190,7 @@ export function NavigationLoader() {
   const completeBar = useCallback(() => {
     const phase = barPhaseRef.current;
     if (phase === "idle" || phase === "done") return;
-    if (barDelayRef.current) clearTimeout(barDelayRef.current);
-    if (barSafetyRef.current) clearTimeout(barSafetyRef.current);
-    barDelayRef.current = null;
-    barSafetyRef.current = null;
+    clearBarTimers(); // no remove timer can be pending here: that is set only in "done"
     clearBusy();
     if (phase === "pending") {
       barPhaseRef.current = "idle";
@@ -206,7 +203,7 @@ export function NavigationLoader() {
       barPhaseRef.current = "idle";
       setBar(null);
     }, NAV_BAR_REMOVE_MS);
-  }, [clearBusy]);
+  }, [clearBarTimers, clearBusy]);
 
   const startBar = useCallback(
     (world: LoaderVariant) => {

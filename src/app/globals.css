@@ -4368,6 +4368,7 @@
 :where(.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"])) {
   position: relative;
   overflow: hidden;
+  background-image: linear-gradient(hsl(var(--fg) / var(--skel-base)), hsl(var(--fg) / var(--skel-base)));
 }
 :where(.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"]))::after {
   content: "";
@@ -4392,9 +4393,6 @@
 :root.dark {
   --skel-sweep: 0.09;
   --skel-base: 0.06;
-}
-:where(.animate-pulse:not([class*="bg-info"]):not([class*="bg-danger"]):not([class*="bg-success"]):not([class*="bg-warning"]):not([class*="bg-accent"])) {
-  background-image: linear-gradient(hsl(var(--fg) / var(--skel-base)), hsl(var(--fg) / var(--skel-base)));
 }
 /* The in-shell route skeleton (layout/ContentSkeleton). */
 .gt-skel-block {
