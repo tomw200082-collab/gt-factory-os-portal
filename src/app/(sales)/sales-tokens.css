@@ -119,12 +119,12 @@
   /* The 1px of light along a surface's top edge. Cheap, and it is most of the
      difference between "a rectangle" and "a thing sitting under a light". */
   --s-sheen: inset 0 1px 0 hsl(0 0% 100% / 0.7);
-  --s-motion: 170ms;
-  --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --s-motion: var(--motion-fast);
+  --s-ease: var(--ease-out);
   /* D1 motion: a spring that overshoots once for things that arrive, an
      expo-out for things that settle. Neither is linear or ease-in-out. */
-  --s-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --s-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --s-spring: var(--ease-spring);
+  --s-settle: var(--ease-out);
   /* the journey flow's stage inks (fills and strokes on petrol, never text) */
   --s-flow-created: 217 88% 66%;
   --s-flow-outreach: 199 88% 62%;
@@ -454,6 +454,27 @@
   pointer-events: none;
 }
 
+/* A save in flight: set aria-busy="true" (with disabled) and put <SBtnSpinner/>
+   first inside the button. It stays readable (the label does not change) and
+   the spinner replaces a leading icon that follows it. */
+[data-app="sales"] .s-btn[aria-busy="true"]:disabled {
+  opacity: 0.75;
+}
+[data-app="sales"] .s-btn-spinner {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  animation: gt-btn-spin 700ms linear infinite;
+}
+[data-app="sales"] .s-btn[aria-busy="true"] > .s-btn-spinner + svg {
+  display: none;
+}
+
 [data-app="sales"] .s-btn-primary {
   background: hsl(var(--s-action));
   color: hsl(var(--s-action-fg));
@@ -721,9 +742,6 @@
   [data-app="sales"] .s-btn,
   [data-app="sales"] .s-tab {
     transition: none;
-  }
-  [data-app="sales"] .s-btn[aria-busy="true"]::after {
-    animation: none;
   }
   /* The loading skeleton uses Tailwind's animate-pulse. This portal has no
      global reduced-motion rule — it disables motion class by class — so

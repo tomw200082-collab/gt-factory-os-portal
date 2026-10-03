@@ -21,6 +21,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { ReconcileBadge } from "@/components/stock/ReconcileBadge";
+import { RefreshHint } from "@/components/feedback/RefreshHint";
 import { StockTruthDrawer } from "@/components/stock/StockTruthDrawer";
 import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
 import {
@@ -1527,15 +1528,7 @@ export default function InventoryPage() {
                   ))}
                 </select>
               </div>
-              {refreshing && !isLoading ? (
-                <span className="ml-auto inline-flex items-center gap-1.5 pb-1 text-sm text-fg-subtle">
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-info"
-                  />
-                  Refreshing
-                </span>
-              ) : null}
+              <RefreshHint active={refreshing && !isLoading} className="ml-auto pb-1" />
             </div>
           </div>
 

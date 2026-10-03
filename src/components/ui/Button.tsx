@@ -1,3 +1,5 @@
+"use client";
+
 // ---------------------------------------------------------------------------
 // Button — the React primitive over the token-driven `.btn` CSS class system
 // (design-readiness PREP-10). Purely additive: it renders the exact same
@@ -12,8 +14,9 @@
 //   size:    xs | sm | md(default, .btn is h-9) | lg
 // ---------------------------------------------------------------------------
 
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { forwardRef, useCallback, useRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
+import { useLockedWidth } from "./useLockedWidth";
 
 export type ButtonVariant =
   | "default"
@@ -41,22 +44,54 @@ const SIZE_CLASS: Record<ButtonSize, string> = {
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /**
+   * The action behind this button is in flight (`pending={m.isPending}`).
+   * Sets `disabled` (so a second click is impossible) and `aria-busy="true"`,
+   * puts a 14px spinner before the label (CSS hides a leading icon that follows
+   * it) and holds the width the button had, so nothing jumps. The label text is
+   * not changed.
+   */
+  pending?: boolean;
 }
 
 /** Token-driven button. Defaults to a non-submitting `type="button"` to avoid
  *  accidental form submits — pass `type="submit"` explicitly when needed. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
-    { variant = "default", size = "md", className, type = "button", ...rest },
+    {
+      variant = "default",
+      size = "md",
+      className,
+      type = "button",
+      pending = false,
+      disabled,
+      children,
+      ...rest
+    },
     ref,
   ) {
+    const inner = useRef<HTMLButtonElement>(null);
+    useLockedWidth(pending, inner);
+    const setRefs = useCallback(
+      (el: HTMLButtonElement | null) => {
+        (inner as { current: HTMLButtonElement | null }).current = el;
+        if (typeof ref === "function") ref(el);
+        else if (ref) ref.current = el;
+      },
+      [ref],
+    );
     return (
       <button
-        ref={ref}
+        ref={setRefs}
         type={type}
         className={cn("btn", VARIANT_CLASS[variant], SIZE_CLASS[size], className)}
+        disabled={disabled || pending}
+        {...(pending ? { "aria-busy": true } : {})}
         {...rest}
-      />
+      >
+        {pending ? <span className="btn-spinner" aria-hidden="true" /> : null}
+        {children}
+      </button>
     );
   },
 );

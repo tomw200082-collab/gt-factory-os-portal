@@ -107,7 +107,7 @@ export default function AuthCallbackPage() {
   }, [router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-8">
+    <div className="flex min-h-screen-dvh items-center justify-center p-8">
       <div className="flex flex-col items-center text-center">
         <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
           GT Factory OS

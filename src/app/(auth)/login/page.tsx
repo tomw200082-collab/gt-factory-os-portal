@@ -100,7 +100,7 @@ function LoginHero() {
         <div className="flex items-center gap-3.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/brand/logo.png"
+            src="/brand/logo-96.png"
             alt="GT Everyday"
             width={44}
             height={44}
@@ -183,9 +183,9 @@ function LoginShell({ children }: { children: React.ReactNode }) {
   return (
     // dir="ltr" per Portal UX Standard §2 — this new wrapper sets direction
     // explicitly so it can never inherit RTL from a parent surface.
-    <div dir="ltr" className="flex min-h-screen w-full">
+    <div dir="ltr" className="flex min-h-screen-dvh w-full">
       <LoginHero />
-      <div className="flex min-h-screen flex-1 items-center justify-center px-4 py-12">
+      <div className="flex min-h-screen-dvh flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">{children}</div>
       </div>
     </div>
@@ -444,7 +444,7 @@ function MagicLinkLogin() {
       <div className="mb-6 flex flex-col items-center gap-2 lg:hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/brand/logo.png"
+          src="/brand/logo-96.png"
           alt="GT Everyday"
           width={48}
           height={48}

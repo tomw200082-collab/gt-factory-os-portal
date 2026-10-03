@@ -34,6 +34,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { FgOutPauseControl } from "@/components/stock/FgOutPauseControl";
+import { RefreshHint } from "@/components/feedback/RefreshHint";
 import { FgOutPickUndoControl } from "@/components/stock/FgOutPickUndoControl";
 import { useSession } from "@/lib/auth/session-provider";
 import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
@@ -1563,18 +1564,7 @@ export default function MovementLogPage() {
           >
             Clear
           </button>
-          {isFetching && !isLoading ? (
-            <span
-              className="ml-1 inline-flex items-center gap-1.5 text-2xs text-fg-subtle"
-              aria-live="polite"
-            >
-              <span
-                aria-hidden
-                className="h-1.5 w-1.5 animate-pulse rounded-full bg-info"
-              />
-              Refreshing
-            </span>
-          ) : null}
+          <RefreshHint active={isFetching && !isLoading} className="ml-1" />
         </div>
       </SectionCard>
 

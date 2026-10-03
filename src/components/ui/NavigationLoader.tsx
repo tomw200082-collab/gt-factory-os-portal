@@ -21,6 +21,15 @@
 // commit while any such boundary is on screen: it stays opaque, and leaves only
 // when the last one is gone, so the user never sees a gap, a dip, or a cut.
 // The 6 s safety valve still ends it regardless.
+//
+// Inside one world there is no overlay (tranche 206). A link that stays in the
+// same world as the current page (factory to factory, sales to sales) keeps the
+// shell mounted and usable and shows a 2 px bar along the top edge instead, in
+// the world's accent. The bar appears only if the commit takes longer than
+// 120 ms, creeps towards 80 %, completes and fades when the pathname commits,
+// and <main> carries aria-busy while the navigation is pending. The GT overlay
+// above is kept, unchanged, for a move across worlds, where the shell itself
+// changes. Programmatic router.push() calls get no indicator.
 
 import {
   useCallback,
@@ -38,6 +47,12 @@ import {
 import { loaderVariantFor, type LoaderVariant } from "./loader-variant";
 
 const SAFETY_MS = 6000;
+/** The bar stays invisible this long, so a fast navigation never flashes it. */
+export const NAV_BAR_DELAY_MS = 120;
+/** Mirrors the done-state fade in globals.css (.gt-navbar, --motion-fast). */
+export const NAV_BAR_FADE_MS = 140;
+/** The fade starts a frame or two after the state change; remove with slack. */
+const NAV_BAR_REMOVE_MS = NAV_BAR_FADE_MS + 100;
 const WATCH_POLL_MS = 50;
 
 /** A route-boundary loader that is on screen and not itself on its way out. */
@@ -85,6 +100,8 @@ function inertEverythingElse(overlay: Element): Element[] {
 }
 
 type Shown = { id: number; variant: LoaderVariant; leaving: boolean };
+type Bar = { id: number; world: LoaderVariant };
+type BarPhase = "idle" | "pending" | "visible" | "done";
 
 /** Pathname without a trailing slash (except the root), for comparisons. */
 function normalize(pathname: string): string {
@@ -105,6 +122,18 @@ export function NavigationLoader() {
   const watcherRef = useRef<MutationObserver | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // The in-world progress bar (tranche 206). Its phase lives in a ref so the
+  // click listener and the timers read the latest value without re-subscribing.
+  const [bar, setBar] = useState<Bar | null>(null);
+  const barPhaseRef = useRef<BarPhase>("idle");
+  const barElRef = useRef<HTMLDivElement | null>(null);
+  const barNextIdRef = useRef(1);
+  const barDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const barSafetyRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const barRemoveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The <main> this navigation marked busy, so only that attribute is removed.
+  const busyMainRef = useRef<Element | null>(null);
+
   const set = useCallback((next: Shown | null) => {
     shownRef.current = next;
     setShown(next);
@@ -124,6 +153,83 @@ export function NavigationLoader() {
     unmountRef.current = null;
     stopWatching();
   }, [stopWatching]);
+
+  const clearBarTimers = useCallback(() => {
+    if (barDelayRef.current) clearTimeout(barDelayRef.current);
+    if (barSafetyRef.current) clearTimeout(barSafetyRef.current);
+    if (barRemoveRef.current) clearTimeout(barRemoveRef.current);
+    barDelayRef.current = null;
+    barSafetyRef.current = null;
+    barRemoveRef.current = null;
+  }, []);
+
+  const markBusy = useCallback(() => {
+    if (busyMainRef.current) return;
+    const main = document.querySelector("main");
+    if (main && !main.hasAttribute("aria-busy")) {
+      main.setAttribute("aria-busy", "true");
+      busyMainRef.current = main;
+    }
+  }, []);
+
+  const clearBusy = useCallback(() => {
+    busyMainRef.current?.removeAttribute("aria-busy");
+    busyMainRef.current = null;
+  }, []);
+
+  // Remove the bar outright (a cross-world click is taking over, or unmount).
+  const dropBar = useCallback(() => {
+    clearBarTimers();
+    clearBusy();
+    barPhaseRef.current = "idle";
+    setBar(null);
+  }, [clearBarTimers, clearBusy]);
+
+  // The navigation ended (commit, abandoned click, or the safety valve):
+  // complete the bar and fade it, or, if it was never shown, just clear busy.
+  const completeBar = useCallback(() => {
+    const phase = barPhaseRef.current;
+    if (phase === "idle" || phase === "done") return;
+    if (barDelayRef.current) clearTimeout(barDelayRef.current);
+    if (barSafetyRef.current) clearTimeout(barSafetyRef.current);
+    barDelayRef.current = null;
+    barSafetyRef.current = null;
+    clearBusy();
+    if (phase === "pending") {
+      barPhaseRef.current = "idle";
+      return;
+    }
+    barPhaseRef.current = "done";
+    barElRef.current?.setAttribute("data-state", "done");
+    barRemoveRef.current = setTimeout(() => {
+      barRemoveRef.current = null;
+      barPhaseRef.current = "idle";
+      setBar(null);
+    }, NAV_BAR_REMOVE_MS);
+  }, [clearBusy]);
+
+  const startBar = useCallback(
+    (world: LoaderVariant) => {
+      const phase = barPhaseRef.current;
+      if (phase === "pending" || phase === "visible") {
+        // Already under way: keep the same bar, restart only the safety valve.
+        if (barSafetyRef.current) clearTimeout(barSafetyRef.current);
+        barSafetyRef.current = setTimeout(completeBar, SAFETY_MS);
+        return;
+      }
+      clearBarTimers();
+      setBar(null);
+      barPhaseRef.current = "pending";
+      markBusy();
+      barDelayRef.current = setTimeout(() => {
+        barDelayRef.current = null;
+        barPhaseRef.current = "visible";
+        setBar({ id: barNextIdRef.current++, world });
+      }, NAV_BAR_DELAY_MS);
+      barSafetyRef.current = setTimeout(completeBar, SAFETY_MS);
+    },
+    [clearBarTimers, completeBar, markBusy],
+  );
 
   // Fade out, then unmount.
   const hide = useCallback(() => {
@@ -235,24 +341,46 @@ export function NavigationLoader() {
         // If an overlay is up for a navigation this click just abandoned, no
         // commit is coming: let it go now rather than at the 6 s valve.
         hide();
+        // Same for a bar left pending by a navigation this click abandoned.
+        completeBar();
         return;
       }
 
-      show(loaderVariantFor(url.pathname));
+      const destination = loaderVariantFor(url.pathname);
+      const overlayUp = shownRef.current !== null && !shownRef.current.leaving;
+      if (destination !== loaderVariantFor(pathname ?? "") || overlayUp) {
+        // Across worlds the shell itself changes: the GT overlay. If one is
+        // already up it simply re-targets, so there is never a second surface.
+        dropBar();
+        show(destination);
+        return;
+      }
+      startBar(destination);
     };
 
     document.addEventListener("click", handleClick, { capture: true });
     return () =>
       document.removeEventListener("click", handleClick, { capture: true });
-  }, [pathname, show, hide]);
+  }, [pathname, show, hide, completeBar, dropBar, startBar]);
 
   // Fade out once Next.js commits the new pathname (and no boundary remains).
   useEffect(() => {
     if (prevPathRef.current !== pathname) {
       prevPathRef.current = pathname;
       exitWhenClear();
+      completeBar();
     }
-  }, [pathname, exitWhenClear]);
+  }, [pathname, exitWhenClear, completeBar]);
+
+  // A freshly mounted bar starts at its first frame, then creeps: the start
+  // state is flushed so the CSS transition has something to run from.
+  const barId = bar?.id;
+  useIsoLayoutEffect(() => {
+    const el = barElRef.current;
+    if (!el || barPhaseRef.current !== "visible") return;
+    void el.getBoundingClientRect();
+    el.setAttribute("data-state", "creep");
+  }, [barId]);
 
   // While the overlay is visibly up, the page behind it is inert. It is not
   // inert in the first 120 ms (nothing is shown yet, and a fast navigation
@@ -276,15 +404,38 @@ export function NavigationLoader() {
 
   // Cleanup on unmount.
   useEffect(() => clearTimers, [clearTimers]);
+  useEffect(
+    () => () => {
+      clearBarTimers();
+      clearBusy();
+    },
+    [clearBarTimers, clearBusy],
+  );
 
-  if (!shown) return null;
   return (
-    <GTLoader
-      key={shown.id}
-      variant={shown.variant}
-      leaving={shown.leaving}
-      nav
-      startedAt={shownAtRef.current}
-    />
+    <>
+      {shown ? (
+        <GTLoader
+          key={shown.id}
+          variant={shown.variant}
+          leaving={shown.leaving}
+          nav
+          startedAt={shownAtRef.current}
+        />
+      ) : null}
+      {bar ? (
+        <div
+          key={bar.id}
+          ref={barElRef}
+          className="gt-navbar"
+          data-gt-navbar=""
+          data-world={bar.world}
+          data-state="start"
+          aria-hidden="true"
+        >
+          <span className="gt-navbar__bar" />
+        </div>
+      ) : null}
+    </>
   );
 }
