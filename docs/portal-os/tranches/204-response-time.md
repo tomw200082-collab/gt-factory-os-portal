@@ -9,10 +9,10 @@ One 24-hour wall-clock SLA counted Friday, Saturday and holidays. A lead that wr
 
 ## Change
 
-- Lead card, Today card and lead drawer: three states, "בזמן" / "עומד לעבור" / "עבר", with the time left in working hours (`sla_state` on_time | due_soon | overdue, `sla_minutes_left`, from the server). A legacy `within` from an older backend still shows no badge.
-- Today queue: inside each section, overdue first, then due soon, then the rest. The server orders it; the portal keeps that order, also before the daily cap.
+- Lead card, Today card and lead drawer: a pill only for "עומד לעבור" (amber, the last quarter) and "עבר הזמן"; on time is quiet muted text ("עוד 5 שעות עבודה"), and the working time left sits in the meta line, not in the pill (`sla_state`, `sla_minutes_left` from the server). Business name and phone wrap, never truncate. A legacy `within` from an older backend still shows nothing.
+- Today queue (UX gate P0-1): inside each section only a lead about to pass jumps ahead, soonest deadline first; overdue and on-time leads keep the stored queue direction. The server orders it the same way; the portal keeps it before the daily cap.
 - Settings, section "זמני תגובה": working days, start and end, and the hot and normal targets in working hours, validated as the server validates them, with its own save and "שונה ע״י … לפני …". Managers only. It replaces the old SLA-hours field (the key stays readable on the server).
-- Attention screen: "זמני תגובה · 7 ימים אחרונים", per rep: on time, due soon, overdue, and the share that met the target.
+- Attention screen: "זמני תגובה · 7 ימים אחרונים", per rep: ענו בזמן, ענו באיחור, עוד לא ענו (and how many of those are about to pass), and the share that met the target.
 
 ## Manifest
 
