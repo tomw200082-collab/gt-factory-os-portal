@@ -737,7 +737,7 @@ function BodyRow({
                   isFilled
                     ? "bg-bg-raised text-fg-strong"
                     : "bg-transparent text-fg",
-                  "focus:bg-accent-soft/25 focus:text-fg-strong",
+                  "focus:bg-accent-soft/25 focus:text-fg-strong focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
                   // 1px inset accent ring on focus — sits inside the cell so
                   // the alignment stays pixel-perfect with neighbors.
                   "focus:shadow-[inset_0_0_0_1px_hsl(var(--accent)/0.7)]",
@@ -999,7 +999,7 @@ function MobileForecastList({
                             className={cn(
                               "min-h-[44px] w-full rounded border border-border bg-bg px-3 text-right font-mono text-sm tabular-nums outline-none transition-colors duration-150",
                               "placeholder:text-fg-faint/70",
-                              "focus:border-accent focus:bg-accent-soft/25 focus:text-fg-strong",
+                              "focus:border-accent focus:bg-accent-soft/25 focus:text-fg-strong focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
                             )}
                           />
                         ) : (

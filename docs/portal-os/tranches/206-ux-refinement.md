@@ -30,6 +30,28 @@ manifest:
   - src/app/**  (follow-up waves; list exact files before editing)
   - src/components/**  (follow-up waves; list exact files before editing)
   - src/lib/**  (follow-up waves; list exact files before editing)
+
+## Wave W4 files (visible focus, table overflow, overlay timing)
+
+- src/components/overlays/Drawer.tsx
+- src/components/overlays/ConfirmDialog.tsx
+- src/components/ui/dropdown-menu.tsx
+- src/components/ui/Popover.tsx
+- src/app/(shared)/stock/movement-log/page.tsx
+- src/app/(planning)/planning/blockers/page.tsx
+- src/components/tables/InlineEditSelectCell.tsx
+- src/components/fields/SearchableSelect.tsx
+- src/app/(planning)/planning/forecast/[version_id]/_components/ItemAutocompleteAdder.tsx
+- src/app/(planning)/planning/production-simulation/_components/QuantityInput.tsx
+- src/components/layout/CommandPalette.tsx
+- src/components/fields/EntityPickerPlus.tsx
+- src/components/bom-edit/BomLineAddDrawer.tsx
+- src/app/(planning)/planning/production-plan/_components/BatchTuneDialog.tsx
+- src/app/(planning)/planning/production-plan/_components/RecipeOverridePanel.tsx
+- src/app/(planning)/planning/production-plan/_components/AddBatchModal.tsx
+- src/app/(planning)/planning/production-plan/page.tsx
+- src/app/(planning)/planning/forecast/[version_id]/_components/MonthlyGrid.tsx
+- src/app/(economics)/admin/economics/ProfitabilityTab.tsx
   - public/brand/**
   - tests/**
   - src/app/globals.css

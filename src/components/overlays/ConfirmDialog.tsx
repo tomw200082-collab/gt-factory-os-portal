@@ -119,7 +119,8 @@ function ConfirmDialogView({
         <Dialog.Overlay
           className={cn(
             "fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]",
-            "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "[animation-duration:var(--motion-fast)]",
             "data-[state=closed]:fade-out data-[state=open]:fade-in",
           )}
         />
@@ -133,7 +134,8 @@ function ConfirmDialogView({
           className={cn(
             "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2",
             "rounded-lg border border-border/70 bg-bg-raised p-5 shadow-pop",
-            "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "[animation-duration:var(--motion-fast)]",
             "data-[state=closed]:fade-out data-[state=open]:fade-in",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           )}

@@ -149,7 +149,7 @@ export function CommandPalette() {
             Type to filter destinations. Use arrow keys to move and Enter to go.
           </Dialog.Description>
 
-          <div className="flex items-center gap-3 border-b border-border/70 px-4">
+          <div className="flex items-center gap-3 border-b border-border/70 px-4 focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
             <Search className="h-4 w-4 shrink-0 text-fg-faint" strokeWidth={1.75} aria-hidden />
             <input
               autoFocus

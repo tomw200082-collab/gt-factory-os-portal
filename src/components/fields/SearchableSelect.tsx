@@ -204,7 +204,7 @@ export function SearchableSelect({
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           {/* Search header */}
-          <div className="relative border-b border-border/40 p-2">
+          <div className="relative border-b border-border/40 p-2 focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
             <Search
               aria-hidden
               className="absolute left-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-fg-muted"

@@ -283,7 +283,7 @@ export function ItemAutocompleteAdder({
 
       <div
         className={cn(
-          "relative flex items-center gap-2 rounded-md border bg-bg-raised px-2.5 py-1.5 transition-colors duration-150",
+          "relative flex items-center gap-2 rounded-md border bg-bg-raised px-2.5 py-1.5 transition-colors duration-150 focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1",
           open
             ? "border-accent/60 ring-2 ring-accent-soft/40"
             : "border-border/70 hover:border-border-strong",

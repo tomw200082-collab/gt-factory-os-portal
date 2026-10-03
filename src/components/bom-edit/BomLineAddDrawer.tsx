@@ -161,7 +161,7 @@ export function BomLineAddDrawer({
             ) : (
               /* Search + list */
               <div className="rounded-sm border border-border bg-bg">
-                <div className="flex items-center gap-2 border-b border-border px-2.5 py-2">
+                <div className="flex items-center gap-2 border-b border-border px-2.5 py-2 focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
                   <Search className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={2} />
                   <input
                     autoFocus
