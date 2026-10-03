@@ -17,6 +17,7 @@ import type {
   AssigneeEntry,
   TodayItemType,
   TodayRow,
+  SalesSettings,
   WhatsappTemplates,
 } from "../_lib/types";
 import { TodayCard } from "./TodayCard";
@@ -47,6 +48,8 @@ export interface TodayQueueProps {
   slaHours: number;
   roster?: AssigneeEntry[];
   templates: WhatsappTemplates | null;
+  /** D-042: the quick messages and the sender's signer, for the WhatsApp button. */
+  settings?: SalesSettings | null;
   onArm: (leadId: string, channel: "call" | "whatsapp" | "email", taskId?: string) => void;
   onPostpone: (row: TodayRow) => void;
   onLost: (row: TodayRow) => void;
@@ -59,6 +62,7 @@ function Section({
   slaHours,
   roster,
   templates,
+  settings,
   onArm,
   onPostpone,
   onLost,
@@ -128,6 +132,7 @@ function Section({
           roster={roster}
           slaHours={slaHours}
           templates={templates}
+          settings={settings}
           onArm={onArm}
           onPostpone={onPostpone}
           onLost={onLost}
@@ -161,6 +166,7 @@ export function TodayQueue({
   slaHours,
   roster,
   templates,
+  settings,
   onArm,
   onPostpone,
   onLost,
@@ -207,6 +213,7 @@ export function TodayQueue({
             slaHours={slaHours}
             roster={roster}
             templates={templates}
+            settings={settings}
             onArm={onArm}
             onPostpone={onPostpone}
             onLost={onLost}

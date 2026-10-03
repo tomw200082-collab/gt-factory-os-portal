@@ -340,6 +340,7 @@ function LeadsScreen() {
           events={events.data ?? []}
           eventsLoading={events.isLoading}
           templates={settings.data?.whatsapp_templates ?? null}
+          settings={settings.data ?? null}
           savingStatus={setStatus.isPending}
           savingNote={addNote.isPending}
           savingNextTouch={setNextTouch.isPending}

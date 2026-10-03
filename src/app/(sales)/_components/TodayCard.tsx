@@ -7,12 +7,13 @@
 // work, so it carries no actions at all.
 
 import { MiniRail } from "./MiniRail";
-import { Mail, MessageCircle, PartyPopper, Phone } from "lucide-react";
+import { Mail, PartyPopper, Phone } from "lucide-react";
 import { fmtMoney, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
-import { mailtoHref, telHref, templateFor, waHref, fillTemplate } from "../_lib/wa";
+import { mailtoHref, telHref } from "../_lib/wa";
 import { agedTone } from "../_lib/queue";
-import type { AssigneeEntry, TodayRow, WhatsappTemplates } from "../_lib/types";
+import type { AssigneeEntry, SalesSettings, TodayRow, WhatsappTemplates } from "../_lib/types";
+import { WhatsAppQuick } from "./WhatsAppQuick";
 import { assigneeName } from "./AssigneePicker";
 import { CustomerBadge, CustomerContext } from "./CustomerBadge";
 import { SlaBadge } from "./SlaBadge";
@@ -24,7 +25,10 @@ export interface TodayCardProps {
   /** The live SLA parameter — the threshold the age tint respects, so the line
    *  Tom sets on the settings screen is the line the colour uses. */
   slaHours: number;
-  templates: WhatsappTemplates | null;
+  /** Legacy: the old three templates. The WhatsApp button reads `settings` (D-042). */
+  templates?: WhatsappTemplates | null;
+  /** The quick messages, the sender's signer, and the old templates as a fallback. */
+  settings?: SalesSettings | null;
   /** Called on tap, before the browser follows the tel:/wa.me link. */
   onArm: (leadId: string, channel: "call" | "whatsapp" | "email") => void;
   onPostpone: (row: TodayRow) => void;
@@ -67,7 +71,7 @@ export function TodayCard({
   row,
   roster = [],
   slaHours,
-  templates,
+  settings = null,
   onArm,
   onPostpone,
   onLost,
@@ -76,19 +80,8 @@ export function TodayCard({
 
   const returning = row.item_type === "returning_customer";
   const aged = agedTone(row.age_days, slaHours);
-  const name = row.contact_name ?? row.org_name;
   const tel = telHref(row.phone_e164);
   const mail = mailtoHref(row.email);
-  const waText = templates
-    ? fillTemplate(
-        templateFor(templates, {
-          isExistingCustomer: row.is_existing_customer,
-          alreadyTouched: Boolean(row.first_touch_at),
-        }),
-        name,
-      )
-    : "";
-  const wa = waHref(row.phone_e164, waText);
 
   return (
     <article
@@ -175,18 +168,17 @@ export function TodayCard({
           <a href={`/sales/leads?lead=${encodeURIComponent(row.lead_id)}`}
             className="s-btn s-btn-primary flex-1">{UI.taskOpenLead}</a>
         )}
-        {wa ? (
-          <a
-            href={wa}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => onArm(row.lead_id, "whatsapp")}
-            className={`s-btn flex-1 ${returning ? "s-btn-ghost-on-tint" : "s-btn-ghost"}`}
-          >
-            <MessageCircle size={16} aria-hidden />
-            {UI.whatsapp}
-          </a>
-        ) : null}
+        {/* D-042: the message for the lead's situation, signed by the sender; disabled,
+            with the reason, for a lead who opted out. The call above stays. */}
+        <WhatsAppQuick
+          leadId={row.lead_id}
+          phone={row.phone_e164}
+          lead={row}
+          settings={settings}
+          onArm={onArm}
+          testId={`today-whatsapp-${row.lead_id}`}
+          tone={returning ? "ghost-on-tint" : "ghost"}
+        />
       </div>
 
       {/* Demoted out of the button row on purpose. Both of these are exits from

@@ -2,6 +2,9 @@
 
 // The admin console.
 //
+// Tranche 203: the WhatsApp templates moved out to their own sections on the page —
+// the automatic sequence (read-only) and the quick messages by situation.
+//
 // v1 held two things — the SLA and the WhatsApp templates — and everything else
 // an admin needed to change was a SQL statement (audit §5: 2 of 9 controls
 // present). This screen is where the queue's shape and the lost-reason
@@ -45,7 +48,6 @@ export function SettingsForm({
   onSave,
   openLeadsByAssignee = {},
 }: SettingsFormProps) {
-  const [templates, setTemplates] = useState<WhatsappTemplates>(settings.whatsapp_templates);
   const [slaHours, setSlaHours] = useState<string>(String(settings.sla_hours));
   const [lostReasons, setLostReasons] = useState<string[]>(settings.lost_reasons);
   const [newReason, setNewReason] = useState("");
@@ -54,7 +56,6 @@ export function SettingsForm({
 
   // Re-seed when the server's copy arrives or changes underneath.
   useEffect(() => {
-    setTemplates(settings.whatsapp_templates);
     setSlaHours(String(settings.sla_hours));
     setLostReasons(settings.lost_reasons);
     setDailyCap(String(settings.queue.daily_cap));
@@ -89,7 +90,6 @@ export function SettingsForm({
         if (!hoursValid || !capValid) return;
         onSave({
           sla_hours: hours,
-          whatsapp_templates: templates,
           lost_reasons: lostReasons,
           queue: { daily_cap: cap, order },
         });
@@ -263,33 +263,9 @@ export function SettingsForm({
         </div>
       </section>
 
-      <section className="s-panel flex flex-col gap-2" aria-labelledby="settings-templates-title">
-        <h2 id="settings-templates-title" className="s-section-heading">{UI.templatesTitle}</h2>
-        <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-          {UI.templatesHint}
-        </p>
-
-        {(
-          [
-            ["new_lead", UI.templateNewLead],
-            ["reminder", UI.templateReminder],
-            ["returning_customer", UI.templateReturning],
-          ] as Array<[keyof WhatsappTemplates, string]>
-        ).map(([key, label]) => (
-          <label key={key} className="flex flex-col gap-1">
-            <span className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-              {label}
-            </span>
-            <textarea
-              className="s-input"
-              rows={3}
-              data-testid={`settings-template-${key}`}
-              value={templates[key]}
-              onChange={(e) => setTemplates((t) => ({ ...t, [key]: e.target.value }))}
-            />
-          </label>
-        ))}
-      </section>
+      {/* The three fixed WhatsApp templates are gone from here (tranche 203, D-042):
+          the quick messages by situation replaced them, each with its own save.
+          The key stays readable on the server for old clients. */}
 
       <section className="s-panel flex flex-col gap-2" aria-labelledby="settings-sla-title">
         <h2 id="settings-sla-title" className="s-section-heading">{UI.slaTitle}</h2>

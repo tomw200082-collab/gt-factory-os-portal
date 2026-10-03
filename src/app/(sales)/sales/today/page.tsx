@@ -293,6 +293,7 @@ export default function TodayPage() {
             slaHours={slaHours}
             roster={settings.data?.assignees ?? []}
             templates={settings.data?.whatsapp_templates ?? null}
+            settings={settings.data ?? null}
             onArm={arm}
             onPostpone={setPostponing}
             onLost={setLosing}

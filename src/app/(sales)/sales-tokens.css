@@ -3486,3 +3486,177 @@
     transition: none;
   }
 }
+
+/* --- the lead conversation (tranche 203, D-042 / D-044) -------------------- */
+
+/* The WhatsApp button for a lead who opted out: disabled, but the reason must stay
+   readable, so the generic .s-btn:disabled fade (opacity 0.5) does not apply. */
+[data-app="sales"] .s-btn.s-wa-blocked:disabled {
+  opacity: 1;
+  background: hsl(var(--s-surface-sunken));
+  border-color: hsl(var(--s-border));
+  color: hsl(var(--s-fg-muted));
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: start;
+}
+
+/* "הודעה אחרת" and the drawer's "כל ההודעות": quiet text controls, 44px targets. */
+[data-app="sales"] .s-wa-other {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding-inline: 8px;
+  font-size: 13px;
+  color: hsl(var(--s-fg-muted));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+[data-app="sales"] .s-wa-situations {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid hsl(var(--s-border));
+  border-radius: var(--s-radius-sm);
+  background: hsl(var(--s-surface));
+}
+[data-app="sales"] .s-wa-situation {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding-inline: 12px;
+  border-radius: var(--s-radius-sm);
+  font-size: 14px;
+  color: hsl(var(--s-fg));
+  text-align: start;
+  cursor: pointer;
+}
+[data-app="sales"] .s-wa-situation:hover {
+  background: hsl(var(--s-surface-sunken));
+}
+[data-app="sales"] .s-wa-situation[aria-pressed="true"] {
+  background: hsl(var(--s-accent-soft));
+  font-weight: 600;
+}
+[data-app="sales"] .s-wa-other:focus-visible,
+[data-app="sales"] .s-wa-situation:focus-visible,
+[data-app="sales"] .s-quick-chip:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+
+/* quick messages: the variable chips and the preview bubble */
+[data-app="sales"] .s-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 12px;
+  border: 1px solid hsl(var(--s-border));
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg));
+  font-size: 13px;
+  cursor: pointer;
+}
+[data-app="sales"] .s-quick-chip:hover {
+  border-color: hsl(var(--s-border-strong));
+}
+[data-app="sales"] .s-quick-row + .s-quick-row {
+  padding-top: 16px;
+  border-top: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-quick-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+/* A message bubble, as WhatsApp shows the rep's own: the accent's soft tint. */
+[data-app="sales"] .s-quick-bubble {
+  padding: 10px 12px;
+  border-radius: var(--s-radius-sm);
+  background: hsl(var(--s-accent-soft));
+  color: hsl(var(--s-fg));
+  overflow-wrap: anywhere;
+}
+
+/* the journey timeline (read-only) */
+[data-app="sales"] .s-journey-mode {
+  padding: 8px 12px;
+  border-radius: var(--s-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg));
+  border: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-journey-mode-live {
+  background: hsl(var(--s-status-won-soft));
+  border-color: hsl(var(--s-status-won) / 0.35);
+}
+[data-app="sales"] .s-journey-line {
+  position: relative;
+  padding-inline-start: 18px;
+  border-inline-start: 2px solid hsl(var(--s-border));
+  margin-inline-start: 4px;
+}
+[data-app="sales"] .s-journey-step {
+  position: relative;
+}
+[data-app="sales"] .s-journey-dot {
+  position: absolute;
+  inset-inline-start: -25px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: hsl(var(--s-accent));
+  box-shadow: 0 0 0 3px hsl(var(--s-bg));
+}
+[data-app="sales"] .s-journey-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding-inline: 10px;
+  border: 1px solid hsl(var(--s-accent) / 0.5);
+  border-radius: var(--s-radius-pill);
+  font-size: 12px;
+  color: hsl(var(--s-accent));
+}
+[data-app="sales"] .s-journey-button-link {
+  border-style: dashed;
+}
+
+/* gate r2 (tranche 203): plaintext bidi for message drafts, the journey's variable
+   pills, and the unsaved tag */
+[data-app="sales"] .s-quick-text {
+  unicode-bidi: plaintext;
+}
+[data-app="sales"] .s-var-pill {
+  display: inline-block;
+  padding-inline: 6px;
+  margin-inline: 1px;
+  border-radius: var(--s-radius-pill);
+  background: hsl(var(--s-surface));
+  border: 1px solid hsl(var(--s-border-strong));
+  color: hsl(var(--s-fg));
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+[data-app="sales"] .s-quick-dirty {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 8px;
+  border-radius: var(--s-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  background: hsl(var(--s-surface-sunken));
+  border: 1px solid hsl(var(--s-status-working) / 0.6);
+  color: hsl(var(--s-status-working));
+}

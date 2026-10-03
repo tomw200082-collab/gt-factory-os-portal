@@ -9,7 +9,7 @@
 // only on the way to the eye.
 
 import { fmtCount } from "./format";
-import type { LeadStatus, OrderClass, OrgFilter, OrgSort, OutcomeResult, OutreachChannel, RiverChip, TodayItemType } from "./types";
+import type { LeadStatus, OrderClass, OrgFilter, OrgSort, OutcomeResult, OutreachChannel, QuickSituation, RiverChip, TodayItemType } from "./types";
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "חדש",
@@ -1068,6 +1068,67 @@ export const UI = {
   commandHintLeads: "לידים",
   commandHintOrgs: "עסקים",
 
+  // the lead conversation (tranche 203, D-042 / D-044)
+  waOptedOut: "הליד ביקש לא לקבל הודעות («הסר»)",
+  waOther: "הודעה אחרת",
+  waPickTitle: "איזו הודעה לפתוח?",
+  autoSentPrefix: "נשלח אוטומטית:",
+  autoRead: (t: string) => `נקרא ${t}`,
+  autoDelivered: (t: string) => `נמסר ${t}`,
+  autoFailed: "לא נמסר",
+  autoTapped: (title: string) => `לחץ «${title}»`,
+  autoShowAll: "כל ההודעות",
+  autoHide: "הסתר",
+  autoListTitle: "מה הקו שלח אוטומטית",
+  quickTitle: "הודעות מהירות",
+  quickHint: "ההודעה שנפתחת בוואטסאפ לפי המצב של הליד. היא נחתמת בשם מי ששולח.",
+  quickVariables: "משתנים:",
+  quickPreview: "תצוגה מקדימה, על ליד לדוגמה",
+  quickSave: "שמירה",
+  quickSaved: "נשמר ✓",
+  quickUnsaved: "לא נשמר",
+  quickEmpty: "ההודעה ריקה.",
+  quickTooLong: "עד 1000 תווים.",
+  quickCount: (n: number) => `${n}/1000`,
+  quickChangedBy: (actor: string, when: string) => `שונה ע״י ${actor} ${when}`,
+  journeyTitle: "שיחה עם ליד",
+  journeyHint: "מה הקו האוטומטי שולח לליד, ומתי. לקריאה בלבד.",
+  journeyChangeVia: "שינוי בנוסח עובר דרך תום: קודם בפלייבוק, ואז באישור של מטא.",
+  journeyModeLive: "פעיל: ההודעות יוצאות לכל הלידים.",
+  journeyModeTest: (n: number) =>
+    n === 0
+      ? "מצב בדיקה: שום הודעה לא יוצאת ללידים."
+      : n === 1
+        ? "מצב בדיקה: ההודעות יוצאות רק לטלפון בדיקה אחד."
+        : `מצב בדיקה: ההודעות יוצאות רק ל-${n} טלפוני בדיקה.`,
+  journeyModeOff: "כבוי: הקו האוטומטי לא מחובר, ושום הודעה לא יוצאת.",
+  journeyWhenFirst: (when: "menu" | "menu_opening" | "no_menu") =>
+    when === "menu"
+      ? "בהודעה הראשונה, כשהליד ביקש תפריט"
+      : when === "menu_opening"
+        ? "בהודעה הראשונה, כשהליד ביקש את תפריט הפתיחה"
+        : "בהודעה הראשונה, כשאין תפריט מזוהה",
+  journeyWhenTap: (title: string) => `כשהליד לוחץ «${title}»`,
+  journeyWhenTapCustomer: (title: string) => `כשלקוח קיים לוחץ «${title}»`,
+  journeyWhenFreeText: "כשהליד כותב שוב טקסט חופשי (פעם ביום לכל היותר)",
+  journeyWhenStop: "כשהליד כותב «הסר»",
+  journeyWhenWake1: (hours: number) => `הודעת המשך 1: ${hours} שעות אחרי שיחה שנרשמה, עד יום המעקב הבא`,
+  journeyWhenWakeN: (step: number) => `הודעת המשך ${step}: בבוקר של יום המעקב שנקבע`,
+  journeySlotsAt: "בשעות",
+  journeySlotsDays: "ראשון עד חמישי, לא בחגים",
+  journeyRules: (between: number, quiet: number, max: number) =>
+    `לפחות ${between} שעות בין הודעות, לא אם מישהו מהצוות כתב בוואטסאפ ב-${quiet} השעות האחרונות, ${max} הודעות המשך לכל היותר. נעצר כשהליד עונה, מזמין או מבקש להסיר.`,
+  journeyEffectLost: "הליד נסגר כאבוד («לא כרגע») ומוסר מהעדכונים",
+  journeyEffectOptOut: "הטלפון מוסר מכל ההודעות האוטומטיות",
+  journeyEffectAlert: "הבעלים של הליד מקבל התראה",
+  journeyFooter: "שורה תחתונה:",
+  journeyButtons: "כפתורים:",
+  journeyLoadError: "לא הצלחנו לטעון את ההודעות האוטומטיות.",
+  journeyGroupFirst: "ההודעה הראשונה",
+  journeyGroupTap: "אחרי לחיצה על כפתור",
+  journeyGroupOther: "תשובות נוספות",
+  journeyGroupWake: "הודעות המשך",
+
   // settings
   settingsTitle: "הגדרות",
   templatesTitle: "תבניות WhatsApp",
@@ -1091,6 +1152,38 @@ export const UI = {
   saveFailed: "השמירה נכשלה — נסה שוב",
   sessionExpired: "החיבור פג — רענן את הדף",
 } as const;
+
+/** The six quick-message situations (D-042), as a rep reads them. */
+export const QUICK_SITUATION_LABELS: Record<QuickSituation, string> = {
+  returning_customer: "לקוח חוזר",
+  tapped_order_no_order: "לחץ «להזמין» ולא הזמין",
+  asked_more: "ביקש לשמוע עוד",
+  no_answer: "לא ענה לשיחה",
+  menu_no_reply: "קיבל תפריט ולא ענה",
+  no_auto: "לא קיבל הודעה אוטומטית",
+};
+
+/** The quick-message variables, as a person reads them: the chips' names and the journey's pills. */
+export const QUICK_VARIABLE_LABELS: Record<"name" | "rep" | "business" | "menu", string> = {
+  name: "שם הליד",
+  rep: "שם הנציג",
+  business: "שם העסק",
+  menu: "שם התפריט",
+};
+
+/** What each automatic message is, in the drawer's line. A first menu shows its menu's label. */
+export const AUTO_KIND_LABELS: Record<string, string> = {
+  first_menu: "תפריט",
+  general_reply: "תשובה ראשונה",
+  order_link: "קישור להזמנה",
+  customer_link: "קישור להזמנה",
+  more_info: "הודעת «נחזור אליכם»",
+  free_text_reply: "הודעת «נחזור אליכם»",
+  not_now: "תודה על ההתעניינות",
+  optout_confirm: "אישור הסרה",
+  order_confirm: "אישור הזמנה",
+  wake: "הודעת המשך",
+};
 
 /** Server rule codes (SALES_*) rendered in Hebrew. */
 export const RULE_MESSAGES: Record<string, string> = {
@@ -1117,4 +1210,5 @@ export const RULE_MESSAGES: Record<string, string> = {
   SALES_IDENTITY_HOLDER_CHANGED: "הלקוח הזה כבר שייך לעסק אחר מזה שהוצג. רעננו את הרשימה והחליטו שוב.",
   SALES_IDENTITY_NOT_A_CANDIDATE: "הלקוח הזה כבר אינו מועמד לעסק. רעננו את הרשימה.",
   SALES_CONTACT_NOT_FOUND: "איש הקשר לא נמצא.",
+  SALES_LEAD_OPTED_OUT: "הליד ביקש לא לקבל הודעות («הסר»). אפשר להתקשר.",
 };
