@@ -143,20 +143,33 @@ export function LeadDrawer({
     panelRef.current?.parentElement?.toggleAttribute("inert", suspended);
   }, [suspended]);
 
+  // The panel takes focus when the drawer opens (or stops being suspended) and
+  // never again while it is open. Tranche 207: this used to run with the key
+  // handler below, which re-runs whenever `dirty` flips, so the first letter of
+  // a note pulled focus out of the textarea.
+  useEffect(() => {
+    if (!suspended) panelRef.current?.focus();
+  }, [suspended]);
+
+  // Read through refs so typing never re-subscribes the key handler.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Escape closes, and Tab stays inside: the drawer covers the list behind a
   // backdrop, so focus escaping into unreachable rows would strand a keyboard
   // or screen-reader user. Same trap MobileNav uses for its drawer.
   useEffect(() => {
     const panel = panelRef.current;
-    if (!suspended) panel?.focus();
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (suspended) return;
       if (e.key === "Escape") {
         // Typed text is work. Closing over it without asking is the same class
         // of loss as a dropped save, and it happened on a key nobody aims for.
-        if (dirty && !window.confirm(UI.discardChanges)) return;
-        onClose();
+        if (dirtyRef.current && !window.confirm(UI.discardChanges)) return;
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !panel) return;
@@ -178,7 +191,7 @@ export function LeadDrawer({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose, dirty, suspended]);
+  }, [suspended]);
 
   const [noteSaved, setNoteSaved] = useState(false);
   useEffect(() => {

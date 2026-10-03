@@ -142,6 +142,21 @@ describe("lead drawer", () => {
     expect(link.getAttribute("href")).toBe(`/sales/orgs/${lead({}).org_id}`);
   });
 
+  it("keeps focus in the note while typing: the first letter no longer jumps to the panel", () => {
+    // Tranche 207: the focus-trap effect re-ran when `dirty` flipped on the first
+    // letter and moved focus to the panel, so every note stopped after one letter.
+    render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
+      templates={null} onClose={noop} onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
+    const note = document.getElementById("drawer-note") as HTMLTextAreaElement;
+    note.focus();
+    fireEvent.change(note, { target: { value: "א" } });
+    expect(document.activeElement).toBe(note);
+    fireEvent.change(note, { target: { value: "אב" } });
+    expect(document.activeElement).toBe(note);
+    fireEvent.change(note, { target: { value: "" } });
+    expect(document.activeElement).toBe(note);
+  });
+
   it("says why the note cannot be saved yet, and stops saying it once there is a note", () => {
     render(<LeadDrawer lead={lead({})} events={[]} eventsLoading={false}
       templates={null} onClose={noop} onStatus={noop} onNote={noop} onNextTouch={noop} onAssign={noop} />);
