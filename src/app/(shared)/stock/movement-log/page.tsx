@@ -1666,7 +1666,8 @@ export default function MovementLogPage() {
                     iso={dayRows[0].event_at}
                     count={dayRows.length}
                   />
-                  <table className="min-w-full text-sm">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
                     <thead>
                       <tr className="border-b border-border/40 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         <th className="py-2 pr-4">Time</th>
@@ -1750,6 +1751,7 @@ export default function MovementLogPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               ))}
             </div>

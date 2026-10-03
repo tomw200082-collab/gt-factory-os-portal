@@ -163,7 +163,7 @@ export function EntityPickerPlus({
 
       {open && !disabled ? (
         <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 overflow-hidden rounded-md border border-border bg-bg-raised shadow-pop">
-          <div className="relative border-b border-border/70 bg-bg-subtle/50">
+          <div className="relative border-b border-border/70 bg-bg-subtle/50 focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-1">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
               strokeWidth={2}

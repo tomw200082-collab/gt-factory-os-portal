@@ -291,7 +291,7 @@ export function Drawer({
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            "fixed inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity duration-200",
+            "fixed inset-0 bg-black/40 backdrop-blur-[1px] transition-opacity [transition-duration:var(--motion-base)]",
             // Each nested overlay dims the area a bit more than its parent.
             zClass.overlay,
           )}
@@ -302,7 +302,8 @@ export function Drawer({
           className={cn(
             "fixed right-0 top-0 flex h-full w-full flex-col bg-bg-raised shadow-xl",
             "border-l border-border/70",
-            "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:[animation-duration:var(--motion-base)] data-[state=closed]:[animation-duration:var(--motion-fast)]",
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
             DRAWER_WIDTH_CLASS[width],
             zClass.content,
