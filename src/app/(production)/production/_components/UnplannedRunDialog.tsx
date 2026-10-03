@@ -369,7 +369,6 @@ export function UnplannedRunDialog({
             aria-busy={mutation.isPending || undefined}
             data-testid="unplanned-run-start"
           >
-            {mutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
             {mutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

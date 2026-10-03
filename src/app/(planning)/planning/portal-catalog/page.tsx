@@ -185,7 +185,6 @@ function ProductRow({ row, all, canEdit }: { row: CatalogRow; all: CatalogRow[];
             className="inline-flex min-h-[44px] items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60"
             data-testid={`catalog-switch-${row.sku}`}
           >
-            {save.isPending ? <span className="btn-spinner" aria-hidden /> : null}
             <span className={cn("relative block h-6 w-11 rounded-full transition-colors", row.available ? "bg-success" : "bg-bg-muted")}>
               <span
                 className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all", row.available ? "left-[22px]" : "left-0.5")}

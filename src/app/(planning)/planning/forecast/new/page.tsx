@@ -500,7 +500,6 @@ export default function NewForecastDraftPage() {
                 aria-busy={isSubmitting || undefined}
                 data-testid="forecast-new-submit"
               >
-                {isSubmitting ? <span className="btn-spinner" aria-hidden /> : null}
                 {isSubmitting ? (
                   <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
                 ) : null}

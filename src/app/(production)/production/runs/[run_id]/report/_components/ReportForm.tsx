@@ -776,7 +776,6 @@ export function ReportForm({ runId }: { runId: string }) {
                 : "cursor-not-allowed border-border bg-bg-subtle text-fg-subtle hover:bg-bg-subtle",
             )}
           >
-            {report.isPending ? <span className="btn-spinner" aria-hidden /> : null}
             {report.isPending ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden />

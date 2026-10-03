@@ -253,7 +253,6 @@ export function AddMaterialControl({
               title={!canSave ? cannotSaveReason : undefined}
               data-testid="active-delta-save"
             >
-              {mutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
               {mutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

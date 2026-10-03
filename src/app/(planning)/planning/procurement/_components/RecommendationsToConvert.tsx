@@ -193,7 +193,6 @@ export function RecommendationsToConvert(): JSX.Element | null {
                   className="btn btn-primary btn-sm"
                   data-testid="procurement-convert-rec"
                 >
-                  {pending ? <span className="btn-spinner" aria-hidden /> : null}
                   {pending ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   ) : (

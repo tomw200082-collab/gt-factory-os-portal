@@ -187,7 +187,6 @@ function DoneConfirmDialog({
             aria-busy={pending || undefined}
             data-testid="done-confirm-yes"
           >
-            {pending ? <span className="btn-spinner" aria-hidden /> : null}
             {pending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
