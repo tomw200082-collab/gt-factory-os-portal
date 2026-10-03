@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { UI } from "../_lib/labels";
 import { useReturnFocus } from "../_lib/useReturnFocus";
+import { SBtnSpinner } from "./SBtnSpinner";
 
 export interface QuickAddSheetProps {
   busy?: boolean;
@@ -178,6 +179,7 @@ export function QuickAddSheet({ busy = false, error = null, onSubmit, onDismiss 
             data-testid="quick-add-save"
             className="s-btn s-btn-primary flex-1"
           >
+            {busy ? <SBtnSpinner /> : null}
             {UI.save}
           </button>
           <button type="button" className="s-btn s-btn-ghost" onClick={onDismiss}>

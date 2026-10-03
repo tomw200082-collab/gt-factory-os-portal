@@ -16,6 +16,7 @@ import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 import { markActivityAttempt, readActivityDraft, saveActivityDraft, type ActivityDraft } from "../_lib/activityDraft";
 import { addIsraelDays, atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter } from "../_lib/israelTime";
+import { SBtnSpinner } from "./SBtnSpinner";
 
 /**
  * `won` is not an OutcomeResult and cannot be: sales_core.record_outcome
@@ -488,6 +489,7 @@ export function OutcomeSheet({
                 else onSubmit({ ...declared, next_touch_at: dueAt });
               }}
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.save}
             </button>
           </div>
@@ -560,6 +562,7 @@ export function OutcomeSheet({
                 )
               }
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.save}
             </button>
             {!chosenReason ? (
@@ -610,6 +613,7 @@ export function OutcomeSheet({
                 onSubmit({ result: "won", document_number: documentNumber.trim() })
               }
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.save}
             </button>
             {!documentNumber.trim() ? (

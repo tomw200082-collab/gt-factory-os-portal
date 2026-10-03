@@ -62,6 +62,7 @@ export function BulkBar({ count, roster, busy, error = null, onAssign, onClear }
         data-testid="bulk-assign-confirm"
         className="s-btn s-btn-primary"
         disabled={busy || !assignee || !date}
+        aria-busy={busy || undefined}
         onClick={() => {
           if (!assignee || !date) return;
           onAssign(assignee, new Date(`${date}T09:00:00`).toISOString());
