@@ -44,11 +44,13 @@ export interface ResponseTime {
 export interface ResponseWeekRow {
   assignee: string | null;
   total: number;
-  on_time: number;
-  due_soon: number;
-  overdue: number;
-  met: number;
-  decided: number;
+  answered_on_time: number;
+  answered_late: number;
+  not_answered: number;
+  /** of not_answered: in the last quarter, and past the deadline */
+  not_answered_due_soon: number;
+  not_answered_overdue: number;
+  /** answered on time over every lead whose outcome is known; null while none is */
   met_pct: number | null;
 }
 

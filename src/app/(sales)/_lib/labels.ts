@@ -1137,15 +1137,17 @@ export const UI = {
   templateReturning: "לקוח חוזר",
   settingsSaved: "נשמר ✓",
 
-  // Response-time badge (D-043, tranche 204). Tranche 164 retired the calm state when one
-  // 24-hour clock made every imported lead overdue and "בזמן" said nothing. In working
-  // hours the calm state is a fresh lead's, and Tom asked for all three (D-043).
-  slaOnTime: "בזמן",
+  // Response time (D-043, tranche 204). A pill only when it asks for action — about to pass,
+  // or past it. On time is a quiet line of text: a pill on every fresh card is a pill on
+  // nothing (tranche 164, audit P1-3). The time left sits in the card's meta line, so the
+  // pill stays one or two words and the business name and phone never truncate.
   slaDueSoon: "עומד לעבור",
-  slaOverdue: "עבר",
-  /** Working time left, in plain words: minutes under an hour, half hours above it. */
-  workLeftMinutes: (m: number) => (m === 1 ? "עוד דקת עבודה" : `עוד ${m} דקות עבודה`),
-  workLeftHours: (h: number) => (h === 1 ? "עוד שעת עבודה" : `עוד ${h} שעות עבודה`),
+  slaOverdue: "עבר הזמן",
+  /** Working time left: minutes under an hour; hours in words up to two and a half. */
+  workLeft: (amount: string) => `עוד ${amount} עבודה`,
+  workMinutes: (m: number) => (m === 1 ? "דקת" : `${m} דקות`),
+  workHours: (h: number) =>
+    h === 1 ? "שעה" : h === 1.5 ? "שעה וחצי" : h === 2 ? "שעתיים" : h === 2.5 ? "שעתיים וחצי" : `${h} שעות`,
 
   // Settings: זמני תגובה (D-043)
   rtTitle: "זמני תגובה",
@@ -1154,11 +1156,11 @@ export const UI = {
   rtStart: "משעה",
   rtEnd: "עד שעה",
   rtHot: "ליד חם",
-  rtHotHint: "לחץ «להזמין» או «לשמוע עוד», או כתב לנו בוואטסאפ",
+  rtHotHint: "הליד לחץ «אני רוצה להזמין» או «רוצה לשמוע עוד», או כתב לנו בוואטסאפ",
   rtNormal: "כל ליד אחר",
   rtHoursUnit: "שעות עבודה",
   rtDaysEmpty: "בחרו לפחות יום עבודה אחד",
-  rtTimeMissing: "כתבו את השעות כך: 09:00",
+  rtTimeFormat: "כתבו את השעה כך: 09:00",
   rtEndBeforeStart: "שעת הסיום צריכה להיות אחרי שעת ההתחלה",
   rtHoursRange: "בין חצי שעה ל־40 שעות, בחצאי שעות",
   rtHotSlower: "היעד לליד חם לא יכול להיות ארוך מהיעד לליד רגיל",
@@ -1170,9 +1172,10 @@ export const UI = {
   // Attention: the week per rep (D-043)
   weekTitle: "זמני תגובה · 7 ימים אחרונים",
   weekHint: "לידים שנכנסו השבוע, ומתי חזרו אליהם",
-  weekOnTime: "בזמן",
-  weekDueSoon: "עומד לעבור",
-  weekOverdue: "עבר",
+  weekOnTime: "ענו בזמן",
+  weekLate: "ענו באיחור",
+  weekOpen: "עוד לא ענו",
+  weekOpenDueSoon: (n: number) => (n === 1 ? "מתוכם אחד עומד לעבור" : `מתוכם ${n} עומדים לעבור`),
   weekMetLabel: "עמדו ביעד",
   weekMet: (pct: number, met: number, decided: number) => `${pct}% · ${met} מתוך ${decided}`,
   weekNoDecided: "עוד אין",

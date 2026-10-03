@@ -61,13 +61,29 @@ const todayRow = (l: ReturnType<typeof lead>) => ({
   uncontactable: false, sla_class: l.sla_class, sla_minutes_left: l.sla_minutes_left, conversation: null,
 });
 const WEEK = [
-  { assignee: "dana@synthetic.invalid", total: 6, on_time: 3, due_soon: 1, overdue: 2, met: 3, decided: 5, met_pct: 60 },
-  { assignee: "yoav@synthetic.invalid", total: 2, on_time: 2, due_soon: 0, overdue: 0, met: 0, decided: 0, met_pct: null },
+  { assignee: "dana@synthetic.invalid", total: 6, answered_on_time: 3, answered_late: 1, not_answered: 2,
+    not_answered_due_soon: 1, not_answered_overdue: 1, met_pct: 60 },
+  { assignee: "yoav@synthetic.invalid", total: 2, answered_on_time: 0, answered_late: 0, not_answered: 2,
+    not_answered_due_soon: 0, not_answered_overdue: 0, met_pct: null },
 ];
+
+// The live shape the UX gate measured: a 145-lead overdue backlog, a fresh lead, and one hot
+// lead about to pass that came in 100 minutes ago — newest first, as the server sends it.
+const BACKLOG = [
+  lead({ id: "FRESH", org_name: "קפה חדש לדוגמה", contact_name: "רוני", phone_e164: "+972500000100",
+    created_at: new Date(Date.now() - 5 * 60e3).toISOString(), sla_minutes_left: 475 }),
+  ...Array.from({ length: 145 }, (_, i) => lead({
+    id: `B${i}`, org_name: `עסק ותיק לדוגמה ${i + 1}`, contact_name: `איש קשר ${i + 1}`,
+    phone_e164: `+97250${String(1000 + i).padStart(7, "0")}`, sla_state: "overdue", sla_minutes_left: -60 * (i + 1),
+    created_at: new Date(Date.now() - (3 + i) * 3600e3).toISOString(), age_days: Math.floor((3 + i) / 24) })),
+].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+const HOT = lead({ id: "HOT", org_name: "מאפיית בוקר לדוגמה", contact_name: "טל", phone_e164: "+972500000200",
+  created_at: new Date(Date.now() - 100 * 60e3).toISOString(), sla_state: "due_soon", sla_class: "hot",
+  sla_minutes_left: 20, sla_deadline_at: new Date(Date.now() + 20 * 60e3).toISOString() });
 
 interface Sent { method: string; body: unknown }
 
-async function stub(page: Page): Promise<Sent[]> {
+async function stub(page: Page, todayLeads: ReturnType<typeof lead>[] = LEADS): Promise<Sent[]> {
   const sent: Sent[] = [];
   await page.route("**/api/sales/settings**", (r) => {
     if (r.request().method() === "PUT") {
@@ -77,7 +93,7 @@ async function stub(page: Page): Promise<Sent[]> {
     return r.fulfill({ json: SETTINGS });
   });
   await page.route("**/api/sales/journey**", (r) => r.fulfill({ status: 404, json: { error: "not stubbed" } }));
-  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: LEADS.map(todayRow), queue: QUEUE } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: todayLeads.map(todayRow), queue: QUEUE } }));
   await page.route("**/api/sales/tasks**", (r) => r.fulfill({ json: { rows: [] } }));
   await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/week-stats**", (r) => r.fulfill({ json: { stats: STATS } }));
@@ -135,18 +151,40 @@ test.beforeEach(async ({ page }) => {
   await setFakeRole(page, "admin");
 });
 
-test("Today shows the three states with the working time left, overdue then due soon first @mocked", async ({ page }) => {
+test("Today: on time is quiet text, about to pass and overdue are pills; only about-to-pass jumps ahead @mocked", async ({ page }) => {
   await stub(page);
   await page.goto("/sales/today");
   await expect(page.getByTestId("today-card-L1")).toBeVisible({ timeout: 30_000 });
 
   const ids = await page.locator('[data-testid^="today-card-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-  expect(ids).toEqual(["today-card-L2", "today-card-L3", "today-card-L1"]);
-  await expect(page.getByTestId("today-card-L2").getByTestId("sla-badge")).toHaveText("עבר");
-  await expect(page.getByTestId("today-card-L3").getByTestId("sla-badge")).toHaveText("עומד לעבור · עוד 25 דקות עבודה");
-  await expect(page.getByTestId("today-card-L1").getByTestId("sla-badge")).toHaveText("בזמן · עוד 5 שעות עבודה");
+  // the server order is L1 (on time), L2 (overdue), L3 (about to pass): only L3 moves
+  expect(ids).toEqual(["today-card-L3", "today-card-L1", "today-card-L2"]);
+  await expect(page.getByTestId("today-card-L2").getByTestId("sla-badge")).toHaveText("עבר הזמן");
+  await expect(page.getByTestId("today-card-L3").getByTestId("sla-badge")).toHaveText("עומד לעבור");
+  await expect(page.getByTestId("today-card-L3").getByTestId("sla-left")).toHaveText("· עוד 25 דקות עבודה");
+  await expect(page.getByTestId("today-card-L1").getByTestId("sla-badge")).toHaveCount(0);
+  await expect(page.getByTestId("today-card-L1").getByTestId("sla-left")).toHaveText("· עוד 5 שעות עבודה");
   await axeBoth(page, "today");
   await shoot(page, "today", null);
+});
+
+test("Today with a 145-lead overdue backlog keeps the hot and fresh leads in view @mocked", async ({ page }) => {
+  // newest first, as the server sends it under the stored direction
+  const rows = [...BACKLOG, HOT].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  await stub(page, rows);
+  await page.goto("/sales/today");
+  await expect(page.getByTestId("today-card-HOT")).toBeVisible({ timeout: 30_000 });
+  const ids = await page.locator('[data-testid^="today-card-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!.replace("today-card-", "")));
+  expect(ids[0]).toBe("HOT");
+  expect(ids[1]).toBe("FRESH");
+  // everyone after the hot lead keeps newest first
+  const expected = rows.filter((l) => l.id !== "HOT").map((l) => l.id).slice(0, ids.length - 1);
+  expect(ids.slice(1)).toEqual(expected);
+  // names and phones wrap, never truncate
+  const truncated = await page.locator('[data-testid^="today-card-"] h3').evaluateAll((els) =>
+    els.filter((e) => e.scrollWidth > e.clientWidth + 1 || getComputedStyle(e).textOverflow === "ellipsis").length);
+  expect(truncated).toBe(0);
+  await shoot(page, "today-backlog", null);
 });
 
 test("the drawer carries the same badge @mocked", async ({ page }) => {
@@ -154,7 +192,8 @@ test("the drawer carries the same badge @mocked", async ({ page }) => {
   await page.goto("/sales/leads?lead=L3");
   const drawer = page.getByTestId("lead-drawer");
   await expect(drawer).toBeVisible({ timeout: 30_000 });
-  await expect(drawer.getByTestId("sla-badge")).toHaveText("עומד לעבור · עוד 25 דקות עבודה");
+  await expect(drawer.getByTestId("sla-badge")).toHaveText("עומד לעבור");
+  await expect(drawer.getByTestId("sla-left")).toHaveText("עוד 25 דקות עבודה");
   await expect(drawer.getByTestId("sla-badge")).toHaveAttribute("data-state", "due_soon");
   await axeBoth(page, "drawer");
   await shoot(page, "drawer", "lead-drawer");
@@ -165,9 +204,13 @@ test("leads list cards carry the badge @mocked", async ({ page }) => {
   await page.goto("/sales/leads");
   // the table (wide) and the cards (phone) both render; only one is visible at a width
   await expect(page.locator(':text("בר לדוגמה"):visible').first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('[data-testid="sla-badge"]:visible', { hasText: "עבר" }).first()).toBeVisible();
-  await expect(page.locator('[data-testid="sla-badge"]:visible', { hasText: "בזמן · עוד 5 שעות עבודה" }).first()).toBeVisible();
-  await expect(page.locator('[data-testid="sla-badge"]:visible', { hasText: "עומד לעבור · עוד 25 דקות עבודה" }).first()).toBeVisible();
+  await expect(page.locator('[data-testid="sla-badge"]:visible', { hasText: "עבר הזמן" }).first()).toBeVisible();
+  await expect(page.locator('[data-testid="sla-badge"]:visible', { hasText: "עומד לעבור" }).first()).toBeVisible();
+  await expect(page.locator('[data-testid="sla-left"]:visible', { hasText: "עוד 5 שעות עבודה" }).first()).toBeVisible();
+  await expect(page.locator('[data-testid="sla-badge"]:visible')).toHaveCount(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[data-testid="sla-badge"]:visible')).toHaveCount(2);
+  await page.setViewportSize({ width: 1280, height: 900 });
   await shoot(page, "leads", null);
 });
 
@@ -183,17 +226,24 @@ test("settings edit the working days, hours and both targets, validated, with th
   await expect(page.getByTestId("rt-save")).toBeDisabled();
   await axeBoth(page, "settings");
 
-  // invalid: an end before the start, and a hot target slower than normal
+  // invalid: checked when the field is left, not while typing
   await page.getByTestId("rt-end").fill("08:00");
-  await expect(page.getByTestId("rt-hours-error")).toHaveText("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
+  await expect(page.getByTestId("rt-end-error")).toHaveText("");
+  await page.getByTestId("rt-end").press("Tab");
+  await expect(page.getByTestId("rt-end-error")).toHaveText("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
+  await expect(page.getByTestId("rt-end")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByTestId("rt-start")).not.toHaveAttribute("aria-invalid", "true");
   await page.getByTestId("rt-end").fill("17:00");
   await page.getByTestId("rt-hot").fill("9");
+  // a save with a problem shows it and sends nothing
+  await page.getByTestId("rt-save").click();
   await expect(page.getByTestId("rt-hot-error")).toHaveText("היעד לליד חם לא יכול להיות ארוך מהיעד לליד רגיל");
-  await expect(page.getByTestId("rt-save")).toBeDisabled();
+  expect(sent).toHaveLength(0);
+  await axeBoth(page, "settings with an error");
 
   // valid: Friday on, hot 1.5 hours
   await page.getByTestId("rt-hot").fill("1.5");
-  await page.getByRole("button", { name: "שישי" }).click();
+  await page.getByRole("button", { name: "ו׳ שישי" }).click();
   await expect(page.getByTestId("rt-day-5")).toHaveAttribute("aria-pressed", "true");
   await shoot(page, "settings-response-time", "settings-response-time");
   await page.getByTestId("rt-save").click();
@@ -210,6 +260,10 @@ test("attention shows each rep's last 7 days @mocked", async ({ page }) => {
   await expect(week).toContainText("זמני תגובה · 7 ימים אחרונים");
   const dana = page.getByTestId("rt-week-dana@synthetic.invalid");
   await expect(dana).toContainText("דנה");
+  await expect(dana.getByTestId("rt-week-on_time")).toHaveText("ענו בזמן3");
+  await expect(dana.getByTestId("rt-week-late")).toHaveText("ענו באיחור1");
+  await expect(dana.getByTestId("rt-week-open")).toHaveText("עוד לא ענו2");
+  await expect(dana.getByTestId("rt-week-soon")).toHaveText("מתוכם אחד עומד לעבור");
   await expect(dana.getByTestId("rt-week-met")).toHaveText("60% · 3 מתוך 5");
   await expect(page.getByTestId("rt-week-yoav@synthetic.invalid").getByTestId("rt-week-met")).toHaveText("עוד אין");
   await axeBoth(page, "attention");

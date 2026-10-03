@@ -81,18 +81,18 @@ export function agedTone(ageDays: number, slaHours: number): "muted" | "overdue"
   return ageDays > slaHours / 24 ? "overdue" : "muted";
 }
 
-const SLA_RANK: Partial<Record<NonNullable<SlaState>, number>> = { overdue: 0, due_soon: 1 };
-
 /**
- * Inside a section, the lead you are latest on comes first: overdue, then due soon, then
- * the rest, each group in the order it arrived (D-043, tranche 204). The server already
- * orders Today this way; doing it here too keeps it true before the daily cap is applied,
- * so an overdue lead is never the one the cap pushes to tomorrow.
+ * Inside a section, only a lead about to pass jumps ahead, soonest deadline first (D-043,
+ * UX gate P0-1). Overdue and on-time leads keep the order they arrived in — the stored
+ * queue direction — exactly as before: sorting a 145-lead overdue backlog first hid every
+ * fresh and hot lead behind the daily cap. The overdue pill still marks them. The server
+ * orders Today the same way; doing it here too keeps it true before the cap is applied.
  */
-export function bySlaUrgency<T extends { sla_state: SlaState }>(rows: T[]): T[] {
-  const rank = (r: T) => (r.sla_state ? (SLA_RANK[r.sla_state] ?? 2) : 2);
-  return rows
+export function bySlaUrgency<T extends { sla_state: SlaState; sla_deadline_at: string | null }>(rows: T[]): T[] {
+  const soon = rows
+    .filter((r) => r.sla_state === "due_soon")
     .map((r, i) => ({ r, i }))
-    .sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i)
+    .sort((a, b) => (Date.parse(a.r.sla_deadline_at ?? "") || 0) - (Date.parse(b.r.sla_deadline_at ?? "") || 0) || a.i - b.i)
     .map((x) => x.r);
+  return [...soon, ...rows.filter((r) => r.sla_state !== "due_soon")];
 }

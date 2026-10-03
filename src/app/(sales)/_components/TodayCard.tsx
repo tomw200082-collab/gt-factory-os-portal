@@ -16,7 +16,7 @@ import type { AssigneeEntry, SalesSettings, TodayRow, WhatsappTemplates } from "
 import { WhatsAppQuick } from "./WhatsAppQuick";
 import { assigneeName } from "./AssigneePicker";
 import { CustomerBadge, CustomerContext } from "./CustomerBadge";
-import { SlaBadge } from "./SlaBadge";
+import { SlaBadge, SlaTimeLeft } from "./SlaBadge";
 
 export interface TodayCardProps {
   row: TodayRow;
@@ -95,10 +95,12 @@ export function TodayCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
+          {/* Wraps, never truncates (tranche 204): the business name and the phone are what the
+              rep acts on, and at 320px an ellipsis ate both. */}
+          <h3 className="break-words font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
             {row.org_name}
           </h3>
-          <p className="mt-0.5 truncate text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+          <p className="mt-0.5 break-words text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
             {row.contact_name ? `${row.contact_name} · ` : ""}
             {/* A phone is the one string here that must never be reordered by
                 the bidi algorithm: fmtPhone falls through to raw E.164 for any
@@ -113,7 +115,7 @@ export function TodayCard({
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {row.is_existing_customer ? <CustomerBadge /> : null}
-          <SlaBadge state={row.sla_state} minutesLeft={row.sla_minutes_left} />
+          <SlaBadge state={row.sla_state} />
         </div>
       </div>
 
@@ -148,6 +150,8 @@ export function TodayCard({
             same queue, a card with no owner reads as "anyone's", which is how
             the same prospect gets called twice. */}
         {row.assignee ? ` · ${assigneeName(row.assignee, roster)}` : ""}
+        {/* D-043: the working time left, quiet, in the meta line rather than in the pill */}
+        <SlaTimeLeft state={row.sla_state} minutesLeft={row.sla_minutes_left} separator />
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

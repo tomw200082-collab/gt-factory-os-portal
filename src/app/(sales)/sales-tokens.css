@@ -3713,3 +3713,10 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* On time is quiet text, not a pill (UX gate P1-2): muted ink, no fill. Muted, not faint:
+   it also sits on the returning-customer card's tinted background, where faint drops below AA. */
+[data-app="sales"] .s-sla-left {
+  color: hsl(var(--s-fg-muted));
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
