@@ -22,6 +22,7 @@ import { useAutoClear } from "../../_lib/useAutoClear";
 import type { Candidate, IdentityAction, IdentityOrg } from "../../_lib/types";
 import { BackLink } from "../BackLink";
 import { ListEmpty, QueueError } from "../EmptyStates";
+import { SBtnSpinner } from "../SBtnSpinner";
 import { Toast } from "../Toast";
 import { Sheet } from "./Sheet";
 
@@ -274,8 +275,10 @@ function ReviewCard({ org, busy, saving, error, onAsk }: { org: IdentityOrg; bus
                     type="button"
                     className="s-btn s-btn-primary mt-3 w-full"
                     disabled={busy}
+                    aria-busy={saving || undefined}
                     onClick={() => onAsk({ kind: "link", org, candidate: c, action: c.basis === "held" ? "confirm" : "pick" })}
                   >
+                    {saving ? <SBtnSpinner /> : null}
                     {a.reject ? UI.chooseCandidate : UI.confirmCustomer}
                   </button>
                 ) : null}
@@ -288,17 +291,20 @@ function ReviewCard({ org, busy, saving, error, onAsk }: { org: IdentityOrg; bus
       {a.reject || a.lead || a.chain ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {a.lead ? (
-            <button type="button" className="s-btn s-btn-primary" disabled={busy} onClick={() => onAsk({ kind: "lead", org })}>
+            <button type="button" className="s-btn s-btn-primary" disabled={busy} aria-busy={saving || undefined} onClick={() => onAsk({ kind: "lead", org })}>
+              {saving ? <SBtnSpinner /> : null}
               {UI.keepAsLead}
             </button>
           ) : null}
           {a.reject ? (
-            <button type="button" className="s-btn s-btn-danger-quiet" disabled={busy} onClick={() => onAsk({ kind: "reject", org })}>
+            <button type="button" className="s-btn s-btn-danger-quiet" disabled={busy} aria-busy={saving || undefined} onClick={() => onAsk({ kind: "reject", org })}>
+              {saving ? <SBtnSpinner /> : null}
               {UI.rejectAll}
             </button>
           ) : null}
           {a.chain ? (
-            <button type="button" className="s-btn s-btn-primary" disabled={busy} onClick={() => onAsk({ kind: "chain", org })}>
+            <button type="button" className="s-btn s-btn-primary" disabled={busy} aria-busy={saving || undefined} onClick={() => onAsk({ kind: "chain", org })}>
+              {saving ? <SBtnSpinner /> : null}
               {UI.confirmChain}
             </button>
           ) : null}

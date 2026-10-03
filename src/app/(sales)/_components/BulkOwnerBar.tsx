@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { UI } from "../_lib/labels";
+import { SBtnSpinner } from "./SBtnSpinner";
 import type { AssigneeEntry } from "../_lib/types";
 
 export interface BulkOwnerBarProps {
@@ -52,9 +53,11 @@ export function BulkOwnerBar({ count, roster, busy, error = null, onAssign, onCl
         type="button"
         className="s-btn s-btn-primary"
         disabled={busy || !owner || count === 0 || tooMany}
+        aria-busy={busy || undefined}
         title={!owner && !busy ? UI.ownerAssignNeedsOwner : undefined}
         onClick={() => owner && onAssign(owner)}
       >
+        {busy ? <SBtnSpinner /> : null}
         {busy ? UI.saving : UI.ownerAssign}
       </button>
       <button type="button" className="s-btn s-btn-ghost" onClick={onClear} disabled={busy}>

@@ -2,6 +2,7 @@
 
 import { TriangleAlert } from "lucide-react";
 import { REPORT_UI as L } from "../../_lib/labels";
+import { SBtnSpinner } from "../SBtnSpinner";
 import type { Freshness } from "../../_lib/report/freshness";
 
 /** The petrol band: the title, the freshness pill, and what every figure excludes. */
@@ -66,6 +67,7 @@ export function RefreshFailed({ clock, checkedAt, pending, onRetry }: { clock: s
         </p>
       </div>
       <button type="button" className="s-btn s-btn-ghost s-btn-compact shrink-0" disabled={pending} aria-busy={pending} onClick={onRetry} data-testid="report-recheck">
+        {pending ? <SBtnSpinner /> : null}
         {pending ? L.rechecking : L.recheck}
       </button>
     </div>

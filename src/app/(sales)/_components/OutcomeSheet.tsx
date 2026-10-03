@@ -16,6 +16,7 @@ import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 import { markActivityAttempt, readActivityDraft, saveActivityDraft, type ActivityDraft } from "../_lib/activityDraft";
 import { addIsraelDays, atLeastSchedulable, israelDate, israelFirstSchedulableDate, israelNineAM, israelNineAMAfter } from "../_lib/israelTime";
+import { SBtnSpinner } from "./SBtnSpinner";
 
 /**
  * `won` is not an OutcomeResult and cannot be: sales_core.record_outcome
@@ -272,6 +273,7 @@ export function OutcomeSheet({
               type="button"
               data-testid="outcome-answered_progressing"
               disabled={busy}
+              aria-busy={busy || undefined}
               className="s-btn s-btn-primary min-h-[56px] text-base"
               onClick={() => {
                 updateDraft({ result: "answered_progressing",
@@ -286,9 +288,11 @@ export function OutcomeSheet({
                 type="button"
                 data-testid="outcome-no_answer"
                 disabled={busy}
+                aria-busy={busy || undefined}
                 className="s-btn s-btn-ghost min-h-[56px] text-base"
                 onClick={() => submitActivity("no_answer")}
               >
+                {busy ? <SBtnSpinner /> : null}
                 {OUTCOME_LABELS.no_answer}
               </button>
               {/* The date this tap is about to commit, before it commits it. */}
@@ -306,6 +310,7 @@ export function OutcomeSheet({
                 type="button"
                 data-testid="outcome-pick-date-no_answer"
                 disabled={busy}
+                aria-busy={busy || undefined}
                 className="s-btn s-btn-ghost self-start text-[13px]"
                 onClick={() => {
                   setDateFor("no_answer");
@@ -320,9 +325,11 @@ export function OutcomeSheet({
                 type="button"
                 data-testid={channel === "email" ? "outcome-email_sent" : "outcome-whatsapp_sent"}
                 disabled={busy}
+                aria-busy={busy || undefined}
                 className="s-btn s-btn-ghost min-h-[56px] text-base"
                 onClick={() => submitActivity(channel === "email" ? "email_sent" : "whatsapp_sent")}
               >
+                {busy ? <SBtnSpinner /> : null}
                 {OUTCOME_LABELS[channel === "email" ? "email_sent" : "whatsapp_sent"]}
               </button>
               <p
@@ -336,6 +343,7 @@ export function OutcomeSheet({
                 type="button"
                 data-testid={channel === "email" ? "outcome-pick-date-email_sent" : "outcome-pick-date-whatsapp_sent"}
                 disabled={busy}
+                aria-busy={busy || undefined}
                 className="s-btn s-btn-ghost self-start text-[13px]"
                 onClick={() => {
                   setDateFor(channel === "email" ? "email_sent" : "whatsapp_sent");
@@ -356,6 +364,7 @@ export function OutcomeSheet({
               type="button"
               data-testid="outcome-won"
               disabled={busy}
+              aria-busy={busy || undefined}
               className="s-btn s-btn-ghost min-h-[56px] text-base"
               onClick={() => setStep("won-evidence")}
             >
@@ -365,6 +374,7 @@ export function OutcomeSheet({
               type="button"
               data-testid="outcome-lost"
               disabled={busy}
+              aria-busy={busy || undefined}
               className="s-btn s-btn-danger-quiet min-h-[56px] text-base"
               onClick={() => setStep("lost-reason")}
             >
@@ -401,6 +411,7 @@ export function OutcomeSheet({
             <button type="button" data-testid="activity-save" className="s-btn s-btn-primary s-sheet-save min-h-[52px]"
               aria-busy={busy || undefined} disabled={busy || !activityReady} onClick={() => submitActivity("answered_progressing")}
               aria-describedby={activityReady ? undefined : "activity-save-needs"}>
+              {busy ? <SBtnSpinner /> : null}
               {busy ? UI.saving : UI.save}
             </button>
             {activityReady ? null : (
@@ -442,25 +453,31 @@ export function OutcomeSheet({
               type="button"
               data-testid="next-touch-tomorrow"
               disabled={busy}
+              aria-busy={busy || undefined}
               className="s-btn s-btn-ghost min-h-[52px]"
               onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(1)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(1) })}
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.tomorrow}
             </button>
             <button
               type="button"
               disabled={busy}
+              aria-busy={busy || undefined}
               className="s-btn s-btn-ghost min-h-[52px]"
               onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(3)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(3) })}
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.inThreeDays}
             </button>
             <button
               type="button"
               disabled={busy}
+              aria-busy={busy || undefined}
               className="s-btn s-btn-ghost min-h-[52px]"
               onClick={() => dateFor ? submitActivity(dateFor, israelNineAMAfter(7)) : onSubmit({ ...declared, next_touch_at: israelNineAMAfter(7) })}
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.inAWeek}
             </button>
             <label className="mt-1 flex items-center gap-2">
@@ -488,6 +505,7 @@ export function OutcomeSheet({
                 else onSubmit({ ...declared, next_touch_at: dueAt });
               }}
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.save}
             </button>
           </div>
@@ -515,6 +533,7 @@ export function OutcomeSheet({
                   role="radio"
                   data-testid={`lost-reason-${r}`}
                   disabled={busy}
+                  aria-busy={busy || undefined}
                   // ARIA's radio pattern: one stop in the tab order, arrows to
                   // move. Making all five tabbable announced a radio group and
                   // then ignored the keys a screen-reader user would reach for,
@@ -560,6 +579,7 @@ export function OutcomeSheet({
                 )
               }
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.save}
             </button>
             {!chosenReason ? (
@@ -610,6 +630,7 @@ export function OutcomeSheet({
                 onSubmit({ result: "won", document_number: documentNumber.trim() })
               }
             >
+              {busy ? <SBtnSpinner /> : null}
               {UI.save}
             </button>
             {!documentNumber.trim() ? (
