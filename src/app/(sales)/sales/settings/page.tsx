@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useJourney, useLeads, useSaveQuickMessage, useSaveSettings, useSettings } from "../../_lib/api";
+import { useJourney, useLeads, useSaveQuickMessage, useSaveResponseTime, useSaveSettings, useSettings } from "../../_lib/api";
 import { RULE_MESSAGES, UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { SettingsForm } from "../../_components/SettingsForm";
 import { JourneySection } from "../../_components/JourneySection";
 import { QuickMessagesSection } from "../../_components/QuickMessagesSection";
+import { ResponseTimeSection } from "../../_components/ResponseTimeSection";
 import type { QuickSituation } from "../../_lib/types";
 import { useSession } from "@/lib/auth/session-provider";
 
@@ -34,6 +35,14 @@ export default function SettingsPage() {
     const timer = setTimeout(() => setQuickSaved(null), 3000);
     return () => clearTimeout(timer);
   }, [quickSaved]);
+  // D-043: the response clock, its own save.
+  const saveRt = useSaveResponseTime();
+  const [rtSaved, setRtSaved] = useState(false);
+  useEffect(() => {
+    if (!rtSaved) return;
+    const timer = setTimeout(() => setRtSaved(false), 3000);
+    return () => clearTimeout(timer);
+  }, [rtSaved]);
 
   const openLeadsByAssignee = useMemo(() => {
     const out: Record<string, number> = {};
@@ -88,6 +97,20 @@ export default function SettingsPage() {
               onSuccess: () => setQuickSaved(situation),
               onError: (e) => setQuickError({ situation, message: (e.code && RULE_MESSAGES[e.code]) || UI.saveFailed }),
             });
+          }}
+        />
+      ) : null}
+
+      {session?.role !== "sales_rep" && settings.isSuccess && settings.data.response_time ? (
+        <ResponseTimeSection
+          value={settings.data.response_time}
+          change={settings.data.last_changes.find((c) => c.key === "response_time") ?? null}
+          saving={saveRt.isPending}
+          saved={rtSaved}
+          error={saveRt.error ? ((saveRt.error.code && RULE_MESSAGES[saveRt.error.code]) || UI.saveFailed) : null}
+          onSave={(value) => {
+            setRtSaved(false);
+            saveRt.mutate(value, { onSuccess: () => setRtSaved(true) });
           }}
         />
       ) : null}

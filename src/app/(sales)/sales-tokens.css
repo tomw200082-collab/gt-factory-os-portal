@@ -76,7 +76,7 @@
   --s-danger-quiet: 0 50% 40%;
 
   /* SLA — the only other place colour is allowed */
-  --s-sla-ok: 152 55% 31%;
+  --s-sla-ok: 152 55% 27%; /* 5.3:1 on its soft fill (tranche 204: the calm badge is back) */
   --s-sla-ok-soft: 152 50% 94%;
   --s-sla-overdue: 0 72% 46%;
   --s-sla-overdue-soft: 0 80% 96%;
@@ -407,6 +407,11 @@
 [data-app="sales"] .s-badge-sla-overdue {
   background: hsl(var(--s-sla-overdue-soft));
   color: hsl(var(--s-sla-overdue));
+}
+/* D-043: the last quarter of the allowed working time, in review amber (D1 V1). */
+[data-app="sales"] .s-badge-sla-soon {
+  background: hsl(var(--s-review-soft));
+  color: hsl(var(--s-review));
 }
 /* Deliberately neutral: an existing customer is context, not a status. */
 [data-app="sales"] .s-badge-customer {
@@ -3659,4 +3664,52 @@
   background: hsl(var(--s-surface-sunken));
   border: 1px solid hsl(var(--s-status-working) / 0.6);
   color: hsl(var(--s-status-working));
+}
+
+/* --- response time (D-043, tranche 204) ------------------------------------ */
+/* A working-day toggle: one Hebrew letter, still a 44px target. */
+[data-app="sales"] .s-rt-day {
+  min-width: 44px;
+  justify-content: center;
+  padding-inline: 10px;
+}
+/* On is unmistakable: accent fill and edge, and weight (WCAG 1.4.1). */
+[data-app="sales"] .s-rt-day[aria-pressed="true"] {
+  background: hsl(var(--s-accent-soft));
+  border-color: hsl(var(--s-accent));
+  color: hsl(var(--s-fg));
+  font-weight: 700;
+}
+/* The week per rep: a name, then four numbers that wrap as a group on a phone. */
+[data-app="sales"] .s-rt-week-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding-block: 10px;
+  border-top: 1px solid hsl(var(--s-border));
+}
+[data-app="sales"] .s-rt-week-row:first-child {
+  border-top: 0;
+}
+[data-app="sales"] .s-rt-week-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+}
+[data-app="sales"] .s-rt-week-stats > div {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+[data-app="sales"] .s-rt-week-stats dt {
+  color: hsl(var(--s-fg-muted));
+  font-size: 12px;
+}
+[data-app="sales"] .s-rt-week-stats dd {
+  margin: 0;
+  color: hsl(var(--s-fg));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }

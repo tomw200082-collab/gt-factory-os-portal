@@ -35,7 +35,7 @@ function Badges({ row }: { row: SalesLeadRow }) {
   return (
     <span className="flex flex-wrap items-center gap-1">
       {row.is_existing_customer ? <CustomerBadge /> : null}
-      <SlaBadge state={row.sla_state} />
+      <SlaBadge state={row.sla_state} minutesLeft={row.sla_minutes_left} />
       {row.possible_duplicate_of ? (
         <span data-testid="duplicate-badge" className="s-badge s-badge-customer">
           {UI.duplicateBadge}

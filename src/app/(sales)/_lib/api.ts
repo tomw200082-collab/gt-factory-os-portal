@@ -44,6 +44,8 @@ import type {
   SalesSettings,
   Journey,
   QuickSituation,
+  ResponseTime,
+  ResponseWeekRow,
   WeekStats,
   WhatsappTemplates,
 } from "./types";
@@ -147,10 +149,28 @@ export function useToday(scope?: string): UseQueryResult<TodayPayload, SalesApiE
   });
 }
 
+/** One read serves both: the attention rows and the week per rep (D-043, 0377). */
+interface AttentionPayload {
+  rows: AttentionRow[];
+  response_week?: ResponseWeekRow[];
+}
+const fetchAttention = async () => request<AttentionPayload>("/api/sales/attention");
+
 export function useAttention(): UseQueryResult<AttentionRow[], SalesApiError> {
   return useQuery({
     queryKey: salesKeys.attention(),
-    queryFn: async () => (await request<{ rows: AttentionRow[] }>("/api/sales/attention")).rows,
+    queryFn: fetchAttention,
+    select: (p) => p.rows,
+    staleTime: 30_000,
+  });
+}
+
+/** The last 7 days of first contacts per rep. A server before 0377 sends none: null. */
+export function useResponseWeek(): UseQueryResult<ResponseWeekRow[] | null, SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.attention(),
+    queryFn: fetchAttention,
+    select: (p) => p.response_week ?? null,
     staleTime: 30_000,
   });
 }
@@ -645,6 +665,17 @@ export function useSaveQuickMessage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ whatsapp_quick_messages: { [situation]: text } }),
+    }),
+  );
+}
+
+/** The response clock's calendar and targets (D-043): one setting, its own save. */
+export function useSaveResponseTime() {
+  return useSalesMutation<ResponseTime, unknown>((value) =>
+    request("/api/sales/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ response_time: value }),
     }),
   );
 }

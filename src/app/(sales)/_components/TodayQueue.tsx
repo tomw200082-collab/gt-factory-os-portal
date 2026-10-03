@@ -12,7 +12,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { TODAY_SECTION_LABELS, UI } from "../_lib/labels";
-import { CAPPED_SECTIONS, SECTION_ALARM_COUNT, budgetSpent, capRows } from "../_lib/queue";
+import { CAPPED_SECTIONS, SECTION_ALARM_COUNT, budgetSpent, bySlaUrgency, capRows } from "../_lib/queue";
 import type {
   AssigneeEntry,
   TodayItemType,
@@ -171,9 +171,10 @@ export function TodayQueue({
   onPostpone,
   onLost,
 }: TodayQueueProps) {
-  const visibleRows = taskLeadIds
+  // D-043: overdue, then due soon, first inside every section — before the cap below.
+  const visibleRows = bySlaUrgency(taskLeadIds
     ? rows.filter((row) => row.item_type === "conversion" || !taskLeadIds.has(row.lead_id))
-    : rows;
+    : rows);
   // "כמה שיחות ביום" is one number for the day, and since tranche 173 it has a
   // single claimant: the untouched backlog. Handing the full cap to every
   // section spent it twice — 15 new leads and 15 follow-ups from a cap of 15

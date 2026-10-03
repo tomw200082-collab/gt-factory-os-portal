@@ -4,7 +4,7 @@
 // agedTone too, and importing it back out of the component that renders the
 // card would make the two modules circular.
 
-import type { TodayItemType, TodayRow } from "./types";
+import type { SlaState, TodayItemType, TodayRow } from "./types";
 
 /**
  * Above this, a section count stops being information and becomes an alarm.
@@ -79,4 +79,20 @@ export function budgetSpent(rows: TodayRow[], budget: number): number {
  */
 export function agedTone(ageDays: number, slaHours: number): "muted" | "overdue" {
   return ageDays > slaHours / 24 ? "overdue" : "muted";
+}
+
+const SLA_RANK: Partial<Record<NonNullable<SlaState>, number>> = { overdue: 0, due_soon: 1 };
+
+/**
+ * Inside a section, the lead you are latest on comes first: overdue, then due soon, then
+ * the rest, each group in the order it arrived (D-043, tranche 204). The server already
+ * orders Today this way; doing it here too keeps it true before the daily cap is applied,
+ * so an overdue lead is never the one the cap pushes to tomorrow.
+ */
+export function bySlaUrgency<T extends { sla_state: SlaState }>(rows: T[]): T[] {
+  const rank = (r: T) => (r.sla_state ? (SLA_RANK[r.sla_state] ?? 2) : 2);
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i)
+    .map((x) => x.r);
 }

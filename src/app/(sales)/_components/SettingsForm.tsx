@@ -30,7 +30,6 @@ export interface SettingsFormProps {
   error?: string | null;
   saved?: boolean;
   onSave: (vars: {
-    sla_hours?: number;
     whatsapp_templates?: WhatsappTemplates;
     lost_reasons?: string[];
     queue?: QueueSettings;
@@ -48,7 +47,6 @@ export function SettingsForm({
   onSave,
   openLeadsByAssignee = {},
 }: SettingsFormProps) {
-  const [slaHours, setSlaHours] = useState<string>(String(settings.sla_hours));
   const [lostReasons, setLostReasons] = useState<string[]>(settings.lost_reasons);
   const [newReason, setNewReason] = useState("");
   const [dailyCap, setDailyCap] = useState<string>(String(settings.queue.daily_cap));
@@ -56,14 +54,11 @@ export function SettingsForm({
 
   // Re-seed when the server's copy arrives or changes underneath.
   useEffect(() => {
-    setSlaHours(String(settings.sla_hours));
     setLostReasons(settings.lost_reasons);
     setDailyCap(String(settings.queue.daily_cap));
     setOrder(settings.queue.order);
   }, [settings]);
 
-  const hours = Number(slaHours);
-  const hoursValid = Number.isInteger(hours) && hours >= 1 && hours <= 168;
   const cap = Number(dailyCap);
   const capValid = Number.isInteger(cap) && cap >= 1 && cap <= 100;
 
@@ -87,9 +82,8 @@ export function SettingsForm({
       data-testid="settings-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!hoursValid || !capValid) return;
+        if (!capValid) return;
         onSave({
-          sla_hours: hours,
           lost_reasons: lostReasons,
           queue: { daily_cap: cap, order },
         });
@@ -267,42 +261,9 @@ export function SettingsForm({
           the quick messages by situation replaced them, each with its own save.
           The key stays readable on the server for old clients. */}
 
-      <section className="s-panel flex flex-col gap-2" aria-labelledby="settings-sla-title">
-        <h2 id="settings-sla-title" className="s-section-heading">{UI.slaTitle}</h2>
-        {/* Given an id and pointed at from the field: a hint that only sits
-            near an input is invisible to anyone not looking at the screen. */}
-        <p id="sla-hint" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-          {UI.slaHint}
-        </p>
-        <label className="flex items-center gap-2">
-          <input
-            type="number"
-            min={1}
-            max={168}
-            className="s-input"
-            style={{ maxWidth: 120 }}
-            data-testid="settings-sla-hours"
-            value={slaHours}
-            onChange={(e) => setSlaHours(e.target.value)}
-            aria-invalid={!hoursValid}
-            aria-describedby="sla-hint sla-error"
-          />
-          <span className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-            {UI.slaHours}
-          </span>
-        </label>
-        {/* aria-invalid with nothing to read announces "invalid" and stops
-            there. The range is the whole of what the person needs. */}
-        <p
-          id="sla-error"
-          role="alert"
-          data-testid="settings-sla-error"
-          className="text-[12px]"
-          style={{ color: "hsl(var(--s-sla-overdue))" }}
-        >
-          {!hoursValid ? UI.slaRange : ""}
-        </p>
-      </section>
+      {/* The 24-hour SLA field is gone (tranche 204, D-043): the response clock counts
+          working hours now, set in its own section "זמני תגובה" with its own save.
+          sla_hours stays readable on the server for old clients. */}
 
       {error ? (
         <p role="alert" data-testid="settings-error" className="text-[13px]" style={{ color: "hsl(var(--s-sla-overdue))" }}>
@@ -319,7 +280,7 @@ export function SettingsForm({
       <div>
         <button
           type="submit"
-          aria-busy={busy || undefined} disabled={busy || !hoursValid || !capValid}
+          aria-busy={busy || undefined} disabled={busy || !capValid}
           data-testid="settings-save"
           className="s-btn s-btn-primary"
         >

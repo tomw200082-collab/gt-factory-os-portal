@@ -20,8 +20,37 @@ export type OutcomeResult =
 
 export type OutreachChannel = "call" | "whatsapp" | "email";
 
-/** null once the lead has been touched — that is how the badge disappears. */
-export type SlaState = "within" | "overdue" | null;
+/**
+ * The response clock on an untouched lead, in working hours (D-043, 0377): on_time,
+ * due_soon (the last quarter of the allowed time), overdue. null once the lead has been
+ * touched — that is how the badge disappears. "within" is what a server before 0377
+ * sends instead of on_time; it renders no badge, as it always did.
+ */
+export type SlaState = "on_time" | "due_soon" | "overdue" | "within" | null;
+
+/** D-043: a hot lead (tapped order / hear more, or wrote) gets the shorter target. */
+export type SlaClass = "hot" | "normal";
+
+/** D-043 (0377): the working calendar and the two targets, in working hours. Days are 0 = Sunday. */
+export interface ResponseTime {
+  days: number[];
+  start: string;
+  end: string;
+  hot_hours: number;
+  normal_hours: number;
+}
+
+/** One owner's last 7 days of first contacts (0377 v_sales_response_week). null owner = unowned. */
+export interface ResponseWeekRow {
+  assignee: string | null;
+  total: number;
+  on_time: number;
+  due_soon: number;
+  overdue: number;
+  met: number;
+  decided: number;
+  met_pct: number | null;
+}
 
 /**
  * The dated snapshot the customer/product tracker wrote for a matched business.
@@ -72,6 +101,10 @@ export interface SalesLeadRow {
   uncontactable: boolean;
   /** D-042: what the lead line sent automatically, and the suggested quick message. */
   conversation?: LeadConversation | null;
+  /** D-043 (0377). Optional: a server before 0377 does not send them. */
+  sla_class?: SlaClass | null;
+  /** Working minutes to the deadline; negative once past; null once touched. */
+  sla_minutes_left?: number | null;
 }
 
 export interface TodayRow {
@@ -100,6 +133,10 @@ export interface TodayRow {
   age_days: number;
   uncontactable: boolean;
   conversation?: LeadConversation | null;
+  /** D-043 (0377). Optional: a server before 0377 does not send them. */
+  sla_class?: SlaClass | null;
+  /** Working minutes to the deadline; negative once past; null once touched. */
+  sla_minutes_left?: number | null;
 }
 
 // ---- the lead conversation (tranche 203, D-042 / D-044) ----------------------
@@ -230,7 +267,10 @@ export interface SettingChange {
 }
 
 export interface SalesSettings {
+  /** Legacy: no view reads it since 0377. Still drives the Today age tone. */
   sla_hours: number;
+  /** D-043 (0377). Optional: a server before 0377 does not send it. */
+  response_time?: ResponseTime;
   whatsapp_templates: WhatsappTemplates;
   lost_reasons: string[];
   queue: QueueSettings;

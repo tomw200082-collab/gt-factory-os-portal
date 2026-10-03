@@ -373,7 +373,6 @@ describe("described-by contracts that resolve", () => {
     // but a contract that is only sometimes true is not a contract.
     render(<SettingsForm settings={settings} onSave={noop} />);
     expect(screen.getByTestId("queue-cap-error").textContent).toBe("");
-    expect(screen.getByTestId("settings-sla-error").textContent).toBe("");
 
     fireEvent.change(screen.getByTestId("queue-cap"), { target: { value: "0" } });
     expect(screen.getByTestId("queue-cap-error").textContent).toBe(UI.queueCapRange);

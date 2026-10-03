@@ -227,7 +227,7 @@ export function LeadDrawer({
             ) : null}
             <p className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusPill status={lead.status} />
-              <SlaBadge state={lead.sla_state} />
+              <SlaBadge state={lead.sla_state} minutesLeft={lead.sla_minutes_left} />
             </p>
             <MiniRail row={lead} />
             {/* Unit B: the business behind the lead, its orders and its people. */}

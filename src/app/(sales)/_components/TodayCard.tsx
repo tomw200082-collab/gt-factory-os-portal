@@ -113,7 +113,7 @@ export function TodayCard({
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
           {row.is_existing_customer ? <CustomerBadge /> : null}
-          <SlaBadge state={row.sla_state} />
+          <SlaBadge state={row.sla_state} minutesLeft={row.sla_minutes_left} />
         </div>
       </div>
 
