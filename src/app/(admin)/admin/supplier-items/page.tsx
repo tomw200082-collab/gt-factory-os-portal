@@ -986,6 +986,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                                 });
                               }}
                               disabled={promotePrimaryMutation.isPending}
+                              aria-busy={promotePrimaryMutation.isPending && promotePrimaryMutation.variables?.supplier_item_id === r.supplier_item_id ? "true" : undefined}
                               title="Set this row as the primary supplier for this component/item"
                             >
                               Set as primary

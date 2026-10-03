@@ -20,6 +20,7 @@ import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { useSession } from "@/lib/auth/session-provider";
 import {
   DetailPage,
@@ -739,6 +740,7 @@ export default function PurchaseOrderDetailPage({
       setCloseShortError((err as Error).message ?? "Close-short failed. Try again.");
     },
   });
+  const closeAtReceivedRef = useLockedWidth<HTMLButtonElement>(closeAtReceivedMut.isPending);
 
   const openLineEdit = useCallback(
     (line: PurchaseOrderLineRow) => {
@@ -993,12 +995,15 @@ export default function PurchaseOrderDetailPage({
                   />
                 </label>
                 <button
+                  ref={closeAtReceivedRef}
                   type="button"
                   className="btn btn-sm border border-warning/50 bg-warning-softer text-warning-fg hover:bg-warning/10"
                   disabled={closeAtReceivedMut.isPending}
+                  aria-busy={closeAtReceivedMut.isPending ? "true" : undefined}
                   onClick={() => closeAtReceivedMut.mutate()}
                   data-testid="po-close-at-received-submit"
                 >
+                  {closeAtReceivedMut.isPending ? <span className="btn-spinner" aria-hidden /> : null}
                   Close PO at received quantity
                 </button>
               </div>
@@ -1171,6 +1176,7 @@ export default function PurchaseOrderDetailPage({
                                 className="btn btn-danger btn-xs"
                                 onClick={() => lineCancelMut.mutate(line.po_line_id)}
                                 disabled={lineCancelMut.isPending}
+                                aria-busy={lineCancelMut.isPending && lineCancelMut.variables === line.po_line_id ? "true" : undefined}
                               >
                                 {lineCancelMut.isPending ? "Cancelling…" : "Cancel line"}
                               </button>
@@ -1237,6 +1243,7 @@ export default function PurchaseOrderDetailPage({
                               className="btn btn-sm"
                               onClick={() => lineUpdateMut.mutate(line.po_line_id)}
                               disabled={lineUpdateMut.isPending}
+                              aria-busy={lineUpdateMut.isPending && lineUpdateMut.variables === line.po_line_id ? "true" : undefined}
                             >
                               {lineUpdateMut.isPending ? "Saving…" : "Save"}
                             </button>
@@ -1396,6 +1403,7 @@ export default function PurchaseOrderDetailPage({
                 className="btn btn-sm"
                 onClick={() => updateMut.mutate()}
                 disabled={updateMut.isPending}
+                aria-busy={updateMut.isPending ? "true" : undefined}
               >
                 {updateMut.isPending ? "Saving…" : "Save"}
               </button>
@@ -1685,6 +1693,7 @@ export default function PurchaseOrderDetailPage({
                   className="btn btn-sm bg-danger text-fg-inverted hover:bg-danger/90"
                   onClick={() => cancelMut.mutate()}
                   disabled={cancelMut.isPending}
+                  aria-busy={cancelMut.isPending ? "true" : undefined}
                 >
                   {cancelMut.isPending ? "Cancelling…" : "Yes, cancel"}
                 </button>

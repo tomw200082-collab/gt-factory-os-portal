@@ -52,6 +52,35 @@ manifest:
 - src/app/(planning)/planning/production-plan/page.tsx
 - src/app/(planning)/planning/forecast/[version_id]/_components/MonthlyGrid.tsx
 - src/app/(economics)/admin/economics/ProfitabilityTab.tsx
+## Wave W1 files
+
+Pending state on mutation-triggered buttons (spec §6, §9):
+  - src/app/(admin)/admin/components/page.tsx
+  - src/app/(admin)/admin/users/page.tsx
+  - src/app/(admin)/admin/supplier-items/page.tsx
+  - src/app/(admin)/admin/sku-aliases/page.tsx
+  - src/app/(admin)/admin/planning-policy/page.tsx
+  - src/app/(admin)/admin/items/page.tsx
+  - src/app/(admin)/admin/cost-drafts/page.tsx
+  - src/app/(admin)/admin/masters/components/[component_id]/page.tsx
+  - src/app/(admin)/admin/masters/items/[item_id]/page.tsx
+  - src/app/(admin)/admin/masters/suppliers/[supplier_id]/page.tsx
+  - src/app/(admin)/admin/masters/archive/page.tsx
+  - src/app/(admin)/admin/holidays/page.tsx
+  - src/app/(admin)/admin/suppliers/page.tsx
+  - src/app/(admin)/admin/groups/page.tsx
+  - src/app/(economics)/admin/portal-registrations/page.tsx
+  - src/app/(economics)/admin/economics/page.tsx
+  - src/app/(inbox)/inbox/page.tsx
+  - src/app/(shared)/credit-tracking/page.tsx
+  - src/components/admin/recipe-health/QuickFixDrawer.tsx
+  - src/components/stock/FgOutPauseControl.tsx
+  - src/components/stock/FgOutPickUndoControl.tsx
+  - src/components/bom-edit/BomDraftEditorPage.tsx
+  - src/components/bom-edit/BomLineRow.tsx
+  - src/components/bom-edit/BomLineAddDrawer.tsx
+  - src/app/(po)/purchase-orders/[po_id]/page.tsx
+  - src/app/(po)/purchase-orders/placement-queue/_components/PlacementRow.tsx
   - public/brand/**
   - tests/**
   - src/app/globals.css

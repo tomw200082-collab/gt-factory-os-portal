@@ -1195,6 +1195,7 @@ function AddHolidayModal({
             type="button"
             className="btn btn-primary"
             disabled={!isValid || mutation.isPending}
+            aria-busy={mutation.isPending ? "true" : undefined}
             onClick={() => mutation.mutate(form)}
           >
             {mutation.isPending ? (
@@ -1387,6 +1388,7 @@ function EditHolidayModal({
             type="button"
             className="btn btn-primary"
             disabled={!isValid || mutation.isPending}
+            aria-busy={mutation.isPending ? "true" : undefined}
             onClick={() => mutation.mutate(form)}
           >
             {mutation.isPending ? (
@@ -1546,6 +1548,7 @@ function ArchiveHolidayModal({
             type="button"
             className="btn btn-danger"
             disabled={mutation.isPending}
+            aria-busy={mutation.isPending ? "true" : undefined}
             onClick={() => mutation.mutate({ reason: reason.trim() || null })}
           >
             {mutation.isPending ? (
@@ -1817,6 +1820,7 @@ function BulkImportModal({
                 className="btn btn-primary"
                 onClick={onPreview}
                 disabled={busy || raw.trim().length === 0}
+                aria-busy={previewMutation.isPending ? "true" : undefined}
               >
                 {previewMutation.isPending ? (
                   <>
@@ -1836,6 +1840,7 @@ function BulkImportModal({
                 )}
                 onClick={onCommit}
                 disabled={busy || validCount === 0}
+                aria-busy={commitMutation.isPending ? "true" : undefined}
                 title={
                   validCount === 0
                     ? "Nothing valid to import — fix the rows above first"

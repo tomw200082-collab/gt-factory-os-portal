@@ -161,6 +161,7 @@ export function FgOutPauseControl() {
             )}
             onClick={() => mutation.mutate(pendingTarget)}
             disabled={mutation.isPending}
+            aria-busy={mutation.isPending ? "true" : undefined}
             data-testid="fg-out-pause-confirm-btn"
           >
             {mutation.isPending
