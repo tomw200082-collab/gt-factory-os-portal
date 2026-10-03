@@ -12,6 +12,7 @@ import { Loader2, Minus, MinusCircle, Plus, PlusCircle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { cn } from "@/lib/cn";
 import { t } from "../../../_lib/copy";
 import type { MaterialDeltaBody, PickListLine } from "../../../_lib/types";
@@ -106,6 +107,8 @@ export function AddMaterialControl({
     setOkMsg(null);
     mutation.reset();
   }
+
+  const saveRef = useLockedWidth<HTMLButtonElement>(mutation.isPending);
 
   return (
     <SectionCard title={t("active_heading")} density="compact">
@@ -241,13 +244,16 @@ export function AddMaterialControl({
 
           <div className="flex gap-2">
             <button
+              ref={saveRef}
               type="button"
               className={cn("btn btn-primary btn-lg flex-1 gap-2")}
               onClick={() => mutation.mutate()}
               disabled={!canSave || mutation.isPending}
+              aria-busy={mutation.isPending || undefined}
               title={!canSave ? cannotSaveReason : undefined}
               data-testid="active-delta-save"
             >
+              {mutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
               {mutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

@@ -29,6 +29,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/Badge";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
@@ -211,6 +212,8 @@ export function ReportForm({ runId }: { runId: string }) {
   });
 
   const isStale = report.error?.message === STALE;
+
+  const submitRef = useLockedWidth<HTMLButtonElement>(report.isPending);
 
   const liveMessage = done
     ? t("report_success")
@@ -752,9 +755,11 @@ export function ReportForm({ runId }: { runId: string }) {
           ) : null}
 
           <button
+            ref={submitRef}
             type="submit"
             disabled={!outputOk || report.isPending || !canPost}
             aria-disabled={!outputOk || report.isPending || !canPost}
+            aria-busy={report.isPending || undefined}
             aria-describedby={!outputOk ? "report-output-hint" : "report-stock-note"}
             title={
               !outputOk
@@ -771,6 +776,7 @@ export function ReportForm({ runId }: { runId: string }) {
                 : "cursor-not-allowed border-border bg-bg-subtle text-fg-subtle hover:bg-bg-subtle",
             )}
           >
+            {report.isPending ? <span className="btn-spinner" aria-hidden /> : null}
             {report.isPending ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
