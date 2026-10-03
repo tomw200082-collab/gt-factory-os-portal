@@ -283,6 +283,60 @@ export interface SalesSettings {
   quick_message_changes?: Partial<Record<QuickSituation, { actor: string; at: string }>>;
   /** The signer for THIS session: the person who sends signs the message. */
   quick_message_signer?: string;
+  /** D-045 (0378): each roster person's Hebrew signer, keyed by account. Optional: older API. */
+  signers?: SignerEntry[];
+}
+
+/** D-045: a roster person's signer and where it is read from today. */
+export interface SignerEntry {
+  email: string;
+  name: string;
+  signer: string | null;
+  /** account: by their email · legacy: by display name (old map) · null: none */
+  source: "account" | "legacy" | null;
+}
+
+export type MenuKey = "matcha" | "ube" | "chai" | "tea" | "opening";
+/** D-045: a line's menu file and its state (a cached server-side HEAD). */
+export interface MenuFileRow {
+  key: MenuKey;
+  line: string;
+  label: string;
+  filename: string | null;
+  pdf_url: string | null;
+  state: "ok" | "missing" | "unchecked";
+  reason: string | null;
+  checked_at: string | null;
+}
+export interface MenuFileInput { label: string; filename: string; pdf_url: string }
+
+/** One row of a settings key's history (sales_core.setting_event). */
+export interface SettingHistoryRow {
+  id: string;
+  actor: string;
+  at: string;
+  old_value: unknown;
+  new_value: unknown;
+}
+export type HistoryKey =
+  | "whatsapp_quick_messages" | "response_time" | "lead_journey_signers_by_email" | "lead_menus" | "queue" | "lost_reasons";
+
+/** The control room (D-045), Tom only. */
+export type TileState = "green" | "amber" | "red";
+export interface ControlTile {
+  id: "intake" | "whatsapp" | "wake" | "mirror" | "report" | "radar" | "settings";
+  state: TileState;
+  last_success_at: string | null;
+  action: string;
+  facts: Record<string, unknown>;
+}
+export interface ControlRoom {
+  generated_at: string;
+  tiles: ControlTile[];
+  technical: {
+    test_phones: string[];
+    intake_mode: { mode: string | null; reason: string | null; changed_at: string | null; pulse_expected: string | null };
+  };
 }
 
 /** One row of the attention screen (0326). A lead can appear in two buckets —

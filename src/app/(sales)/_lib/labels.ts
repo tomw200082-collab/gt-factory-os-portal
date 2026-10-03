@@ -816,7 +816,7 @@ export const UI = {
   // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
   // past. This one states the lead's age as a property of the lead, which is
   // what makes an old lead feel old on the card.
-  ageInDays: (days: number) => (days === 1 ? "בן יום" : `בן ${days} ימים`),
+  ageInDays: (days: number) => (days <= 0 ? "חדש מהיום" : days === 1 ? "בן יום" : `בן ${days} ימים`),
   uncontactableChip: (n: number) => `ללא פרטי קשר (${n})`,
   sortByAge: "מיין לפי גיל",
   nextTouchPreview: (date: string) => `המגע הבא: ${date}`,
@@ -1146,8 +1146,10 @@ export const UI = {
   /** Working time left: minutes under an hour; hours in words up to two and a half. */
   workLeft: (amount: string) => `עוד ${amount} עבודה`,
   workMinutes: (m: number) => (m === 1 ? "דקת" : `${m} דקות`),
+  // From 3 hours up, whole hours only (rounded down): "5 שעות", never "5.5 שעות".
   workHours: (h: number) =>
-    h === 1 ? "שעה" : h === 1.5 ? "שעה וחצי" : h === 2 ? "שעתיים" : h === 2.5 ? "שעתיים וחצי" : `${h} שעות`,
+    h === 1 ? "שעה" : h === 1.5 ? "שעה וחצי" : h === 2 ? "שעתיים" : h === 2.5 ? "שעתיים וחצי"
+      : h >= 3 ? `${Math.floor(h)} שעות` : `${h} שעות`,
 
   // Settings: זמני תגובה (D-043)
   rtTitle: "זמני תגובה",
@@ -1228,6 +1230,8 @@ export const AUTO_KIND_LABELS: Record<string, string> = {
 /** Server rule codes (SALES_*) rendered in Hebrew. */
 export const RULE_MESSAGES: Record<string, string> = {
   AUTH_EXPIRED: UI.sessionExpired,
+  SALES_SIGNER_NOT_ON_ROSTER: "האדם הזה לא ברשימת אנשי המכירות הפעילים.",
+  SALES_TEST_PHONE_INVALID: "אחד המספרים אינו מספר ישראלי תקין.",
   SALES_LOST_REQUIRES_REASON: "צריך לציין סיבה לאובדן.",
   SALES_WON_IS_EVIDENCE_ONLY: "סטטוס 'הומר' נכתב מהזמנה ב-Shopify, ולא ידנית.",
   SALES_NEXT_TOUCH_REQUIRED: "צריך לקבוע מתי חוזרים לליד.",
@@ -1252,3 +1256,69 @@ export const RULE_MESSAGES: Record<string, string> = {
   SALES_CONTACT_NOT_FOUND: "איש הקשר לא נמצא.",
   SALES_LEAD_OPTED_OUT: "הליד ביקש לא לקבל הודעות («הסר»). אפשר להתקשר.",
 };
+
+/** Settings phase 3, "צוות וכללים" (D-045, tranche 205). */
+export const TEAM_UI = {
+  title: "צוות וכללים",
+  hint: "מי חותם על ההודעות, איזה תפריט יוצא לכל קו, וצורת התור.",
+  changedBy: (actor: string, when: string) => `שונה ע״י ${actor} ${when}`,
+  saved: "נשמר ✓",
+  unsaved: "לא נשמר",
+  retry: "נסו שוב",
+
+  signersTitle: "אנשי מכירות ושמות חתימה",
+  signersHint: "השם שחותם על הודעות ההמשך האוטומטיות ועל ההודעות המהירות. הוא מקושר לחשבון של כל אחד, לא לשם התצוגה.",
+  signerLabel: (name: string) => `שם החתימה של ${name}`,
+  signerPlaceholder: "למשל: אבי",
+  signerNone: (name: string) => `אין שם חתימה, ולכן הודעות ההמשך האוטומטיות ללידים של ${name} לא יוצאות.`,
+  signerLegacy: "נקרא כרגע לפי שם התצוגה. שמרו כדי לקשר אותו לחשבון.",
+  signerTooLong: "עד 30 תווים",
+  signersSave: "שמירת שמות החתימה",
+
+  menusTitle: "קובץ התפריט לכל קו",
+  menusHint: "הקובץ שנשלח לליד בהודעה הראשונה, לפי הקו שבחר באתר.",
+  menusWarn: "בלי קובץ, הליד מקבל את התשובה הכללית במקום התפריט.",
+  menusLoadError: "לא הצלחנו לבדוק את קובצי התפריט.",
+  menuState: { ok: "תקין", missing: "חסר קובץ", unchecked: "לא נבדק" } as const,
+  menuReason: (reason: string | null): string => {
+    if (!reason) return "";
+    if (reason === "no_file") return "לא הוגדר קובץ";
+    if (reason === "unreachable") return "לא הצלחנו להגיע לקובץ";
+    if (reason === "host_not_allowed") return "הקישור לא בכתובת מורשית, ולכן לא נבדק";
+    const http = /^http_(\d{3})$/.exec(reason);
+    if (http) return http[1] === "404" ? "הקובץ לא נמצא בכתובת" : `הכתובת החזירה שגיאה ${http[1]}`;
+    return "";
+  },
+  menuCheckedAt: (when: string) => `נבדק ${when}`,
+  menuLine: (line: string) => `קו: ${line}`,
+  menuEdit: "עריכה",
+  // the accessible name starts with the visible word (WCAG 2.5.3)
+  menuEditNamed: (label: string) => `עריכה: ${label}`,
+  menuCancel: "ביטול",
+  menuLabel: "שם התפריט",
+  menuFilename: "שם הקובץ",
+  /** followed by an example file name, isolated left-to-right */
+  menuFilenameHint: "השם שהליד רואה בוואטסאפ, למשל ",
+  menuUrl: "קישור לקובץ",
+  /** followed by MENU_URL_PREFIX, isolated left-to-right */
+  menuUrlHint: "קישור שמתחיל ב־",
+  menuSave: "שמירת הקובץ",
+  menuLabelRequired: "כתבו שם לתפריט, עד 60 תווים",
+  menuFilenameBad: "שם הקובץ צריך להסתיים ב־pdf, בלי לוכסן ועד 120 תווים",
+  /** followed by MENU_URL_PREFIX, isolated left-to-right */
+  menuUrlBad: "הקישור צריך להתחיל ב־",
+
+  queueSave: "שמירת צורת התור",
+  lostReasonsSave: "שמירת סיבות האבוד",
+
+  historyShow: "היסטוריית שינויים",
+  historyTitle: (what: string) => `היסטוריית שינויים: ${what}`,
+  historyEmpty: "אין עדיין שינויים.",
+  historyError: "לא הצלחנו לטעון את ההיסטוריה.",
+  historyLoading: "טוענים…",
+  historyAdded: (items: string) => `נוסף: ${items}`,
+  historyRemoved: (items: string) => `הוסר: ${items}`,
+  historyChanged: (items: string) => `שונה: ${items}`,
+  historyFirst: "ערך ראשון נשמר",
+  historyUpdated: "עודכן",
+} as const;

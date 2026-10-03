@@ -9,10 +9,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Activity, ArrowLeftRight, Building2, CalendarCheck, ChartColumn, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
-import { useLeads, useQuickAdd } from "../_lib/api";
+import { useControlAccess, useLeads, useQuickAdd } from "../_lib/api";
 import { noteSalesPath } from "../_lib/salesHistory";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
@@ -47,6 +48,12 @@ const REPORT_DESTINATION: Destination = {
   icon: ChartColumn,
 };
 
+// The control room (D-045) is Tom's. The entry follows the server's can_control flag, so the
+// client never carries the email it is decided by; the route itself answers 404 to anyone else.
+// Loaded on demand, only for a session the server allows: the label stays out of everyone else's bundle.
+const CONTROL_HREF = "/sales/control";
+const ControlNavEntry = dynamic(() => import("./ControlNavEntry"), { ssr: false });
+
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -67,6 +74,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const { session } = useSession();
   const canManageSales = session?.role === "admin" || session?.role === "planner";
   const destinations = canManageSales ? [...DESTINATIONS, REPORT_DESTINATION] : DESTINATIONS;
+  const showControl = useControlAccess(canManageSales).data === true;
   const pathname = usePathname() ?? "";
   // The report's month tables are the widest thing in the workspace: its body takes the room the page has
   // beyond the usual column, toward the far edge. The rail and the app bar stay exactly where they are on
@@ -148,6 +156,9 @@ export function SalesShell({ children }: { children: ReactNode }) {
             <Settings size={18} aria-hidden />
           </Link> : null}
 
+          {/* Phones only: on desktop the rail carries the entry. */}
+          {showControl ? <ControlNavEntry variant="icon" active={isActive(pathname, CONTROL_HREF)} /> : null}
+
           {/* The phone is the primary device, and it had no way back to the
               factory at all — the bottom bar holds the three sales
               destinations, so leaving meant typing a URL. Icon-only here,
@@ -199,6 +210,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             <Settings size={17} aria-hidden />
             {NAV_LABELS.settings}
           </Link> : null}
+          {showControl ? <ControlNavEntry variant="rail" active={isActive(pathname, CONTROL_HREF)} /> : null}
         </nav>
 
         <main
@@ -218,7 +230,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
       {/* Nor on a business page: there the first viewport ends on the call and
           WhatsApp buttons, and the floating disc sat on top of them. */}
       {/* Nor on the report: it is something you read, and the disc sat over the numbers in the corner. */}
-      {pathname === "/sales/settings" || pathname === REPORT_DESTINATION.href || /^\/sales\/orgs\/[^/]+/.test(pathname) ? null : (
+      {pathname === "/sales/settings" || pathname === CONTROL_HREF || pathname === REPORT_DESTINATION.href || /^\/sales\/orgs\/[^/]+/.test(pathname) ? null : (
       <button
         type="button"
         data-testid="sales-quick-add"

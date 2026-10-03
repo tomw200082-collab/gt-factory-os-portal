@@ -122,6 +122,28 @@ function isApiPath(pathname: string): boolean {
   return pathname.startsWith("/api/");
 }
 
+// Tranche 205 (D-045, UX gate P1-1): /sales/control is Tom's. For anyone else the portal answers
+// exactly what an unknown route answers — rewritten to a path no route matches, so Next renders
+// its own not-found with status 404 before anything streams (a layout's notFound() comes after
+// the root loading boundary has already sent 200). The backend stays the guard: its control
+// endpoints answer 404 to every other session; this only makes the page say the same.
+// Server-only code: the email never reaches a browser bundle.
+const CONTROL_PATH = "/sales/control";
+const CONTROL_EMAIL = "tom@gteveryday.com";
+const DEV_SHIM_EMAIL_COOKIE = "gt.devshim.email";
+function isControlPath(pathname: string): boolean {
+  return pathname === CONTROL_PATH || pathname.startsWith(`${CONTROL_PATH}/`);
+}
+function isControlEmail(email: string | null | undefined): boolean {
+  return (email ?? "").trim().toLowerCase() === CONTROL_EMAIL;
+}
+function controlNotFound(request: NextRequest): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = "/__not-found";
+  url.search = "";
+  return NextResponse.rewrite(url);
+}
+
 export async function middleware(request: NextRequest) {
   // T019: wrap the entire body in try/catch. Any failure inside
   // updateSupabaseSession (env-var missing, upstream Supabase timeout,
@@ -132,6 +154,12 @@ export async function middleware(request: NextRequest) {
     // Dev-shim bypass: when the fake-session flag is on, skip Supabase
     // entirely and let the existing local dev flow work.
     if (process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true") {
+      // The shim's identity lives in the browser; its email cookie stands in for the session
+      // here (local and test only — a production deployment never runs this branch's shim).
+      if (isControlPath(request.nextUrl.pathname)) {
+        const raw = request.cookies.get(DEV_SHIM_EMAIL_COOKIE)?.value;
+        if (!isControlEmail(raw ? decodeURIComponent(raw) : null)) return controlNotFound(request);
+      }
       return NextResponse.next({ request });
     }
 
@@ -160,6 +188,10 @@ export async function middleware(request: NextRequest) {
     // no-op — existing layout-level RoleGate + upstream 403 remain the
     // active defense. When the backend adds the projection, this code
     // immediately upgrades to a third defense layer.
+    if (user && isControlPath(pathname) && !isControlEmail(user.email)) {
+      return controlNotFound(request);
+    }
+
     if (user) {
       const role = (user.app_metadata as { role?: string } | undefined)?.role;
       if (role) {

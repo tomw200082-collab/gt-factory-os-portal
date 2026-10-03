@@ -25,7 +25,8 @@ describe("time left in working hours", () => {
     expect(fmtWorkLeft(120)).toBe("עוד שעתיים עבודה");
     expect(fmtWorkLeft(150)).toBe("עוד שעתיים וחצי עבודה");
     expect(fmtWorkLeft(180)).toBe("עוד 3 שעות עבודה");
-    expect(fmtWorkLeft(7 * 60 + 59)).toBe("עוד 7.5 שעות עבודה");
+    // tranche 205: from three hours up, whole hours, rounded down — never "7.5 שעות"
+    expect(fmtWorkLeft(7 * 60 + 59)).toBe("עוד 7 שעות עבודה");
   });
 });
 

@@ -158,10 +158,11 @@ test("queue shape is Tom's to change, and says who changed it last @mocked", asy
   await stub(page, { saved });
   await page.goto("/sales/settings");
 
-  await expect(page.getByTestId("settings-queue")).toContainText("שונה על ידי Tom");
+  // tranche 205: the queue's own save and its own "שונה ע״י … לפני …" line
+  await expect(page.getByTestId("settings-queue")).toContainText("שונה ע״י Tom");
   await page.getByTestId("queue-cap").fill("7");
   await page.getByTestId("queue-order-oldest_first").click();
-  await page.getByTestId("settings-save").click();
+  await page.getByTestId("queue-save").click();
 
   await expect.poll(() => saved.length).toBeGreaterThan(0);
   const body = saved[0] as { queue: { daily_cap: number; order: string } };
@@ -176,7 +177,7 @@ test("lost reasons are editable without a deploy @mocked", async ({ page }) => {
 
   await page.getByTestId("lost-reason-new").fill("מחיר");
   await page.getByTestId("lost-reason-add").click();
-  await page.getByTestId("settings-save").click();
+  await page.getByTestId("lost-reasons-save").click();
 
   await expect.poll(() => saved.length).toBeGreaterThan(0);
   const body = saved[0] as { lost_reasons: string[] };

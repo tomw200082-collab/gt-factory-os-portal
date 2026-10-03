@@ -214,7 +214,9 @@ test("settings reads the roster back and refuses to write one @mocked", async ({
 
   // And a save from this screen carries no roster at all — the endpoint stopped
   // accepting one in the same change, so sending it would be writing into a void.
-  await page.getByTestId("settings-save").click();
+  // tranche 205: the queue has its own save, offered once something changed
+  await page.getByTestId("queue-cap").fill("9");
+  await page.getByTestId("queue-save").click();
   await expect.poll(() => saved.length).toBeGreaterThan(0);
   expect(saved[0]).not.toHaveProperty("assignees");
 });

@@ -3545,6 +3545,13 @@
 [data-app="sales"] .s-wa-situation:hover {
   background: hsl(var(--s-surface-sunken));
 }
+[data-app="sales"] .s-wa-situation-mark {
+  display: inline-flex;
+  width: 16px;
+  flex: none;
+  margin-inline-end: 8px;
+  color: hsl(var(--s-accent));
+}
 [data-app="sales"] .s-wa-situation[aria-pressed="true"] {
   background: hsl(var(--s-accent-soft));
   font-weight: 600;
@@ -3654,6 +3661,10 @@
   font-size: 0.9em;
   line-height: 1.5;
 }
+/* a pill glued to the punctuation after it (tranche 205): no gap on that side */
+[data-app="sales"] .s-var-pill-tight {
+  margin-inline-end: 0;
+}
 [data-app="sales"] .s-quick-dirty {
   display: inline-flex;
   align-items: center;
@@ -3719,4 +3730,119 @@
   color: hsl(var(--s-fg-muted));
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Settings phase 3: team and rules, the control room (tranche 205, D-045) ─────────────── */
+[data-app="sales"] .s-team-areas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+[data-app="sales"] .s-history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  min-height: 44px;
+  padding-inline: 4px;
+  font-size: 13px;
+  color: hsl(var(--s-fg-muted));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+[data-app="sales"] .s-history-toggle:focus-visible,
+[data-app="sales"] .s-tile-link:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+[data-app="sales"] .s-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-inline-start: 2px solid hsl(var(--s-border-strong));
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+[data-app="sales"] .s-signer-row,
+[data-app="sales"] .s-menu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-block: 8px;
+  border-top: 1px solid hsl(var(--s-border));
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-app="sales"] .s-signer-row:first-child,
+[data-app="sales"] .s-menu-row:first-child {
+  border-top: 0;
+}
+[data-app="sales"] .s-menu-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: var(--s-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+}
+[data-app="sales"] .s-menu-state-ok {
+  color: hsl(var(--s-sla-ok));
+  background: hsl(var(--s-sla-ok-soft));
+}
+[data-app="sales"] .s-menu-state-missing {
+  color: hsl(var(--s-review));
+  background: hsl(var(--s-review-soft));
+}
+[data-app="sales"] .s-menu-state-unchecked {
+  color: hsl(var(--s-fg-muted));
+  background: hsl(var(--s-surface-sunken));
+}
+
+/* the control room's tiles: state in words and an icon, never colour alone */
+[data-app="sales"] .s-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+[data-app="sales"] .s-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border-inline-start: 4px solid hsl(var(--s-border-strong));
+}
+[data-app="sales"] .s-tile[data-state="green"] { border-inline-start-color: hsl(var(--s-sla-ok)); }
+[data-app="sales"] .s-tile[data-state="amber"] { border-inline-start-color: hsl(var(--s-review)); }
+[data-app="sales"] .s-tile[data-state="red"] { border-inline-start-color: hsl(var(--s-sla-overdue)); }
+[data-app="sales"] .s-tile-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: var(--s-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+}
+[data-app="sales"] .s-tile-state-green { color: hsl(var(--s-sla-ok)); background: hsl(var(--s-sla-ok-soft)); }
+[data-app="sales"] .s-tile-state-amber { color: hsl(var(--s-review)); background: hsl(var(--s-review-soft)); }
+[data-app="sales"] .s-tile-state-red { color: hsl(var(--s-sla-overdue)); background: hsl(var(--s-sla-overdue-soft)); }
+[data-app="sales"] .s-tile-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: hsl(var(--s-fg-muted));
+  font-variant-numeric: tabular-nums;
+}
+[data-app="sales"] .s-tile-action {
+  font-size: 13px;
+  color: hsl(var(--s-fg));
 }

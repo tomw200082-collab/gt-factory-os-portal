@@ -13,7 +13,7 @@
 // HH:MM, 24-hour: a native time field shows "09:00 AM" in an English browser, on a Hebrew
 // screen.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DAY_NAMES, DAY_SHORT, UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
 import { validateResponseTime, type ResponseTimeField } from "../_lib/responseTime";
@@ -26,6 +26,8 @@ export interface ResponseTimeSectionProps {
   saved: boolean;
   error: string | null;
   onSave: (value: ResponseTime) => void;
+  /** D-045: the key's last 20 changes (SettingHistory), under the save */
+  history?: ReactNode;
 }
 
 const same = (a: ResponseTime, b: ResponseTime) =>
@@ -34,7 +36,8 @@ const same = (a: ResponseTime, b: ResponseTime) =>
 
 const ERR_STYLE = { color: "hsl(var(--s-sla-overdue))" } as const;
 
-export function ResponseTimeSection({ value, change, saving, saved, error, onSave }: ResponseTimeSectionProps) {
+export function ResponseTimeSection({ value, change, saving, saved, error, onSave, history }: ResponseTimeSectionProps) {
+  const sectionRef = useRef<HTMLElement>(null);
   const [days, setDays] = useState<number[]>(value.days);
   const [start, setStart] = useState(value.start);
   const [end, setEnd] = useState(value.end);
@@ -123,6 +126,7 @@ export function ResponseTimeSection({ value, change, saving, saved, error, onSav
 
   return (
     <section
+      ref={sectionRef}
       className="s-panel flex w-full max-w-2xl flex-col gap-3"
       aria-labelledby="settings-rt-title"
       data-testid="settings-response-time"
@@ -183,6 +187,12 @@ export function ResponseTimeSection({ value, change, saving, saved, error, onSav
           onClick={() => {
             if (!valid) {
               setShown(new Set<ResponseTimeField>(["days", "start", "end", "hot", "normal"]));
+              // move to the first field that is wrong, in reading order, so the error is where the person is
+              const first = (["days", "start", "end", "hot", "normal"] as ResponseTimeField[]).find((f) => problems[f]);
+              const target = first === "days"
+                ? sectionRef.current?.querySelector<HTMLElement>('[data-testid="rt-day-0"]')
+                : first ? sectionRef.current?.querySelector<HTMLElement>(`#rt-${first}`) : null;
+              target?.focus();
               return;
             }
             onSave(draft);
@@ -199,6 +209,7 @@ export function ResponseTimeSection({ value, change, saving, saved, error, onSav
           </span>
         ) : null}
       </div>
+      {history}
     </section>
   );
 }

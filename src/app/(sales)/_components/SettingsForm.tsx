@@ -1,56 +1,48 @@
 "use client";
 
-// The admin console.
+// The Today queue's shape and the lost-reason vocabulary — part of "צוות וכללים" since
+// tranche 205 (D-045). They stay as they were, but each is its own area now, with its own
+// save, its own "שונה ע״י … לפני …" line and its own history; one button used to save both,
+// which made "I changed the cap" also rewrite the reasons someone else was editing.
 //
-// Tranche 203: the WhatsApp templates moved out to their own sections on the page —
-// the automatic sequence (read-only) and the quick messages by situation.
-//
-// v1 held two things — the SLA and the WhatsApp templates — and everything else
-// an admin needed to change was a SQL statement (audit §5: 2 of 9 controls
-// present). This screen is where the queue's shape and the lost-reason
-// vocabulary become editable, because both are policy that will change and
-// neither belongs in a deploy.
-//
-// The roster used to be editable here too, and is not any more (tranche 173,
-// D6). It was a third registry of "who works leads", alongside the people who
-// can actually sign in and the check on the endpoints, and nothing reconciled
-// the three: a name could be handed leads without being able to log in, and a
-// person could be deactivated as a user and go on collecting them. People are
-// created and deactivated in one place now — /admin/users — and this section
-// shows what that produced.
+// The roster moved to the signers area (SignersArea): it is still read, not edited, here —
+// people are created and deactivated in one place, /admin/users (tranche 173, D6).
 
-import { useEffect, useState } from "react";
-import { UI, actorLabel } from "../_lib/labels";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { TEAM_UI, UI, actorLabel } from "../_lib/labels";
 import { fmtRelative } from "../_lib/format";
-import type { QueueSettings, SalesSettings, WhatsappTemplates } from "../_lib/types";
+import type { QueueSettings, SalesSettings } from "../_lib/types";
+
+export type SettingsArea = "queue" | "lost_reasons";
+export type SettingsSaveVars = { queue: QueueSettings } | { lost_reasons: string[] };
 
 export interface SettingsFormProps {
   settings: SalesSettings;
-  busy?: boolean;
-  error?: string | null;
-  saved?: boolean;
-  onSave: (vars: {
-    whatsapp_templates?: WhatsappTemplates;
-    lost_reasons?: string[];
-    queue?: QueueSettings;
-  }) => void;
-  /** Open leads per assignee, so deactivating somebody can say what it would
-   *  strand. Warned about, never blocked — the person may have left. */
-  openLeadsByAssignee?: Record<string, number>;
+  savingArea?: SettingsArea | null;
+  savedArea?: SettingsArea | null;
+  error?: { area: SettingsArea; message: string } | null;
+  onSave: (vars: SettingsSaveVars) => void;
+  queueHistory?: ReactNode;
+  lostReasonsHistory?: ReactNode;
 }
+
+const ERR = { color: "hsl(var(--s-sla-overdue))" } as const;
+const FAINT = { color: "hsl(var(--s-fg-faint))" } as const;
 
 export function SettingsForm({
   settings,
-  busy = false,
+  savingArea = null,
+  savedArea = null,
   error = null,
-  saved = false,
   onSave,
-  openLeadsByAssignee = {},
+  queueHistory,
+  lostReasonsHistory,
 }: SettingsFormProps) {
   const [lostReasons, setLostReasons] = useState<string[]>(settings.lost_reasons);
   const [newReason, setNewReason] = useState("");
   const [dailyCap, setDailyCap] = useState<string>(String(settings.queue.daily_cap));
   const [order, setOrder] = useState<QueueSettings["order"]>(settings.queue.order);
+  const capRef = useRef<HTMLInputElement>(null);
 
   // Re-seed when the server's copy arrives or changes underneath.
   useEffect(() => {
@@ -61,147 +53,107 @@ export function SettingsForm({
 
   const cap = Number(dailyCap);
   const capValid = Number.isInteger(cap) && cap >= 1 && cap <= 100;
+  const queueDirty = cap !== settings.queue.daily_cap || order !== settings.queue.order;
+  const reasonsDirty = JSON.stringify(lostReasons) !== JSON.stringify(settings.lost_reasons);
 
-  /** Who last changed a setting, from sales_core.setting_event (0326). A screen
-   *  that writes state without showing its history is how an SLA change
-   *  recolours 188 leads with nobody able to say who did it. */
+  /** Who last changed a setting, from sales_core.setting_event (0326). */
   function lastChange(key: string): string | null {
     const change = settings.last_changes.find((c) => c.key === key);
     if (!change) return null;
-    return UI.lastChangedBy(actorLabel(change.actor), fmtRelative(change.at));
+    return TEAM_UI.changedBy(actorLabel(change.actor), fmtRelative(change.at));
   }
 
+  const status = (area: SettingsArea) => (
+    <>
+      {error?.area === area ? (
+        <p role="alert" data-testid={`${area}-error`} className="text-[13px]" style={ERR}>{error.message}</p>
+      ) : null}
+      {/* Always present, so assistive tech announces the change of text (UX gate A11Y-187-003). */}
+      <span role="status" data-testid={savedArea === area ? `${area}-saved` : undefined} className="text-[12px]" style={{ color: "hsl(var(--s-status-won))" }}>
+        {savedArea === area ? UI.settingsSaved : ""}
+      </span>
+    </>
+  );
+
   return (
-    <form
-      // A settings row is a label and its control, and at full width they sat
-      // 700px apart — "אין תקציב" at one edge and its own הסר at the other,
-      // which is the spreading tranche 170 fixed on the attention cards. A form
-      // reads at a measure; the textareas were too wide to scan at full width
-      // for the same reason.
-      className="flex w-full max-w-2xl flex-col gap-6"
-      data-testid="settings-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!capValid) return;
-        onSave({
-          lost_reasons: lostReasons,
-          queue: { daily_cap: cap, order },
-        });
-      }}
-    >
-      {/* People first — but as a statement of fact, not a control. The
-          registry is /admin/users; this reads it back so the person setting a
-          daily cap can see who the cap is for. */}
-      <section className="s-panel flex flex-col gap-2" aria-labelledby="settings-people-title" data-testid="settings-people">
-        <h2 id="settings-people-title" className="s-section-heading">{UI.peopleTitle}</h2>
-        <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-          {UI.peopleDerived}{" "}
-          <a
-            href="/admin/users"
-            data-testid="people-registry-link"
-            className="underline"
-            style={{ color: "hsl(var(--s-accent))" }}
-          >
-            {UI.peopleRegistryLink}
-          </a>
-        </p>
-
-        {settings.assignees.length === 0 ? (
-          <p data-testid="people-empty" className="text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-            {UI.peopleEmpty}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {settings.assignees.map((person) => {
-              const open = openLeadsByAssignee[person.email] ?? 0;
-              return (
-                <li
-                  key={person.email}
-                  data-testid={`person-${person.email}`}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  <span className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>
-                    {person.name}
-                  </span>
-                  <bdi dir="ltr" className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-                    {person.email}
-                  </bdi>
-                  {open > 0 ? (
-                    <span
-                      data-testid={`person-open-${person.email}`}
-                      className="ms-auto text-[12px]"
-                      style={{ color: "hsl(var(--s-fg-faint))" }}
-                    >
-                      {UI.personOpenLeads(open)}
-                    </span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {/* The queue's shape. This is the answer to "188 leads is not a queue":
-          how many belong to a day, and which end of the backlog to start from.
-          It was a constant in two files and needed a deploy to change. */}
+    <>
+      {/* The queue's shape: how many belong to a day, and which end of the backlog to start from. */}
       <section className="s-panel flex flex-col gap-2" aria-labelledby="settings-queue-title" data-testid="settings-queue">
-        <h2 id="settings-queue-title" className="s-section-heading">{UI.queueShapeTitle}</h2>
-
-        <label className="s-eyebrow" htmlFor="queue-cap">
-          {UI.queueCapLabel}
-        </label>
-        <input
-          id="queue-cap"
-          data-testid="queue-cap"
-          className="s-input w-32"
-          type="number"
-          min={1}
-          max={100}
-          inputMode="numeric"
-          aria-invalid={!capValid}
-          aria-describedby="queue-cap-error"
-          value={dailyCap}
-          onChange={(e) => setDailyCap(e.target.value)}
-        />
-        <p
-          id="queue-cap-error"
-          role="alert"
-          data-testid="queue-cap-error"
-          className="text-[12px]"
-          style={{ color: "hsl(var(--s-sla-overdue))" }}
+        <form
+          className="flex flex-col gap-2"
+          data-testid="settings-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!capValid) {
+              capRef.current?.focus();
+              return;
+            }
+            onSave({ queue: { daily_cap: cap, order } });
+          }}
         >
-          {!capValid ? UI.queueCapRange : ""}
-        </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 id="settings-queue-title" className="s-section-heading">{UI.queueShapeTitle}</h3>
+            {queueDirty ? <span className="s-quick-dirty">{TEAM_UI.unsaved}</span> : null}
+          </div>
 
-        <div className="flex gap-1" role="group" aria-label={UI.queueShapeTitle}>
-          {(["newest_first", "oldest_first"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              data-testid={`queue-order-${option}`}
-              aria-pressed={order === option}
-              className={`s-tab ${order === option ? "s-tab-active" : ""}`}
-              onClick={() => setOrder(option)}
-            >
-              {option === "newest_first" ? UI.queueOrderNewest : UI.queueOrderOldest}
-            </button>
-          ))}
-        </div>
-        {lastChange("queue") ? (
-          <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-            {lastChange("queue")}
+          <label className="s-eyebrow" htmlFor="queue-cap">{UI.queueCapLabel}</label>
+          <input
+            id="queue-cap"
+            ref={capRef}
+            data-testid="queue-cap"
+            className="s-input w-32"
+            type="number"
+            min={1}
+            max={100}
+            inputMode="numeric"
+            aria-invalid={!capValid}
+            aria-describedby="queue-cap-error"
+            value={dailyCap}
+            onChange={(e) => setDailyCap(e.target.value)}
+          />
+          <p id="queue-cap-error" role="alert" data-testid="queue-cap-error" className="text-[12px]" style={ERR}>
+            {!capValid ? UI.queueCapRange : ""}
           </p>
-        ) : null}
+
+          <div className="flex gap-1" role="group" aria-label={UI.queueShapeTitle}>
+            {(["newest_first", "oldest_first"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                data-testid={`queue-order-${option}`}
+                aria-pressed={order === option}
+                className={`s-tab ${order === option ? "s-tab-active" : ""}`}
+                onClick={() => setOrder(option)}
+              >
+                {option === "newest_first" ? UI.queueOrderNewest : UI.queueOrderOldest}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              data-testid="queue-save"
+              className="s-btn s-btn-ghost"
+              aria-busy={savingArea === "queue" || undefined}
+              disabled={savingArea === "queue" || !capValid || !queueDirty}
+            >
+              {TEAM_UI.queueSave}
+            </button>
+            {status("queue")}
+            {lastChange("queue") ? <span className="text-[12px]" style={FAINT}>{lastChange("queue")}</span> : null}
+          </div>
+        </form>
+        {queueHistory}
       </section>
 
-      {/* The lost-reason vocabulary. Hardcoded in labels.ts until now, which
-          made "we should split this reason in two" a code change. */}
+      {/* The lost-reason vocabulary. Hardcoded in labels.ts until 0326. */}
       <section className="s-panel flex flex-col gap-2" aria-labelledby="settings-reasons-title" data-testid="settings-lost-reasons">
-        <h2 id="settings-reasons-title" className="s-section-heading">{UI.lostReasonsTitle}</h2>
-        <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
-          {UI.lostReasonsHint}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 id="settings-reasons-title" className="s-section-heading">{UI.lostReasonsTitle}</h3>
+          {reasonsDirty ? <span className="s-quick-dirty">{TEAM_UI.unsaved}</span> : null}
+        </div>
+        <p className="text-[12px]" style={FAINT}>{UI.lostReasonsHint}</p>
 
         <ul className="flex flex-col gap-2">
           {lostReasons.map((reason, i) => (
@@ -211,13 +163,9 @@ export function SettingsForm({
                 type="button"
                 data-testid={`lost-reason-remove-${reason}`}
                 aria-label={UI.removeItemNamed(reason)}
-                // A text link, not a button shell: four bordered 44px controls
-                // in a stacked list outweigh the reasons they modify. The
-                // touch target stays 44px, the visual weight does not.
                 className="inline-flex min-h-[44px] items-center justify-center px-3 underline"
                 style={{ color: "hsl(var(--s-danger-quiet))" }}
-                // Never empty: the drawer and the sheet both read this list,
-                // and an empty one would make a lead impossible to close.
+                // Never empty: the drawer and the sheet both read this list.
                 disabled={lostReasons.length <= 1}
                 onClick={() => setLostReasons((prev) => prev.filter((_, j) => j !== i))}
               >
@@ -242,51 +190,31 @@ export function SettingsForm({
             className="s-btn s-btn-ghost"
             disabled={!newReason.trim() || lostReasons.includes(newReason.trim())}
             onClick={() => {
-              // Appended before the free-text entry so the "last one takes
-              // text" rule keeps meaning what the hint says it means.
-              setLostReasons((prev) => [
-                ...prev.slice(0, -1),
-                newReason.trim(),
-                prev[prev.length - 1],
-              ]);
+              // Appended before the free-text entry, so "the last one takes text" holds.
+              setLostReasons((prev) => [...prev.slice(0, -1), newReason.trim(), prev[prev.length - 1]]);
               setNewReason("");
             }}
           >
             {UI.addItem}
           </button>
         </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            data-testid="lost-reasons-save"
+            className="s-btn s-btn-ghost"
+            aria-busy={savingArea === "lost_reasons" || undefined}
+            disabled={savingArea === "lost_reasons" || !reasonsDirty}
+            onClick={() => onSave({ lost_reasons: lostReasons })}
+          >
+            {TEAM_UI.lostReasonsSave}
+          </button>
+          {status("lost_reasons")}
+          {lastChange("lost_reasons") ? <span className="text-[12px]" style={FAINT}>{lastChange("lost_reasons")}</span> : null}
+        </div>
+        {lostReasonsHistory}
       </section>
-
-      {/* The three fixed WhatsApp templates are gone from here (tranche 203, D-042):
-          the quick messages by situation replaced them, each with its own save.
-          The key stays readable on the server for old clients. */}
-
-      {/* The 24-hour SLA field is gone (tranche 204, D-043): the response clock counts
-          working hours now, set in its own section "זמני תגובה" with its own save.
-          sla_hours stays readable on the server for old clients. */}
-
-      {error ? (
-        <p role="alert" data-testid="settings-error" className="text-[13px]" style={{ color: "hsl(var(--s-sla-overdue))" }}>
-          {error}
-        </p>
-      ) : null}
-
-      {/* Always present, so assistive tech announces the change of text
-          rather than missing a region that appears (UX gate A11Y-187-003). */}
-      <p role="status" data-testid={saved ? "settings-saved" : undefined} className="min-h-[20px] text-[13px]" style={{ color: "hsl(var(--s-status-won))" }}>
-        {saved ? UI.settingsSaved : ""}
-      </p>
-
-      <div>
-        <button
-          type="submit"
-          aria-busy={busy || undefined} disabled={busy || !capValid}
-          data-testid="settings-save"
-          className="s-btn s-btn-primary"
-        >
-          {UI.save}
-        </button>
-      </div>
-    </form>
+    </>
   );
 }
