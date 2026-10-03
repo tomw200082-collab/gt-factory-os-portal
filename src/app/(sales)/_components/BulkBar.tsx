@@ -11,7 +11,6 @@ import { useState } from "react";
 import { UI } from "../_lib/labels";
 import { toDateInputValue } from "../_lib/format";
 import { AssigneePicker } from "./AssigneePicker";
-import { SBtnSpinner } from "./SBtnSpinner";
 import type { AssigneeEntry } from "../_lib/types";
 
 export interface BulkBarProps {
@@ -69,7 +68,6 @@ export function BulkBar({ count, roster, busy, error = null, onAssign, onClear }
           onAssign(assignee, new Date(`${date}T09:00:00`).toISOString());
         }}
       >
-        {busy ? <SBtnSpinner /> : null}
         {busy ? UI.saving : UI.assignAction}
       </button>
 

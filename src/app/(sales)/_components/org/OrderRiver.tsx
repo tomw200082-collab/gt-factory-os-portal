@@ -10,7 +10,6 @@ import { fmtAgorot, fmtDateTime } from "../../_lib/format";
 import { RIVER_CHIP_LABELS, UI, actorLabel, riverEventLabel } from "../../_lib/labels";
 import type { OrderRow, PendingDraft, RiverChip, RiverItem } from "../../_lib/types";
 import { QueueError } from "../EmptyStates";
-import { SBtnSpinner } from "../SBtnSpinner";
 import { orderKindLabel } from "./OrderSheet";
 
 const CHIPS: RiverChip[] = ["all", "orders", "contact", "cancelled", "drafts"];
@@ -117,7 +116,6 @@ export function OrderRiver(p: OrderRiverProps) {
       {p.hasMore ? (
         <div className="mt-3 flex justify-center">
           <button type="button" className="s-btn s-btn-ghost" disabled={p.loadingMore} aria-busy={p.loadingMore || undefined} onClick={p.onMore}>
-            {p.loadingMore ? <SBtnSpinner /> : null}
             {p.loadingMore ? UI.loading : UI.riverMore}
           </button>
         </div>

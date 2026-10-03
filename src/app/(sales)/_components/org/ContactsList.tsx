@@ -12,7 +12,6 @@ import { fmtDateTime, fmtPhone } from "../../_lib/format";
 import { CONTACT_KIND_LABELS, UI, contactSourceLabel } from "../../_lib/labels";
 import type { ContactRow, OrgContacts } from "../../_lib/types";
 import { QueueError } from "../EmptyStates";
-import { SBtnSpinner } from "../SBtnSpinner";
 import { Sheet } from "./Sheet";
 
 export interface ContactsListProps {
@@ -102,10 +101,8 @@ export function ContactsList({ contacts, loading, error, onRetry, manager, busyI
                         className="s-btn s-btn-ghost s-btn-compact"
                         aria-label={UI.contactVerifyNamed(name)}
                         disabled={busyId === c.id}
-                        aria-busy={busyId === c.id || undefined}
                         onClick={() => setConfirm({ contact: c, action: "verify" })}
                       >
-                        {busyId === c.id ? <SBtnSpinner /> : null}
                         {UI.contactVerify}
                       </button>
                       <button
@@ -113,10 +110,8 @@ export function ContactsList({ contacts, loading, error, onRetry, manager, busyI
                         className="s-btn s-btn-danger-quiet s-btn-compact"
                         aria-label={UI.contactRejectNamed(name)}
                         disabled={busyId === c.id}
-                        aria-busy={busyId === c.id || undefined}
                         onClick={() => setConfirm({ contact: c, action: "reject" })}
                       >
-                        {busyId === c.id ? <SBtnSpinner /> : null}
                         {UI.contactReject}
                       </button>
                     </div>
