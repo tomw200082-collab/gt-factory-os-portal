@@ -257,6 +257,7 @@ export function BomLineAddDrawer({
             <button
               type="submit"
               disabled={post.isPending || !selected || !qty}
+              aria-busy={post.isPending ? "true" : undefined}
               className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               {post.isPending ? "Adding…" : "Add component"}

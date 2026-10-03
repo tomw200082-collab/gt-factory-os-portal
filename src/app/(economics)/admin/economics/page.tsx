@@ -1779,6 +1779,7 @@ function CostGapsDrawer({
                     type="button"
                     onClick={onRecalc}
                     disabled={recalcBusy}
+                    aria-busy={recalcBusy ? "true" : undefined}
                     className="btn-primary inline-flex items-center gap-1.5"
                   >
                     <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -2368,6 +2369,7 @@ export default function AdminEconomicsPage(): JSX.Element {
         recalculateMutation.mutate();
       }}
       disabled={recalculateMutation.isPending}
+      aria-busy={recalculateMutation.isPending ? "true" : undefined}
     >
       <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
       {recalculateMutation.isPending ? "Running…" : "Run Snapshot Now"}
@@ -2626,6 +2628,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                         recalculateMutation.mutate();
                       }}
                       disabled={recalculateMutation.isPending}
+                      aria-busy={recalculateMutation.isPending ? "true" : undefined}
                     >
                       <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
                       {recalculateMutation.isPending
@@ -3160,6 +3163,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                       recalculateMutation.mutate();
                     }}
                     disabled={recalculateMutation.isPending}
+                    aria-busy={recalculateMutation.isPending ? "true" : undefined}
                     className="btn-primary inline-flex items-center gap-1.5"
                   >
                     <Play className="h-3.5 w-3.5" strokeWidth={2.5} />

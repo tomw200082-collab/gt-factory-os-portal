@@ -631,6 +631,7 @@ function RegistrationItem({
               type="button"
               className="btn btn-primary"
               disabled={!picked || decide.isPending}
+              aria-busy={acting === "approve" ? "true" : undefined}
               title={picked ? undefined : "Pick a customer first"}
               onClick={() => void approve()}
               data-testid={`portal-approve-${id}`}
@@ -642,6 +643,7 @@ function RegistrationItem({
               type="button"
               className="btn btn-ghost text-danger-fg"
               disabled={decide.isPending}
+              aria-busy={acting === "reject" ? "true" : undefined}
               onClick={() => void reject()}
               data-testid={`portal-reject-${id}`}
             >
@@ -1042,6 +1044,7 @@ function ApprovedItem({
               className="btn btn-primary"
               onClick={() => create.mutate()}
               disabled={busy}
+              aria-busy={create.isPending ? "true" : undefined}
               data-testid={`portal-create-link-${id}`}
             >
               <KeyRound className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -1056,6 +1059,7 @@ function ApprovedItem({
               className="btn btn-ghost text-danger-fg"
               onClick={() => void revokeAccess()}
               disabled={busy}
+              aria-busy={revoke.isPending ? "true" : undefined}
               data-testid={`portal-revoke-${id}`}
             >
               <UserX className="h-4 w-4" strokeWidth={2} aria-hidden />

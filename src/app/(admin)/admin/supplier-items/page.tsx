@@ -986,10 +986,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                                 });
                               }}
                               disabled={promotePrimaryMutation.isPending}
-                              aria-busy={promotePrimaryMutation.isPending ? "true" : undefined}
+                              aria-busy={promotePrimaryMutation.isPending && promotePrimaryMutation.variables?.supplier_item_id === r.supplier_item_id ? "true" : undefined}
                               title="Set this row as the primary supplier for this component/item"
                             >
-                              {promotePrimaryMutation.isPending ? <span className="btn-spinner" aria-hidden /> : null}
                               Set as primary
                             </button>
                           ) : (

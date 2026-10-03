@@ -637,6 +637,7 @@ function SuppliersPageInner(): JSX.Element {
                               handleToggleStatus(r);
                             }}
                             disabled={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id}
+                            aria-busy={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id ? "true" : undefined}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -720,6 +721,7 @@ function SuppliersPageInner(): JSX.Element {
                         handleToggleStatus(r);
                       }}
                       disabled={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id}
+                      aria-busy={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id ? "true" : undefined}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}

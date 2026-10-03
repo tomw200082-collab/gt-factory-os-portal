@@ -10,9 +10,8 @@
 //  11. Empty state with Supabase invite guidance.
 // ---------------------------------------------------------------------------
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -262,7 +261,6 @@ function PasswordCell({
           aria-busy={state.passwordPending ? "true" : undefined}
           onClick={onReveal}
         >
-          {state.passwordPending ? <span className="btn-spinner" aria-hidden /> : null}
           <Eye className="mr-1 h-3.5 w-3.5" strokeWidth={2} />
           {state.passwordPending ? "…" : "••••••••"}
         </button>
@@ -279,7 +277,6 @@ function PasswordCell({
             aria-busy={state.passwordPending ? "true" : undefined}
             onClick={onGenerate}
           >
-            {state.passwordPending ? <span className="btn-spinner inline" aria-hidden /> : null}
             <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
             {state.passwordPending ? "…" : user.has_password ? "Regenerate" : "Generate"}
           </button>
@@ -288,10 +285,8 @@ function PasswordCell({
             className="text-2xs text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
             disabled={state.passwordPending}
             aria-label={`Type a password for ${user.display_name}`}
-            aria-busy={state.passwordPending ? "true" : undefined}
             onClick={() => onDraftChange("")}
           >
-            {state.passwordPending ? <span className="btn-spinner inline" aria-hidden /> : null}
             <Pencil className="mr-1 inline h-3 w-3" strokeWidth={2} />
             Type one
           </button>
@@ -993,7 +988,6 @@ export default function AdminUsersPage() {
                                 });
                               }}
                             >
-                              {rs.statusPending ? <span className="btn-spinner" aria-hidden /> : null}
                               {rs.statusPending ? "…" : "Deactivate"}
                             </button>
                           ) : (
@@ -1018,7 +1012,6 @@ export default function AdminUsersPage() {
                                 });
                               }}
                             >
-                              {rs.statusPending ? <span className="btn-spinner" aria-hidden /> : null}
                               {rs.statusPending ? "…" : "Activate"}
                             </button>
                           )}

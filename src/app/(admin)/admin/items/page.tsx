@@ -839,7 +839,6 @@ function ItemsPageInner(): JSX.Element {
                             disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
                             aria-busy={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? "true" : undefined}
                           >
-                            {statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? <span className="btn-spinner" aria-hidden /> : null}
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                           </button>
@@ -969,7 +968,6 @@ function ItemsPageInner(): JSX.Element {
                       disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
                       aria-busy={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? "true" : undefined}
                     >
-                      {statusMutation.isPending && statusMutation.variables?.item_id === r.item_id ? <span className="btn-spinner" aria-hidden /> : null}
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                     </button>

@@ -58,6 +58,8 @@ Pending state on mutation-triggered buttons (spec §6, §9):
   - src/components/bom-edit/BomDraftEditorPage.tsx
   - src/components/bom-edit/BomLineRow.tsx
   - src/components/bom-edit/BomLineAddDrawer.tsx
+  - src/app/(po)/purchase-orders/[po_id]/page.tsx
+  - src/app/(po)/purchase-orders/placement-queue/_components/PlacementRow.tsx
   - public/brand/**
   - tests/**
   - src/app/globals.css

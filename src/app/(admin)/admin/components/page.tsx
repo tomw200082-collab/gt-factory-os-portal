@@ -18,11 +18,12 @@
 //       card.
 // ---------------------------------------------------------------------------
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLockedWidth } from "@/components/ui/useLockedWidth";
 import { ArrowRight, ExternalLink, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -268,6 +269,7 @@ function ComponentsPageInner(): JSX.Element {
     | null
   >(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const supplierSaveRef = useRef<HTMLButtonElement>(null);
 
   const componentsQuery = useQuery<ListEnvelope<ComponentRow>>({
     queryKey: ["admin", "components", statusFilter],
@@ -503,6 +505,8 @@ function ComponentsPageInner(): JSX.Element {
       setBanner({ kind: "error", message: `Could not update primary supplier: ${err.message}` });
     },
   });
+
+  useLockedWidth(supplierAssignMutation.isPending, supplierSaveRef);
 
   const handleSaveSupplier = async () => {
     if (!selectedComponent || !pendingSupplier) return;
@@ -880,7 +884,6 @@ function ComponentsPageInner(): JSX.Element {
                             disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
                             aria-busy={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? "true" : undefined}
                           >
-                            {statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? <span className="btn-spinner" aria-hidden /> : null}
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                           </button>
@@ -989,7 +992,6 @@ function ComponentsPageInner(): JSX.Element {
                       disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
                       aria-busy={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? "true" : undefined}
                     >
-                      {statusMutation.isPending && statusMutation.variables?.component_id === r.component_id ? <span className="btn-spinner" aria-hidden /> : null}
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                     </button>
@@ -1276,6 +1278,7 @@ function ComponentsPageInner(): JSX.Element {
                   </label>
                   <div className="flex gap-2">
                     <button
+                      ref={supplierSaveRef}
                       type="button"
                       className="btn-primary btn-sm"
                       onClick={handleSaveSupplier}

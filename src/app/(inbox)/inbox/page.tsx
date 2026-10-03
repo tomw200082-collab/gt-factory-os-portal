@@ -451,6 +451,7 @@ function ResolvePanel({
           )}
           data-testid="inbox-resolve-confirm"
           disabled={!canSubmit}
+          aria-busy={busy ? "true" : undefined}
           onClick={() => onConfirm(notes)}
         >
           {busy ? "Submitting…" : confirmLabel}
@@ -548,6 +549,7 @@ function BulkActionBar({
           data-testid="inbox-bulk-resolve"
           onClick={onBulkResolve}
           disabled={selectedCount === 0 || busy}
+          aria-busy={busy ? "true" : undefined}
           title="⌘⏎ to resolve all selected"
         >
           <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
@@ -2085,6 +2087,7 @@ function InboxRowCard({
                 className="btn btn-sm gap-1.5 max-md:min-h-[32px]"
                 data-testid="inbox-row-acknowledge"
                 disabled={ackBusy}
+                aria-busy={ackBusy ? "true" : undefined}
                 onClick={() => onAcknowledge(row.id)}
                 title="Press 'a' to acknowledge"
               >

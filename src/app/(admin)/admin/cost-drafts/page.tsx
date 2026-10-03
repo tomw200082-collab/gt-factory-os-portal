@@ -486,6 +486,7 @@ export default function AdminCostDraftsPage(): JSX.Element {
                               type="button"
                               className="btn btn-sm btn-primary px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                               disabled={decisionMutation.isPending}
+                              aria-busy={isActing && decisionMutation.variables?.action === "approve" ? "true" : undefined}
                               onClick={() => handleDecision(row, "approve")}
                               data-testid={`cost-drafts-approve-${row.supplier_cost_draft_id}`}
                             >
@@ -498,6 +499,7 @@ export default function AdminCostDraftsPage(): JSX.Element {
                               type="button"
                               className="btn btn-sm btn-ghost px-2.5 text-xs text-danger-fg disabled:cursor-not-allowed disabled:opacity-50"
                               disabled={decisionMutation.isPending}
+                              aria-busy={isActing && decisionMutation.variables?.action === "reject" ? "true" : undefined}
                               onClick={() => handleDecision(row, "reject")}
                               data-testid={`cost-drafts-reject-${row.supplier_cost_draft_id}`}
                             >

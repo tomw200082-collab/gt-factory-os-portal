@@ -300,6 +300,13 @@ export function QuickFixDrawer({
                             onClick={() =>
                               updatePrice.mutate({ row: r, price: newPrice })
                             }
+                            disabled={updatePrice.isPending}
+                            aria-busy={
+                              updatePrice.isPending &&
+                              updatePrice.variables?.row.supplier_item_id === r.supplier_item_id
+                                ? "true"
+                                : undefined
+                            }
                             className="rounded-sm border border-accent-border bg-accent px-2 py-0.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
                           >
                             Save price
@@ -352,6 +359,7 @@ export function QuickFixDrawer({
                   promote.isPending ||
                   (selected !== null && selected.is_primary)
                 }
+                aria-busy={promote.isPending ? "true" : undefined}
                 onClick={() => {
                   if (selected) promote.mutate(selected);
                 }}
@@ -434,6 +442,7 @@ export function QuickFixDrawer({
               <button
                 type="submit"
                 disabled={addLink.isPending || !bSupplierId}
+                aria-busy={addLink.isPending ? "true" : undefined}
                 className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {addLink.isPending ? "Adding…" : "Add sourcing link"}
